@@ -1,8 +1,8 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import sklearn.model_selection as skl_ms
 import tools.generate_functions as fng  # noqa:F401
 import tools.io as io
+import tools.plots as pl
 import tools.printing_scripts as scp
 import tools.scalers as sc
 
@@ -87,32 +87,26 @@ class Sample(object):
             return
         if verbose:
             scp.info('Generating plots.')
-        path = output.subfolder('plots').create(verbose=verbose)
         for nx in range(self.n_x):
-            # Plot original sample
-            x_name = 'x_{}'.format(nx)
-            fname = io.File(x_name+'.pdf', root=path)
-            plt.figure()
-            plt.scatter(self.x_train[:, nx], self.y_train[:, 0],
-                        label='train', s=1)
-            plt.scatter(self.x_test[:, nx], self.y_test[:, 0],
-                        label='test', s=1)
-            plt.xlabel(x_name)
-            plt.ylabel('y_0')
-            plt.legend()
-            fname.savefig(plt, verbose=verbose)
-            # Plot rescaled sample
-            x_name = 'x_scaled_{}'.format(nx)
-            fname = io.File(x_name+'.pdf', root=path)
-            plt.figure()
-            plt.scatter(self.x_train_scaled[:, nx], self.y_train_scaled[:, 0],
-                        label='train', s=1)
-            plt.scatter(self.x_test_scaled[:, nx], self.y_test_scaled[:, 0],
-                        label='test_scaled', s=1)
-            plt.xlabel(x_name)
-            plt.ylabel('y_scaled_0')
-            plt.legend()
-            fname.savefig(plt, verbose=verbose)
+            for ny in range(self.n_y):
+                # Plot original sample
+                pl.ScatterPlot(
+                    [(self.x_train[:, nx], self.y_train[:, ny]),
+                     (self.x_test[:, nx], self.y_test[:, ny])],
+                    labels=['train', 'test'],
+                    x_label='x_{}'.format(nx),
+                    y_label='y_{}'.format(ny),
+                    root=output.subfolder('plots'),
+                    verbose=verbose).save()
+                # Plot rescaled sample
+                pl.ScatterPlot(
+                    [(self.x_train_scaled[:, nx], self.y_train_scaled[:, ny]),
+                     (self.x_test_scaled[:, nx], self.y_test_scaled[:, ny])],
+                    labels=['train_scaled', 'test_scaled'],
+                    x_label='x_scaled_{}'.format(nx),
+                    y_label='y_scaled_{}'.format(ny),
+                    root=output.subfolder('plots'),
+                    verbose=verbose).save()
         return
 
 

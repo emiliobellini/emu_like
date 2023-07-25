@@ -222,13 +222,6 @@ class File(object):
             scp.print_level(1, 'Created file {}'.format(self.path))
         return
 
-    def savefig(self, plt, verbose=False):
-        plt.savefig(self.path)
-        plt.close()
-        if verbose:
-            scp.print_level(1, 'Created file {}'.format(self.path))
-        return
-
 
 class YamlFile(File):
     """

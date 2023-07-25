@@ -1,8 +1,8 @@
-import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 import tools.io as io
+import tools.plots as pl
 import tools.printing_scripts as scp
 from tools.emu import Emulator
 from tools.sample import LoadSample, GenerateSample
@@ -140,7 +140,6 @@ class FFNNEmu(Emulator):
             verbose=int(verbose),
             save_best_only=True,
             mode='auto',
-            period=1,
             save_freq='epoch',
             save_weights_only=True)
 
@@ -192,25 +191,30 @@ class FFNNEmu(Emulator):
             verbose=int(verbose))
 
         if get_plots:
-            path = self.output.subfolder('plots').create(verbose=verbose)
             # Loss per epoch
             ee = np.array(history.epoch)+1
             loss = history.history['loss']
             val_loss = history.history['val_loss']
-            plt.loglog(ee, loss, label='loss', color='firebrick', lw=3)
-            plt.loglog(ee, val_loss, label='val loss', color='royalblue', lw=3)
-            plt.legend()
-            plt.xlabel(r'epoch', fontsize=20)
-            fname = io.File('loss_vs_epoch.pdf', root=path)
-            fname.savefig(plt, verbose=verbose)
+            pl.LogLogPlot(
+                [(ee, loss),
+                 (ee, val_loss)],
+                labels=['loss', 'val_loss'],
+                x_label='epoch',
+                y_label=self.params['ffnn_model']['loss_function'],
+                fname='loss_function.pdf',
+                root=self.output.subfolder('plots'),
+                verbose=verbose).save()
 
             if sample.n_x == 1 and sample.n_y == 1:
                 y_emu = self.model(sample.x_train_scaled, training=False)
                 y_emu = sample.scaler_y.inverse_transform(y_emu)
-                plt.scatter(sample.x_train, sample.y_train, s=1, label='true')
-                plt.scatter(sample.x_train, y_emu, s=1, label='emulated')
-                plt.legend()
-                plt.xlabel('x_0')
-                fname = io.File('true_vs_emulated.pdf', root=path)
-                fname.savefig(plt, verbose=verbose)
+                pl.ScatterPlot(
+                    [(sample.x_train[:, 0], sample.y_train[:, 0]),
+                     (sample.x_train[:, 0], y_emu[:, 0])],
+                    labels=['true', 'emulated'],
+                    x_label='x_0',
+                    y_label='y_0',
+                    root=self.output.subfolder('plots'),
+                    fname='true_vs_emulated.pdf',
+                    verbose=verbose).save()
         return
