@@ -128,6 +128,43 @@ class FFNNEmu(Emulator):
             model.summary()
         return model
 
+    def call_backs(self, verbose=False):
+
+        # Checkpoint
+        path = self.output.subfolder('checkpoints').create(verbose=verbose)
+        fname = io.File('checkpoint_epoch{epoch:04d}.hdf5', root=path)
+        # TODO: understand what should be passed by the user
+        checkpoint = keras.callbacks.ModelCheckpoint(
+            fname.path,
+            monitor='val_loss',
+            verbose=int(verbose),
+            save_best_only=True,
+            mode='auto',
+            period=1,
+            save_freq='epoch',
+            save_weights_only=True)
+
+        # Logfile
+        path = self.output.subfolder('history_log').create(verbose=verbose)
+        fname = io.File('history_log.cvs', root=path)
+        csv_logger = keras.callbacks.CSVLogger(fname.path, append=True)
+
+        # Early Stopping
+        # TODO: understand what should be passed by the user
+        early_stopping = keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            min_delta=0,
+            patience=15000,
+            verbose=1,
+            mode="auto",
+            baseline=None,
+            restore_best_weights=True,
+        )
+
+        call_backs = [csv_logger, early_stopping, checkpoint]
+
+        return call_backs
+
     def train(self, verbose=False, get_plots=False):
         """
         Train Feed-forward Neural-Network emulator.
@@ -139,6 +176,9 @@ class FFNNEmu(Emulator):
         # Get architecture
         self.model = self.build_model(sample.n_x, sample.n_y, verbose=verbose)
 
+        # Get call_backs
+        call_backs = self.call_backs(verbose=verbose)
+
         # Fit model
         history = self.model.fit(
             sample.x_train_scaled,
@@ -148,6 +188,7 @@ class FFNNEmu(Emulator):
             validation_data=(
                 sample.x_test_scaled,
                 sample.y_test_scaled),
+            callbacks=call_backs,
             verbose=int(verbose))
 
         if get_plots:
