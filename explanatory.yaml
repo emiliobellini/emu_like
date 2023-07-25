@@ -1,0 +1,99 @@
+# Explanatory file.
+
+# Output folder (str)
+output: output/linear
+
+# Type of emulator (Options: ffnn_emu)
+emulator_type: ffnn_emu
+
+
+# Either load an existing sample or generate a new one.
+# Only one among the 'training_sample' and 'generate_sample'
+# variables should be specified.
+
+# training_sample:
+#   # Path to the sample (str)
+#   path: data/chain.txt
+#   # # In alternative, one can use two different paths for x and y (str)
+#   # path_x:
+#   # path_y:
+#   # List of columns x and y variables. Defaults:
+#   # If a single path is specified:
+#   #   - columns_x: all except last
+#   #   - columns_y: last one
+#   # If two different paths are specified:
+#   #   - columns_x: all
+#   #   - columns_y: all
+#   # columns_x: [1, 2]
+#   # columns_y: [-1]
+#   # Save samples (bool) in the output directory (default: False)
+#   save: True
+
+generate_sample:
+  # Name of the function to be used. It has to be
+  # defined in tools/generate_functions.py.
+  # Current options: linear_1d, linear_2d, quadratic_1d, quadratic_2d
+  function: linear_1d
+  # Optionally give keywords arguments to be passed to the function
+  kwargs:
+    a: 2.
+    b: -1.
+  # Spacing method (str).
+  # Options: grid, log_grid, random_uniform, random_normal.
+  spacing: grid
+  # If sampling = grid or log_grid or random_uniform these are
+  # the left and right bounds for the sampling,
+  # i.e.: [[x_min_1, x_max_1], [x_min_2, x_max_2], ...]
+  # If sampling = random_normal these are the mean and standard deviation,
+  # i.e.: [[x_mean_1, x_std_1], [x_mean_2, x_std_2], ...]
+  sampling_params: [[-1, 4]]
+  # Number of samples to generate (int)
+  n_samples: 1000
+  # Save samples in the output directory (bool, default: False)
+  save: True
+
+
+# Fractional samples used for training (float)
+frac_train: 0.9
+# Random seed for train/test splitting (int)
+train_test_random_seed: 1543
+# Rescale x and y variables. Options:
+# - None: does not perform rescaling
+# - StandardScaler: gaussian with mean 0 and standard deviation 1
+# - MinMaxScaler: min and max rescaled in the range [0, 1]
+# - MinMaxScalerPlus1: min and max rescaled in the range [1, 2]
+rescale_x: StandardScaler
+rescale_y: MinMaxScalerPlus1
+
+# Parameters typical of the ffnn_model.
+# These are the ones used to build the architecture
+ffnn_model:
+  # Any activation function from (str)
+  # https://keras.io/api/layers/activations/
+  activation_function: relu
+  # Number of neurons for each hidden layer (list of positive int)
+  neurons_hidden_layer: []
+  # Normalize tensors with mean and variance (bool)
+  batch_normalization: False
+  # Relative dropout during training (float). It help with overfitting.
+  dropout_rate: 0.
+  # Any optimizer from (str)
+  # https://www.tensorflow.org/api_docs/python/tf/keras/optimizers
+  optimizer: sgd
+  # Name of the loss function (str). Options: any of the functions
+  # defined in https://keras.io/api/losses/, plus the ones
+  # defined in tools/loss_functions.py
+  loss_function: mean_squared_error
+  # Number of epochs to be run before stop (int)
+  n_epochs: 1000
+  # Divide sample into batches of this size (int). The pipeline is
+  # calculated individually in each of these batches and then
+  # the loss function takes care of combining each batch.
+  batch_size: 32
+  # If False remove the output layer (default: True).
+  # Useful to reduce to linear regression case.
+  want_output_layer: True
+
+
+# TODO: add resume option
+# TODO: save to log file
