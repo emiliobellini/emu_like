@@ -43,7 +43,7 @@ class FFNNEmu(Emulator):
             sample = GenerateSample(
                 self.params['generate_sample'],
                 verbose=verbose)
-            sample.generate()
+            sample.generate(verbose=verbose)
         else:
             raise Exception(
                 'Do you want to load a pre-generated sample or '

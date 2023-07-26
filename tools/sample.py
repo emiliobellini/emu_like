@@ -5,6 +5,7 @@ import tools.io as io
 import tools.plots as pl
 import tools.printing_scripts as scp
 import tools.scalers as sc
+import tools.samplers as smp
 
 
 class Sample(object):
@@ -240,27 +241,11 @@ class GenerateSample(Sample):
         scp.print_level(1, 'N samples: {}'.format(self.n_samples))
         return
 
-    def _get_x_array(self):
-        lefts = self.params[:, 0]
-        rights = self.params[:, 1]
-        if self.spacing == 'grid':
-            x = np.linspace(lefts, rights, num=self.n_samples)
-        elif self.spacing == 'log_grid':
-            lefts, rights = np.log10(lefts), np.log10(rights)
-            x = np.logspace(lefts, rights, num=self.n_samples)
-        elif self.spacing == 'random_uniform':
-            x = np.random.uniform(lefts, rights,
-                                  size=(self.n_samples, len(lefts)))
-        elif self.spacing == 'random_normal':
-            x = np.random.normal(lefts, rights,
-                                 size=(self.n_samples, len(lefts)))
-        else:
-            raise Exception('Spacing not recognized!')
-        return x
+    def generate(self, verbose=False):
 
-    def generate(self):
         # Get x array
-        self.x = self._get_x_array()
+        x_sampler = smp.Sampler().choose_one(self.spacing, verbose=verbose)
+        self.x = x_sampler.get_x(self.params, self.n_samples)
 
         # Get y samples
         if self.kwargs:
