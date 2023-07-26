@@ -251,5 +251,7 @@ class GenerateSample(Sample):
             self.y = self.function(self.x, **self.kwargs)
         else:
             self.y = self.function(self.x)
+        if self.y.ndim == 1:
+            self.y = self.y[:, np.newaxis]
         self.n_y = self.y.shape[1]
         return self.x, self.y
