@@ -30,7 +30,7 @@ class Emulator(object):
         else:
             raise ValueError('Emulator not recognized!')
 
-    def train(self, verbose=False, show_plots=False):
+    def train(self, resume=None, verbose=False, show_plots=False):
         """
         Placeholder for train.
         """

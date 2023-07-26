@@ -1,7 +1,7 @@
 # Explanatory file.
 
 # Output folder (str)
-output: output/linear
+output: output/test
 
 # Type of emulator (Options: ffnn_emu)
 emulator_type: ffnn_emu
@@ -26,8 +26,6 @@ emulator_type: ffnn_emu
 #   #   - columns_y: all
 #   # columns_x: [1, 2]
 #   # columns_y: [-1]
-#   # Save samples (bool) in the output directory (default: False)
-#   save: True
 
 generate_sample:
   # Name of the function to be used. It has to be
@@ -49,8 +47,6 @@ generate_sample:
   sampling_params: [[-1, 4]]
   # Number of samples to generate (int)
   n_samples: 1000
-  # Save samples in the output directory (bool, default: False)
-  save: True
 
 
 # Fractional samples used for training (float)
@@ -93,7 +89,3 @@ ffnn_model:
   # If False remove the output layer (default: True).
   # Useful to reduce to linear regression case.
   want_output_layer: True
-
-
-# TODO: add resume option
-# TODO: save to log file

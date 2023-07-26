@@ -1,6 +1,7 @@
 import numpy as np
 import sklearn.model_selection as skl_ms
 import tools.generate_functions as fng  # noqa:F401
+import tools.defaults as de
 import tools.io as io
 import tools.plots as pl
 import tools.printing_scripts as scp
@@ -32,13 +33,16 @@ class Sample(object):
     def save(self, output, verbose=False):
         if verbose:
             scp.info('Saving sample.')
-        path = output.subfolder('sample').create(verbose=verbose)
         # Save x
-        data_x = io.File('x_sample.txt', root=path)
+        path = output.subfolder(
+            de.file_names['x_sample']['folder']).create(verbose=verbose)
+        data_x = io.File(de.file_names['x_sample']['name'], root=path)
         data_x.content = self.x
         data_x.save_array(verbose=verbose)
         # Save y
-        data_y = io.File('y_sample.txt', root=path)
+        path = output.subfolder(
+            de.file_names['y_sample']['folder']).create(verbose=verbose)
+        data_y = io.File(de.file_names['y_sample']['name'], root=path)
         data_y.content = self.y
         data_y.save_array(verbose=verbose)
         return
@@ -129,11 +133,6 @@ class LoadSample(Sample):
         self.n_y = self.y.shape[1]
         if verbose:
             self._print_init(single_file)
-        # Eventually save sample in output folder
-        try:
-            self.save_x_y = params['save']
-        except KeyError:
-            self.save_x_y = False
         return
 
     def _file_names(self, params):
@@ -190,8 +189,14 @@ class LoadSample(Sample):
         return
 
     def load(self):
-        x = np.genfromtxt(self.path_x)[:, self.idx_x]
-        y = np.atleast_2d(np.genfromtxt(self.path_y)[:, self.idx_y])
+        x = np.genfromtxt(self.path_x)
+        y = np.genfromtxt(self.path_y)
+        if x.ndim == 1:
+            x = x[:, np.newaxis]
+        if y.ndim == 1:
+            y = y[:, np.newaxis]
+        x = x[:, self.idx_x]
+        y = y[:, self.idx_y]
         return x, y
 
 
@@ -215,12 +220,6 @@ class GenerateSample(Sample):
         self.function = eval('fng.'+self.fn_name)
         if verbose:
             self._print_init()
-        # Eventually save sample in output folder
-        try:
-            self.save_x_y = params['save']
-        except KeyError:
-            self.save_x_y = False
-        return
         return
 
     def _print_init(self):

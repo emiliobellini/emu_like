@@ -44,6 +44,10 @@ def argument_parser():
         '--get_plots', '-p',
         help='Generate diagnostic plots and save them (default: False)',
         action='store_true')
+    train_parser.add_argument(
+        '--resume', '-r',
+        type=int,
+        help='Resume from a previous run. Number of additional epochs (int)')
 
     # Test arguments
     test_parser.add_argument('emu_folder', type=str, help='Emulator folder')

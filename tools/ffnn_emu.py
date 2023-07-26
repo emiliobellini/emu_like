@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+import tools.defaults as de
 import tools.io as io
 import tools.plots as pl
 import tools.printing_scripts as scp
@@ -20,7 +21,7 @@ class FFNNEmu(Emulator):
         Emulator.__init__(self, params, output)
         return
 
-    def get_sample(self, verbose=False, get_plots=False):
+    def get_sample(self, resume=None, verbose=False, get_plots=False):
         """
         This perform three tasks on samples:
          (i) load or generate it.
@@ -28,30 +29,43 @@ class FFNNEmu(Emulator):
          (iii) rescale the sample
         """
 
-        # Load or generate sample
-        want_training = 'training_sample' in self.params.keys()
-        want_generate = 'generate_sample' in self.params.keys()
-        if want_training and want_generate:
-            raise Exception(
-                'You can not specify both training_sample and '
-                'generate_sample. Please comment one of them!')
-        elif want_training:
+        if resume:
+            out_x = self.output.subfolder(de.file_names['x_sample']['folder'])
+            out_y = self.output.subfolder(de.file_names['y_sample']['folder'])
+            self.params['training_sample'] = {
+                'path_x': io.File(
+                    de.file_names['x_sample']['name'], root=out_x).path,
+                'path_y': io.File(
+                    de.file_names['y_sample']['name'], root=out_y).path,
+            }
             sample = LoadSample(
                 self.params['training_sample'],
                 verbose=verbose)
-        elif want_generate:
-            sample = GenerateSample(
-                self.params['generate_sample'],
-                verbose=verbose)
-            sample.generate(verbose=verbose)
         else:
-            raise Exception(
-                'Do you want to load a pre-generated sample or '
-                'generate it? Please specify one of training_sample, '
-                'generate_sample.')
+            # Load or generate sample
+            want_training = 'training_sample' in self.params.keys()
+            want_generate = 'generate_sample' in self.params.keys()
+            if want_training and want_generate:
+                raise Exception(
+                    'You can not specify both training_sample and '
+                    'generate_sample. Please comment one of them!')
+            elif want_training:
+                sample = LoadSample(
+                    self.params['training_sample'],
+                    verbose=verbose)
+            elif want_generate:
+                sample = GenerateSample(
+                    self.params['generate_sample'],
+                    verbose=verbose)
+                sample.generate(verbose=verbose)
+            else:
+                raise Exception(
+                    'Do you want to load a pre-generated sample or '
+                    'generate it? Please specify one of training_sample, '
+                    'generate_sample.')
 
-        # Eventually save in output folder sample
-        sample.save(self.output, verbose=verbose)
+            # Save in output folder sample
+            sample.save(self.output, verbose=verbose)
 
         # Split training and testing samples
         sample.train_test_split(
@@ -131,8 +145,9 @@ class FFNNEmu(Emulator):
     def call_backs(self, verbose=False):
 
         # Checkpoint
-        path = self.output.subfolder('checkpoints').create(verbose=verbose)
-        fname = io.File('checkpoint_epoch{epoch:04d}.hdf5', root=path)
+        path = self.output.subfolder(
+            de.file_names['checkpoint']['folder']).create(verbose=verbose)
+        fname = io.File(de.file_names['checkpoint']['name'], root=path)
         # TODO: understand what should be passed by the user
         checkpoint = keras.callbacks.ModelCheckpoint(
             fname.path,
@@ -144,8 +159,9 @@ class FFNNEmu(Emulator):
             save_weights_only=True)
 
         # Logfile
-        path = self.output.subfolder('history_log').create(verbose=verbose)
-        fname = io.File('history_log.cvs', root=path)
+        path = self.output.subfolder(
+            de.file_names['log']['folder']).create(verbose=verbose)
+        fname = io.File(de.file_names['log']['name'], root=path)
         csv_logger = keras.callbacks.CSVLogger(fname.path, append=True)
 
         # Early Stopping
@@ -164,25 +180,38 @@ class FFNNEmu(Emulator):
 
         return call_backs
 
-    def train(self, verbose=False, get_plots=False):
+    def train(self, resume=None, verbose=False, get_plots=False):
         """
         Train Feed-forward Neural-Network emulator.
         """
 
         # Load/generate the sample, train/test split and rescale
-        sample = self.get_sample(verbose=verbose, get_plots=get_plots)
+        sample = self.get_sample(
+            resume=resume, verbose=verbose, get_plots=get_plots)
 
-        # Get architecture
-        self.model = self.build_model(sample.n_x, sample.n_y, verbose=verbose)
+        if resume:
+            path = self.output.subfolder(
+                de.file_names['model']['folder']).create(verbose=verbose)
+            fname = io.File(de.file_names['model']['name'], root=path).path
+            self.model = keras.models.load_model(fname)
+            ep_ini = self.params['ffnn_model']['n_epochs']
+            ep_tot = ep_ini + self.params['ffnn_model']['additional_epochs']
+        else:
+            # Get architecture
+            self.model = self.build_model(
+                sample.n_x, sample.n_y, verbose=verbose)
+            ep_ini = 0
+            ep_tot = self.params['ffnn_model']['n_epochs']
 
         # Get call_backs
         call_backs = self.call_backs(verbose=verbose)
 
         # Fit model
-        history = self.model.fit(
+        self.model.fit(
             sample.x_train_scaled,
             sample.y_train_scaled,
-            epochs=self.params['ffnn_model']['n_epochs'],
+            epochs=ep_tot,
+            initial_epoch=ep_ini,
             batch_size=self.params['ffnn_model']['batch_size'],
             validation_data=(
                 sample.x_test_scaled,
@@ -190,11 +219,24 @@ class FFNNEmu(Emulator):
             callbacks=call_backs,
             verbose=int(verbose))
 
+        # Save model
+        path = self.output.subfolder(
+            de.file_names['model']['folder']).create(verbose=verbose)
+        fname = io.File(de.file_names['model']['name'], root=path).path
+        if verbose:
+            scp.info('Saving model at {}'.format(fname))
+        self.model.save(fname, overwrite=True)
+
         if get_plots:
+            path = self.output.subfolder(
+                de.file_names['log']['folder']).create(verbose=verbose)
+            fname = io.File(de.file_names['log']['name'], root=path).path
+            data = np.genfromtxt(fname, delimiter=",", skip_header=1)
+
             # Loss per epoch
-            ee = np.array(history.epoch)+1
-            loss = history.history['loss']
-            val_loss = history.history['val_loss']
+            ee = data[:, 0] + 1
+            loss = data[:, 1]
+            val_loss = data[:, 2]
             pl.LogLogPlot(
                 [(ee, loss),
                  (ee, val_loss)],
