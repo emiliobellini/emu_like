@@ -24,15 +24,19 @@ def train_emu(args):
     # Define output path
     output = io.Folder(path=params['output'])
     if args.resume:
-        params = io.YamlFile(
+        if args.verbose:
+            scp.info('Resuming from {}.'.format(output.path))
+        ref_params = io.YamlFile(
             de.file_names['params']['name'],
             root=output,
             should_exist=True)
-        params.read()
+        ref_params.read()
         # TODO: here if we change the emulator would not work
+        # Take the number of epochs from the reference file
+        params['ffnn_model']['n_epochs'] = ref_params['ffnn_model']['n_epochs']
         params['ffnn_model']['additional_epochs'] = args.resume
-        scp.info('Resume option selected. Using parameter file from {}.'
-                 ''.format(params.path))
+        # Check that the two parameter files are compatible
+        params.check_with(ref_params, de.params_to_check, verbose=args.verbose)
     else:
         # Check if empty, and copy param file to output folder
         if output.is_empty():
@@ -64,6 +68,7 @@ def train_emu(args):
     if args.resume:
         # TODO: here if we change the emulator would not work
         params['ffnn_model']['n_epochs'] += args.resume
+        params['ffnn_model'].pop('additional_epochs')
         params.copy_to(
             name=de.file_names['params']['name'],
             root=params['output'],

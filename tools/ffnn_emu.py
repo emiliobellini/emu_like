@@ -206,6 +206,10 @@ class FFNNEmu(Emulator):
         # Get call_backs
         call_backs = self.call_backs(verbose=verbose)
 
+        # Learning rate
+        self.model.optimizer.learning_rate = \
+            self.params['ffnn_model']['learning_rate']
+
         # Fit model
         self.model.fit(
             sample.x_train_scaled,
@@ -228,18 +232,14 @@ class FFNNEmu(Emulator):
         self.model.save(fname, overwrite=True)
 
         if get_plots:
+            # Loss per epoch
             path = self.output.subfolder(
                 de.file_names['log']['folder']).create(verbose=verbose)
             fname = io.File(de.file_names['log']['name'], root=path).path
             data = np.genfromtxt(fname, delimiter=",", skip_header=1)
-
-            # Loss per epoch
-            ee = data[:, 0] + 1
-            loss = data[:, 1]
-            val_loss = data[:, 2]
             pl.LogLogPlot(
-                [(ee, loss),
-                 (ee, val_loss)],
+                [(data[:, 0] + 1, data[:, 1]),
+                 (data[:, 0] + 1, data[:, 2])],
                 labels=['loss', 'val_loss'],
                 x_label='epoch',
                 y_label=self.params['ffnn_model']['loss_function'],

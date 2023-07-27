@@ -301,3 +301,22 @@ class YamlFile(File):
         if verbose:
             scp.print_level(1, 'Created file {}'.format(params_dest.path))
         return
+
+    def check_with(self, ref, to_check, verbose=False):
+
+        # Exception message
+        msg = 'Incompatible parameter files! {} is different'
+
+        # Check keys
+        for key in to_check.keys():
+            if to_check[key]:
+                for subk in to_check[key]:
+                    if self[key][subk] != ref[key][subk]:
+                        raise Exception(msg.format('/'.join([key, subk])))
+            else:
+                if self[key] != ref[key]:
+                    raise Exception(msg.format(key, subk))
+
+        if verbose:
+            scp.info('Old parameter file is consistent with the new one')
+        return
