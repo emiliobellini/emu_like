@@ -89,7 +89,7 @@ ffnn_model:
   # If False remove the output layer (default: True).
   # Useful to reduce to linear regression case.
   want_output_layer: True
-  # Learning rate (float, default: 1.e-2). It is the equivalent of
+  # Learning rate (float). It is the equivalent of
   # the stepsize in gradient descent. The smaller it is the slower
   # will be to learn, but it will be more accurate to find minimum.
-  learning_rate: 1.e-2
+  learning_rate: 1.e-3
