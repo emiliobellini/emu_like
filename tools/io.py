@@ -26,11 +26,26 @@ def argument_parser():
     subparsers = parser.add_subparsers(
         dest='mode',
         help='Options are: '
-        '(i) train: train the emulator. '
-        '(ii) test: test the emulator.')
+        '(i) sample: generate the sample for the emulator. '
+        '(ii) train: train the emulator. '
+        '(iii) test: test the emulator.')
+    sample_parser = subparsers.add_parser('sample')
     train_parser = subparsers.add_parser('train')
     test_parser = subparsers.add_parser('test')
 
+    # Sample arguments
+    sample_parser.add_argument(
+        'params_file',
+        type=str,
+        help='Parameters file (.yaml)')
+    sample_parser.add_argument(
+        '--verbose', '-v',
+        help='Verbose (default: False)',
+        action='store_true')
+    sample_parser.add_argument(
+        '--get_plots', '-p',
+        help='Generate diagnostic plots and save them (default: False)',
+        action='store_true')
     # Train arguments
     train_parser.add_argument(
         'params_file',

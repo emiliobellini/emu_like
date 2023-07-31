@@ -8,6 +8,9 @@ if __name__ == '__main__':
     args = argument_parser()
 
     # Redirect the run to the correct module
+    if args.mode == 'sample':
+        from tools.sample_emu import sample_emu
+        sys.exit(sample_emu(args))
     if args.mode == 'train':
         from tools.train_emu import train_emu
         sys.exit(train_emu(args))
