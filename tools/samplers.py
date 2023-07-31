@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 import tools.printing_scripts as scp
 
 
@@ -27,6 +28,8 @@ class Sampler(object):
             return RandomUniformSampler(verbose=verbose)
         elif sampler_type == 'random_normal':
             return RandomNormalSampler(verbose=verbose)
+        elif sampler_type == 'latin_hypercube':
+            return LatinHypercubeSampler(verbose=verbose)
         else:
             raise ValueError('Sampler not recognized!')
 
@@ -91,4 +94,19 @@ class RandomNormalSampler(Sampler):
         x = np.random.normal(
             bounds[:, 0], bounds[:, 1],
             size=(n_samples, len(bounds[:, 0])))
+        return x
+
+
+class LatinHypercubeSampler(Sampler):
+
+    def __init__(self, verbose=False):
+        if verbose:
+            scp.info('Initializing LatinHypercube sampler.')
+        Sampler.__init__(self)
+        return
+
+    def get_x(self, bounds, n_samples):
+        sampler = scipy.stats.qmc.LatinHypercube(d=len(bounds[:, 0]))
+        sample = sampler.random(n=n_samples)
+        x = scipy.stats.qmc.scale(sample, bounds[:, 0], bounds[:, 1])
         return x

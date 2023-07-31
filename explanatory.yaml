@@ -37,7 +37,7 @@ generate_sample:
     a: 2.
     b: -1.
   # Spacing method (str).
-  # Options: grid, log_grid, random_uniform, random_normal.
+  # Options: grid, log_grid, random_uniform, random_normal, latin_hypercube.
   spacing: grid
   # If sampling = grid or log_grid or random_uniform these are
   # the left and right bounds for the sampling,
