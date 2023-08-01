@@ -9,11 +9,11 @@ if __name__ == '__main__':
 
     # Redirect the run to the correct module
     if args.mode == 'sample':
-        from tools.sample_emu import sample_emu
+        from pipelines.sample import sample_emu
         sys.exit(sample_emu(args))
     if args.mode == 'train':
-        from tools.train_emu import train_emu
+        from pipelines.train import train_emu
         sys.exit(train_emu(args))
     if args.mode == 'test':
-        from tools.test_emu import test_emu
+        from pipelines.test import test_emu
         sys.exit(test_emu(args))
