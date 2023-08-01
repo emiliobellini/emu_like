@@ -11,8 +11,8 @@ n_samples: 1000
 # the same structure:
 #   - input: array of x sample, list of varying parameters, params dict
 #   - output: corresponding y value(s)
-# Current options: linear_1d, linear_2d, quadratic_1d, quadratic_2d,
-# cobaya_loglike.
+# Current options: linear_1d, quadratic_1d, gaussian_1d, linear_2d,
+# quadratic_2d, cobaya_loglike.
 # With cobaya_loglike one can choose any Cobaya likelihood, adding
 # params, likelihood, prior (optional) and theory (optional)
 # blocks following the Cobaya scheme.
@@ -22,12 +22,15 @@ function: linear_1d
 # Options: grid, log_grid, random_uniform, random_normal, latin_hypercube.
 spacing: grid
 
-# List of params 
+# List of params.
+# If the function to sample is cobaya_loglike all this, plus the additional
+# blocks needed by cobaya should be encapsulated by a "cobaya" block.
 params:
   # If spacing grid, log_grid, random_normal or latin_hypercube use (min, max)
   # If spacing random_uniform use (loc, scale), with loc=mean and scale=sigma.
   x: # sampled parameter
-    min: -1.
-    max: 4.
+    prior:
+      min: -1.
+      max: 4.
   a: 2. # fixed parameter
   b: -1. # fixed parameter

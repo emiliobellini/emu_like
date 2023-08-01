@@ -49,8 +49,8 @@ class GridSampler(Sampler):
         return
 
     def get_x(self, params, varying, n_samples):
-        mins = [params[x]['min'] for x in varying]
-        maxs = [params[x]['max'] for x in varying]
+        mins = [params[x]['prior']['min'] for x in varying]
+        maxs = [params[x]['prior']['max'] for x in varying]
         x = np.linspace(mins, maxs, num=n_samples)
         return x
 
@@ -64,8 +64,8 @@ class LogGridSampler(Sampler):
         return
 
     def get_x(self, params, varying, n_samples):
-        mins = [np.log10(params[x]['min']) for x in varying]
-        maxs = [np.log10(params[x]['max']) for x in varying]
+        mins = [np.log10(params[x]['prior']['min']) for x in varying]
+        maxs = [np.log10(params[x]['prior']['max']) for x in varying]
         x = np.logspace(mins, maxs, num=n_samples)
         return x
 
@@ -79,8 +79,8 @@ class RandomUniformSampler(Sampler):
         return
 
     def get_x(self, params, varying, n_samples):
-        mins = [params[x]['min'] for x in varying]
-        maxs = [params[x]['max'] for x in varying]
+        mins = [params[x]['prior']['min'] for x in varying]
+        maxs = [params[x]['prior']['max'] for x in varying]
         x = np.random.uniform(mins, maxs, size=(n_samples, len(mins)))
         return x
 
@@ -94,8 +94,8 @@ class RandomNormalSampler(Sampler):
         return
 
     def get_x(self, params, varying, n_samples):
-        means = [params[x]['loc'] for x in varying]
-        std = [params[x]['scale'] for x in varying]
+        means = [params[x]['prior']['loc'] for x in varying]
+        std = [params[x]['prior']['scale'] for x in varying]
         x = np.random.normal(means, std, size=(n_samples, len(means)))
         return x
 
@@ -109,8 +109,8 @@ class LatinHypercubeSampler(Sampler):
         return
 
     def get_x(self, params, varying, n_samples):
-        mins = [params[x]['min'] for x in varying]
-        maxs = [params[x]['max'] for x in varying]
+        mins = [params[x]['prior']['min'] for x in varying]
+        maxs = [params[x]['prior']['max'] for x in varying]
         sampler = scipy.stats.qmc.LatinHypercube(d=len(mins))
         sample = sampler.random(n=n_samples)
         x = scipy.stats.qmc.scale(sample, mins, maxs)

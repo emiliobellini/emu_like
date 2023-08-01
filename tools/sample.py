@@ -18,9 +18,15 @@ class Sample(object):
         return
 
     def _init_from_params(self, params):
+        # Get parameters
+        try:
+            self.params = params['params']
+        except KeyError:
+            self.cobaya_params = params['cobaya']
+            self.params = self.cobaya_params['params']
+        # Get additional info
         self.fn_name = params['function']
         self.spacing = params['spacing']
-        self.params = params['params']
         self.n_samples = params['n_samples']
         self.varying_params = [x for x in self.params if self._is_varying(x)]
         self.fixed_params = [x for x in self.params if not self._is_varying(x)]
@@ -127,7 +133,12 @@ class Sample(object):
             self.params, self.varying_params, self.n_samples)
 
         # Get y samples
-        self.y = self.function(self.x, self.varying_params, self.params)
+        try:
+            param_dict = self.cobaya_params
+        except AttributeError:
+            param_dict = self.params
+        self.y = self.function(self.x, self.varying_params, param_dict,
+                               progress=verbose)
         self.n_y = self.y.shape[1]
         return self.x, self.y
 

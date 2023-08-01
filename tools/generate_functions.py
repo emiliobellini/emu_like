@@ -6,11 +6,13 @@ and call it in the params file with the 'generate_sample'
 variable.
 """
 import numpy as np
+import cobaya
+import tqdm
 
 
 # 1D functions
 
-def linear_1d(x, x_var, params):
+def linear_1d(x, x_var, params, progress=False):
     """
     Arguments:
         x: array with dimensions (n_samples, 1)
@@ -29,7 +31,7 @@ def linear_1d(x, x_var, params):
     return y
 
 
-def quadratic_1d(x, x_var, params):
+def quadratic_1d(x, x_var, params, progress=False):
     """
     Arguments:
         x: array with dimensions (n_samples, 1)
@@ -49,7 +51,7 @@ def quadratic_1d(x, x_var, params):
     return y
 
 
-def gaussian_1d(x, x_var, params):
+def gaussian_1d(x, x_var, params, progress=False):
     """
     Arguments:
         x: array with dimensions (n_samples, 1)
@@ -70,7 +72,7 @@ def gaussian_1d(x, x_var, params):
 
 # 2D functions
 
-def linear_2d(x, x_var, params):
+def linear_2d(x, x_var, params, progress=False):
     """
     Arguments:
         x: array with dimensions (n_samples, 2)
@@ -91,7 +93,7 @@ def linear_2d(x, x_var, params):
     return y
 
 
-def quadratic_2d(x, x_var, params):
+def quadratic_2d(x, x_var, params, progress=False):
     """
     Arguments:
         x: array with dimensions (n_samples, 2)
@@ -112,4 +114,32 @@ def quadratic_2d(x, x_var, params):
     x2 = x[:, x_var.index('x2')]
     y = a*x1**2. + b*x2**2. + c*x1*x2 + d*x1 + e*x2 + f
     y = y[:, np.newaxis]
+    return y
+
+
+# Cobaya loglikelihoods
+
+def cobaya_loglike(x, x_var, params, progress=False):
+    """
+    Arguments:
+        x: array with dimensions (n_samples, len(x_var))
+        x_var: list of varying parameters names
+        params: dictionary of all parameters
+    Output:
+        y: array with dimensions (n_samples, 1)
+
+    """
+    # Define model
+    model = cobaya.model.get_model(params)
+    # Each sample should be a dictionary
+    sampled_params = [dict(zip(x_var, x_n)) for x_n in x]
+    if progress:
+        sp_tot = tqdm.tqdm(sampled_params)
+    else:
+        sp_tot = sampled_params
+    # Get loglikes
+    loglikes = [model.loglikes(sp, as_dict=True)[0] for sp in sp_tot]
+    # Get y array
+    y = np.array([[a[b] for b in params['likelihood'].keys()]
+                  for a in loglikes])
     return y
