@@ -28,9 +28,9 @@ class Sample(object):
         self.fn_name = params['function']
         self.spacing = params['spacing']
         self.n_samples = params['n_samples']
-        self.varying_params = [x for x in self.params if self._is_varying(x)]
-        self.fixed_params = [x for x in self.params if not self._is_varying(x)]
-        self.n_x = len(self.varying_params)
+        self.x_names = [x for x in self.params if self._is_varying(x)]
+        self.args_names = [x for x in self.params if not self._is_varying(x)]
+        self.n_x = len(self.x_names)
         # Call the function to be sampled
         self.function = eval('fng.'+self.fn_name)
         return
@@ -102,10 +102,10 @@ class Sample(object):
             scp.print_level(1, 'Sampling function: {}'.format(self.fn_name))
             scp.print_level(1, 'Spacing: {}'.format(self.spacing))
             scp.print_level(1, 'Varying parameters:')
-            for x in self.varying_params:
+            for x in self.x_names:
                 scp.print_level(2, '{} = {}'.format(x, self.params[x]))
             scp.print_level(1, 'Fixed parameters:')
-            for x in self.fixed_params:
+            for x in self.args_names:
                 scp.print_level(2, '{} = {}'.format(x, self.params[x]))
         else:
             mins = np.min(self.x, axis=0)
@@ -130,15 +130,16 @@ class Sample(object):
         # Get x array
         x_sampler = smp.Sampler().choose_one(self.spacing, verbose=verbose)
         self.x = x_sampler.get_x(
-            self.params, self.varying_params, self.n_samples)
+            self.params, self.x_names, self.n_samples)
 
         # Get y samples
         try:
             param_dict = self.cobaya_params
         except AttributeError:
             param_dict = self.params
-        self.y = self.function(self.x, self.varying_params, param_dict,
-                               progress=verbose)
+        self.y, self.y_names = self.function(
+            self.x, self.x_names,
+            param_dict, progress=verbose)
         self.n_y = self.y.shape[1]
         return self.x, self.y
 
@@ -196,11 +197,15 @@ class Sample(object):
         # Save x
         data_x = io.File(de.file_names['x_sample']['name'], root=output)
         data_x.content = self.x
-        data_x.save_array(verbose=verbose)
+        data_x.save_array(header='\t'.join(self.x_names), verbose=verbose)
         # Save y
+        if self.y_names:
+            header_y = '\t'.join(self.y_names)
+        else:
+            header_y = ''
         data_y = io.File(de.file_names['y_sample']['name'], root=output)
         data_y.content = self.y
-        data_y.save_array(verbose=verbose)
+        data_y.save_array(header=header_y, verbose=verbose)
         return
 
     def rescale(self, rescale_x, rescale_y, verbose=False):

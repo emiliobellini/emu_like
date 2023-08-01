@@ -235,8 +235,8 @@ class File(object):
         self._exists_or_error()
         return self
 
-    def save_array(self, verbose=False):
-        np.savetxt(self.path, self.content)
+    def save_array(self, header='', verbose=False):
+        np.savetxt(self.path, self.content, header=header)
         if verbose:
             scp.print_level(1, 'Created file {}'.format(self.path))
         return

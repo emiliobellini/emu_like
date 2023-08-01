@@ -20,6 +20,8 @@ def linear_1d(x, x_var, params, progress=False):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (n_samples, 1)
+        y_names: list of names for each of the y column
+        (it is possible to leave it None)
 
     y = a*x + b
     """
@@ -28,7 +30,7 @@ def linear_1d(x, x_var, params, progress=False):
     x = x[:, x_var.index('x')]
     y = a*x + b
     y = y[:, np.newaxis]
-    return y
+    return y, None
 
 
 def quadratic_1d(x, x_var, params, progress=False):
@@ -39,6 +41,8 @@ def quadratic_1d(x, x_var, params, progress=False):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (n_samples, 1)
+        y_names: list of names for each of the y column
+        (it is possible to leave it None)
 
     y = a*x^2 + b*x + c
     """
@@ -48,7 +52,7 @@ def quadratic_1d(x, x_var, params, progress=False):
     x = x[:, x_var.index('x')]
     y = a*x**2 + b*x + c
     y = y[:, np.newaxis]
-    return y
+    return y, None
 
 
 def gaussian_1d(x, x_var, params, progress=False):
@@ -59,6 +63,8 @@ def gaussian_1d(x, x_var, params, progress=False):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (n_samples, 1)
+        y_names: list of names for each of the y column
+        (it is possible to leave it None)
 
     y = exp(-(x-mean^2)/std/2)
     """
@@ -67,7 +73,7 @@ def gaussian_1d(x, x_var, params, progress=False):
     x = x[:, x_var.index('x')]
     y = np.exp(-(x-mean)**2./std**2./2.)
     y = y[:, np.newaxis]
-    return y
+    return y, None
 
 
 # 2D functions
@@ -80,6 +86,8 @@ def linear_2d(x, x_var, params, progress=False):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (n_samples, 1)
+        y_names: list of names for each of the y column
+        (it is possible to leave it None)
 
     y = a*x1 + b*x2 + c
     """
@@ -90,7 +98,7 @@ def linear_2d(x, x_var, params, progress=False):
     x2 = x[:, x_var.index('x2')]
     y = a*x1 + b*x2 + c
     y = y[:, np.newaxis]
-    return y
+    return y, None
 
 
 def quadratic_2d(x, x_var, params, progress=False):
@@ -101,6 +109,8 @@ def quadratic_2d(x, x_var, params, progress=False):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (n_samples, 1)
+        y_names: list of names for each of the y column
+        (it is possible to leave it None)
 
     y = a*x1^2 + b*x2^2 + c*x1*x2 + d*x1 + e*x2 + f
     """
@@ -114,7 +124,7 @@ def quadratic_2d(x, x_var, params, progress=False):
     x2 = x[:, x_var.index('x2')]
     y = a*x1**2. + b*x2**2. + c*x1*x2 + d*x1 + e*x2 + f
     y = y[:, np.newaxis]
-    return y
+    return y, None
 
 
 # Cobaya loglikelihoods
@@ -127,8 +137,12 @@ def cobaya_loglike(x, x_var, params, progress=False):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (n_samples, 1)
+        y_names: list of names for each of the y column
+        (it is possible to leave it None)
 
     """
+    # Get y_names
+    y_names = list(params['likelihood'].keys())
     # Define model
     model = cobaya.model.get_model(params)
     # Each sample should be a dictionary
@@ -140,6 +154,5 @@ def cobaya_loglike(x, x_var, params, progress=False):
     # Get loglikes
     loglikes = [model.loglikes(sp, as_dict=True)[0] for sp in sp_tot]
     # Get y array
-    y = np.array([[a[b] for b in params['likelihood'].keys()]
-                  for a in loglikes])
-    return y
+    y = np.array([[a[b] for b in y_names] for a in loglikes])
+    return y, y_names
