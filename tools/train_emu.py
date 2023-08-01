@@ -7,6 +7,7 @@ import tools.defaults as de
 import tools.io as io
 import tools.printing_scripts as scp
 from tools.emu import Emulator
+from tools.sample import Sample
 
 
 def train_emu(args):
@@ -55,14 +56,40 @@ def train_emu(args):
     if args.verbose:
         scp.print_level(0, "\nStarting training of Planck emulator\n")
 
+    # Load sample
+    sample = Sample()
+    sample.load(params=params['training_sample'], verbose=args.verbose)
+
+    # Split training and testing samples
+    sample.train_test_split(
+        params['frac_train'],
+        params['train_test_random_seed'],
+        verbose=args.verbose)
+
+    # If requested, rescale training and testing samples
+    sample.rescale(
+        params['rescale_x'],
+        params['rescale_y'],
+        verbose=args.verbose)
+
+    # Plots
+    if args.get_plots:
+        sample.get_plots(output, verbose=args.verbose)
+
     # Call the right emulator
     emu = Emulator.choose_one(params, output, verbose=args.verbose)
 
+    # In case resume
+    if args.resume:
+        emu.load(verbose=args.verbose)
+    else:
+        emu.build(sample.n_x, sample.n_y, verbose=args.verbose)
+
     # Train the emulator
-    emu.train(
-        resume=args.resume,
-        verbose=args.verbose,
-        get_plots=args.get_plots)
+    emu.train(sample, verbose=args.verbose, get_plots=args.get_plots)
+
+    # Save the emulator
+    emu.save(verbose=args.verbose)
 
     # Update the epochs run
     if args.resume:

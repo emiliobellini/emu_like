@@ -6,7 +6,7 @@ Main module with the pipeline used to train the emulator.
 import tools.defaults as de
 import tools.io as io
 import tools.printing_scripts as scp
-from tools.sample import GenerateSample
+from tools.sample import Sample
 
 
 def sample_emu(args):
@@ -37,11 +37,11 @@ def sample_emu(args):
             'precious data!')
 
     if args.verbose:
-        scp.print_level(0, "\nGetting sample for Planck emulator\n")
+        scp.print_level(0, "\nGetting sample for Emulator\n")
 
     # Load or generate sample
-    sample = GenerateSample(params, verbose=args.verbose)
-    sample.generate(verbose=args.verbose)
+    sample = Sample()
+    sample.generate(params=params, verbose=args.verbose)
 
     # Save in output folder sample
     sample.save(output, verbose=args.verbose)

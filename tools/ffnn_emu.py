@@ -6,7 +6,6 @@ import tools.io as io
 import tools.plots as pl
 import tools.printing_scripts as scp
 from tools.emu import Emulator
-from tools.sample import LoadSample, GenerateSample
 import tools.loss_functions as lf  # noqa:F401
 
 
@@ -21,71 +20,8 @@ class FFNNEmu(Emulator):
         Emulator.__init__(self, params, output)
         return
 
-    def get_sample(self, resume=None, verbose=False, get_plots=False):
-        """
-        This perform three tasks on samples:
-         (i) load or generate it.
-         (ii) splits it into training and testing sample.
-         (iii) rescale the sample
-        """
-
-        if resume:
-            out_x = self.output.subfolder(de.file_names['x_sample']['folder'])
-            out_y = self.output.subfolder(de.file_names['y_sample']['folder'])
-            self.params['training_sample'] = {
-                'path_x': io.File(
-                    de.file_names['x_sample']['name'], root=out_x).path,
-                'path_y': io.File(
-                    de.file_names['y_sample']['name'], root=out_y).path,
-            }
-            sample = LoadSample(
-                self.params['training_sample'],
-                verbose=verbose)
-        else:
-            # Load or generate sample
-            want_training = 'training_sample' in self.params.keys()
-            want_generate = 'generate_sample' in self.params.keys()
-            if want_training and want_generate:
-                raise Exception(
-                    'You can not specify both training_sample and '
-                    'generate_sample. Please comment one of them!')
-            elif want_training:
-                sample = LoadSample(
-                    self.params['training_sample'],
-                    verbose=verbose)
-            elif want_generate:
-                sample = GenerateSample(
-                    self.params['generate_sample'],
-                    verbose=verbose)
-                sample.generate(verbose=verbose)
-            else:
-                raise Exception(
-                    'Do you want to load a pre-generated sample or '
-                    'generate it? Please specify one of training_sample, '
-                    'generate_sample.')
-
-            # Save in output folder sample
-            sample.save(self.output, verbose=verbose)
-
-        # Split training and testing samples
-        sample.train_test_split(
-            self.params['frac_train'],
-            self.params['train_test_random_seed'],
-            verbose=verbose)
-
-        # If requested, rescale training and testing samples
-        sample.rescale(
-            self.params['rescale_x'],
-            self.params['rescale_y'],
-            verbose=verbose)
-
-        # Plots
-        if get_plots:
-            sample.get_plots(self.output, verbose=verbose)
-
-        return sample
-
-    def build_model(self, n_x, n_y, verbose=False):
+    def build(self, n_x, n_y, verbose=False):
+        # Build model architecture
         if verbose:
             scp.info('Building FFNN architecture')
 
@@ -138,9 +74,41 @@ class FFNNEmu(Emulator):
 
         model.compile(optimizer=optimizer, loss=loss)
 
+        self.model = model
+        self.initial_epoch = 0
+        self.total_epochs = self.params['ffnn_model']['n_epochs']
+
         if verbose:
             model.summary()
-        return model
+
+        return
+
+    def load(self, verbose=False):
+
+        path = self.output.subfolder(
+            de.file_names['model']['folder'])
+        fname = io.File(de.file_names['model']['name'], root=path).path
+
+        if verbose:
+            scp.info('Loading FFNN architecture')
+            scp.print_level(1, 'From: {}'.format(fname))
+
+        self.model = keras.models.load_model(fname)
+        self.initial_epoch = self.params['ffnn_model']['n_epochs']
+        self.total_epochs = \
+            self.initial_epoch + self.params['ffnn_model']['additional_epochs']
+
+        return
+
+    def save(self, verbose=False):
+        # Save model
+        path = self.output.subfolder(
+            de.file_names['model']['folder']).create(verbose=verbose)
+        fname = io.File(de.file_names['model']['name'], root=path).path
+        if verbose:
+            scp.info('Saving model at {}'.format(fname))
+        self.model.save(fname, overwrite=True)
+        return
 
     def call_backs(self, verbose=False):
 
@@ -180,28 +148,10 @@ class FFNNEmu(Emulator):
 
         return call_backs
 
-    def train(self, resume=None, verbose=False, get_plots=False):
+    def train(self, sample, verbose=False, get_plots=False):
         """
         Train Feed-forward Neural-Network emulator.
         """
-
-        # Load/generate the sample, train/test split and rescale
-        sample = self.get_sample(
-            resume=resume, verbose=verbose, get_plots=get_plots)
-
-        if resume:
-            path = self.output.subfolder(
-                de.file_names['model']['folder']).create(verbose=verbose)
-            fname = io.File(de.file_names['model']['name'], root=path).path
-            self.model = keras.models.load_model(fname)
-            ep_ini = self.params['ffnn_model']['n_epochs']
-            ep_tot = ep_ini + self.params['ffnn_model']['additional_epochs']
-        else:
-            # Get architecture
-            self.model = self.build_model(
-                sample.n_x, sample.n_y, verbose=verbose)
-            ep_ini = 0
-            ep_tot = self.params['ffnn_model']['n_epochs']
 
         # Get call_backs
         call_backs = self.call_backs(verbose=verbose)
@@ -214,22 +164,14 @@ class FFNNEmu(Emulator):
         self.model.fit(
             sample.x_train_scaled,
             sample.y_train_scaled,
-            epochs=ep_tot,
-            initial_epoch=ep_ini,
+            epochs=self.total_epochs,
+            initial_epoch=self.initial_epoch,
             batch_size=self.params['ffnn_model']['batch_size'],
             validation_data=(
                 sample.x_test_scaled,
                 sample.y_test_scaled),
             callbacks=call_backs,
             verbose=int(verbose))
-
-        # Save model
-        path = self.output.subfolder(
-            de.file_names['model']['folder']).create(verbose=verbose)
-        fname = io.File(de.file_names['model']['name'], root=path).path
-        if verbose:
-            scp.info('Saving model at {}'.format(fname))
-        self.model.save(fname, overwrite=True)
 
         if get_plots:
             # Loss per epoch

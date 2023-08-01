@@ -16,11 +16,9 @@ file_names = {
     },
     'x_sample': {
         'name': 'x_sample.txt',
-        'folder': 'sample',
     },
     'y_sample': {
         'name': 'y_sample.txt',
-        'folder': 'sample',
     },
     'log': {
         'name': 'history_log.cvs',

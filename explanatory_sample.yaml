@@ -3,22 +3,31 @@
 # Output folder (str)
 output: output/test_sample
 
-# Name of the function to be used. It has to be
-# defined in tools/generate_functions.py.
-# Current options: linear_1d, linear_2d, quadratic_1d, quadratic_2d
+# Number of samples to generate (int)
+n_samples: 1000
+
+# Name of the function to be used. It has to be one of the functions
+# defined in tools/generate_functions.py. All of them should have
+# the same structure:
+#   - input: array of x sample, list of varying parameters, params dict
+#   - output: corresponding y value(s)
+# Current options: linear_1d, linear_2d, quadratic_1d, quadratic_2d,
+# cobaya_loglike.
+# With cobaya_loglike one can choose any Cobaya likelihood, adding
+# params, likelihood, prior (optional) and theory (optional)
+# blocks following the Cobaya scheme.
 function: linear_1d
-# Optionally give keywords arguments to be passed to the function
-kwargs:
-  a: 2.
-  b: -1.
+
 # Spacing method (str).
 # Options: grid, log_grid, random_uniform, random_normal, latin_hypercube.
 spacing: grid
-# If sampling = grid or log_grid or random_uniform these are
-# the left and right bounds for the sampling,
-# i.e.: [[x_min_1, x_max_1], [x_min_2, x_max_2], ...]
-# If sampling = random_normal these are the mean and standard deviation,
-# i.e.: [[x_mean_1, x_std_1], [x_mean_2, x_std_2], ...]
-sampling_params: [[-1, 4]]
-# Number of samples to generate (int)
-n_samples: 1000
+
+# List of params 
+params:
+  # If spacing grid, log_grid, random_normal or latin_hypercube use (min, max)
+  # If spacing random_uniform use (loc, scale), with loc=mean and scale=sigma.
+  x: # sampled parameter
+    min: -1.
+    max: 4.
+  a: 2. # fixed parameter
+  b: -1. # fixed parameter

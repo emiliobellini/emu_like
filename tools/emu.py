@@ -35,21 +35,3 @@ class Emulator(object):
         Placeholder for train.
         """
         return
-
-    def test(self, verbose=False, show_plots=False):
-        """
-        Placeholder for test.
-        """
-        return
-
-    def load(self, path=None, verbose=False):
-        """
-        Placeholder for load.
-        """
-        return
-
-    def save(self, path=None, verbose=False):
-        """
-        Placeholder for save.
-        """
-        return

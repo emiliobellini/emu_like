@@ -94,7 +94,7 @@ class Folder(object):
         directory, otherwise raise an error.
         """
         if not os.path.isdir(self.path):
-            raise Exception('Folder {} does not exist!'.format(self.path))
+            raise IOError('Folder {} does not exist!'.format(self.path))
         return
 
     def create(self, verbose=False):
@@ -217,7 +217,7 @@ class File(object):
         otherwise raise an error.
         """
         if not os.path.isfile(self.path):
-            raise Exception('File {} does not exist!'.format(self.path))
+            raise IOError('File {} does not exist!'.format(self.path))
         return
 
     def create(self, verbose=False):
