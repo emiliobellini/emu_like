@@ -1,6 +1,6 @@
 import numpy as np
 import sklearn.model_selection as skl_ms
-import tools.generate_functions as fng  # noqa:F401
+import tools.sampling_functions as fng  # noqa:F401
 import tools.defaults as de
 import tools.io as io
 import tools.plots as pl

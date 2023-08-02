@@ -7,7 +7,7 @@ output: output/test_sample
 n_samples: 1000
 
 # Name of the function to be used. It has to be one of the functions
-# defined in tools/generate_functions.py. All of them should have
+# defined in tools/sampling_functions.py. All of them should have
 # the same structure:
 #   - input: array of x sample, list of varying parameters, params dict
 #   - output: corresponding y value(s)

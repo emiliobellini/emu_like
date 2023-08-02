@@ -155,7 +155,6 @@ def cobaya_loglike(x, x_var, params, progress=False):
     loglikes = [model.loglikes(sp, as_dict=True)[0] for sp in sp_tot]
     # Get y array
     y = np.array([[a[b] for b in y_names] for a in loglikes])
-    y_names = [y + '_loglike' for y in y_names]
     # Add total loglike
     y_tot = np.sum(y, axis=1)[:, np.newaxis]
     y = np.hstack((y, y_tot))
