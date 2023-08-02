@@ -75,8 +75,6 @@ class FFNNEmu(Emulator):
         model.compile(optimizer=optimizer, loss=loss)
 
         self.model = model
-        self.initial_epoch = 0
-        self.total_epochs = self.params['ffnn_model']['n_epochs']
 
         if verbose:
             model.summary()
@@ -94,9 +92,6 @@ class FFNNEmu(Emulator):
             scp.print_level(1, 'From: {}'.format(fname))
 
         self.model = keras.models.load_model(fname)
-        self.initial_epoch = self.params['ffnn_model']['n_epochs']
-        self.total_epochs = \
-            self.initial_epoch + self.params['ffnn_model']['additional_epochs']
 
         return
 
@@ -157,8 +152,12 @@ class FFNNEmu(Emulator):
         call_backs = self.call_backs(verbose=verbose)
 
         # Learning rate
-        self.model.optimizer.learning_rate = \
-            self.params['ffnn_model']['learning_rate']
+        lr = self.params['ffnn_model']['learning_rate']
+        # In YamlFile.update_params this is converted into a list to
+        # keep track of the run history
+        if isinstance(lr, list):
+            lr = lr[-1]
+        self.model.optimizer.learning_rate = lr
 
         # Fit model
         self.model.fit(

@@ -32,10 +32,8 @@ def train_emu(args):
             root=output,
             should_exist=True)
         ref_params.read()
-        # TODO: here if we change the emulator would not work
-        # Take the number of epochs from the reference file
-        params['ffnn_model']['n_epochs'] = ref_params['ffnn_model']['n_epochs']
-        params['ffnn_model']['additional_epochs'] = args.resume
+        # Update parameters with new settings
+        params.update_params(args.additional_epochs, args.learning_rate)
         # Check that the two parameter files are compatible
         params.check_with(ref_params, de.params_to_check, verbose=args.verbose)
     else:
@@ -54,7 +52,7 @@ def train_emu(args):
                 'the --resume (-r) option.')
 
     if args.verbose:
-        scp.print_level(0, "\nStarting training of Planck emulator\n")
+        scp.print_level(0, "\nStarted training emulator\n")
 
     # Load sample
     sample = Sample()
@@ -79,11 +77,22 @@ def train_emu(args):
     # Call the right emulator
     emu = Emulator.choose_one(params, output, verbose=args.verbose)
 
-    # In case resume
+    # If resume, load emulator
     if args.resume:
         emu.load(verbose=args.verbose)
+        # In YamlFile.update_params this is converted into a list to
+        # keep track of the run history
+        emu.initial_epoch = params['ffnn_model']['n_epochs'][-2]
+        emu.total_epochs = params['ffnn_model']['n_epochs'][-1]
+    # Else, build it
     else:
         emu.build(sample.n_x, sample.n_y, verbose=args.verbose)
+        emu.initial_epoch = 0
+        emu.total_epochs = params['ffnn_model']['n_epochs']
+        # In YamlFile.update_params this is converted into a list to
+        # keep track of the run history
+        if isinstance(emu.total_epochs, list):
+            emu.total_epochs = emu.total_epochs[-1]
 
     # Train the emulator
     emu.train(sample, verbose=args.verbose, get_plots=args.get_plots)
@@ -91,11 +100,8 @@ def train_emu(args):
     # Save the emulator
     emu.save(verbose=args.verbose)
 
-    # Update the epochs run
+    # Replace parameter file
     if args.resume:
-        # TODO: here if we change the emulator would not work
-        params['ffnn_model']['n_epochs'] += args.resume
-        params['ffnn_model'].pop('additional_epochs')
         params.copy_to(
             name=de.file_names['params']['name'],
             root=params['output'],

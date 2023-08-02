@@ -59,7 +59,10 @@ ffnn_model:
   # defined in https://keras.io/api/losses/, plus the ones
   # defined in tools/loss_functions.py
   loss_function: mean_squared_error
-  # Number of epochs to be run before stop (int)
+  # Number of epochs to be run before stop (int).
+  # To keep track of resuming, this is converted and saved as a list.
+  # In case a list is provided, the last two values are the starting and
+  # total epochs respectively.
   n_epochs: 1000
   # Divide sample into batches of this size (int). The pipeline is
   # calculated individually in each of these batches and then
@@ -71,4 +74,6 @@ ffnn_model:
   # Learning rate (float). It is the equivalent of
   # the stepsize in gradient descent. The smaller it is the slower
   # will be to learn, but it will be more accurate to find minimum.
+  # To keep track of resuming, this is converted and saved as a list.
+  # In case a list is provided, the last value is the one used.
   learning_rate: 1.e-3

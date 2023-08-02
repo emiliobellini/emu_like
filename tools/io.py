@@ -20,7 +20,7 @@ def argument_parser():
 
     """
 
-    parser = argparse.ArgumentParser('Planck emulator.')
+    parser = argparse.ArgumentParser('Likelihood emulator.')
 
     # Add supbarser to select between run and prep modes.
     subparsers = parser.add_subparsers(
@@ -58,8 +58,18 @@ def argument_parser():
     # TODO: make this boolean and add 'add_epochs' and 'learning_rate'
     train_parser.add_argument(
         '--resume', '-r',
+        help='Resume from a previous run.',
+        action='store_true')
+    train_parser.add_argument(
+        '--additional_epochs', '-e',
         type=int,
-        help='Resume from a previous run. Number of additional epochs (int)')
+        default=0,
+        help='Number of additional epochs (int)')
+    train_parser.add_argument(
+        '--learning_rate', '-lr',
+        type=float,
+        default=1.e-3,
+        help='New learning rate (float)')
 
     # Test arguments
     test_mcmc_parser.add_argument(
@@ -342,4 +352,19 @@ class YamlFile(File):
 
         if verbose:
             scp.info('Old parameter file is consistent with the new one')
+        return
+
+    def update_params(self, add_epochs, learning_rate):
+        epochs = self['ffnn_model']['n_epochs']
+        lr = self['ffnn_model']['learning_rate']
+        # TODO: think how to make it more general for other emulators
+        if not isinstance(epochs, list):
+            epochs = [epochs]
+        if not isinstance(lr, list):
+            lr = [lr]
+        epochs.append(epochs[-1] + add_epochs)
+        lr.append(learning_rate)
+        self['ffnn_model']['n_epochs'] = epochs
+        self['ffnn_model']['learning_rate'] = lr
+        print(self.content)
         return
