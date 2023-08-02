@@ -31,7 +31,7 @@ def argument_parser():
         '(iii) test: test the emulator.')
     sample_parser = subparsers.add_parser('sample')
     train_parser = subparsers.add_parser('train')
-    test_parser = subparsers.add_parser('test')
+    test_mcmc_parser = subparsers.add_parser('test_mcmc')
 
     # Sample arguments
     sample_parser.add_argument(
@@ -41,10 +41,6 @@ def argument_parser():
     sample_parser.add_argument(
         '--verbose', '-v',
         help='Verbose (default: False)',
-        action='store_true')
-    sample_parser.add_argument(
-        '--get_plots', '-p',
-        help='Generate diagnostic plots and save them (default: False)',
         action='store_true')
     # Train arguments
     train_parser.add_argument(
@@ -59,13 +55,25 @@ def argument_parser():
         '--get_plots', '-p',
         help='Generate diagnostic plots and save them (default: False)',
         action='store_true')
+    # TODO: make this boolean and add 'add_epochs' and 'learning_rate'
     train_parser.add_argument(
         '--resume', '-r',
         type=int,
         help='Resume from a previous run. Number of additional epochs (int)')
 
     # Test arguments
-    test_parser.add_argument('emu_folder', type=str, help='Emulator folder')
+    test_mcmc_parser.add_argument(
+        'params_file',
+        type=str,
+        help='Parameters file (.yaml)')
+    test_mcmc_parser.add_argument(
+        '--verbose', '-v',
+        help='Verbose (default: False)',
+        action='store_true')
+    test_mcmc_parser.add_argument(
+        '--get_plots', '-p',
+        help='Generate diagnostic plots and save them (default: False)',
+        action='store_true')
 
     return parser.parse_args()
 

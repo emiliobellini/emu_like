@@ -1,0 +1,11 @@
+# Explanatory file.
+
+# Emulator
+emulator:
+  # Folder where the emulator is located (str)
+  path:
+  # Epoch to load. Options: integer, 'best', 'last'
+  epoch:
+
+# Reference chains
+reference_chains:

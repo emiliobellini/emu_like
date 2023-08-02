@@ -15,5 +15,5 @@ if __name__ == '__main__':
         from pipelines.train import train_emu
         sys.exit(train_emu(args))
     if args.mode == 'test':
-        from pipelines.test import test_emu
-        sys.exit(test_emu(args))
+        from pipelines.test_mcmc import test_mcmc_emu
+        sys.exit(test_mcmc_emu(args))

@@ -1,7 +1,7 @@
 import tools.printing_scripts as scp
 
 
-def test_emu(args):
+def test_mcmc_emu(args):
     """ Test the emulator.
 
     Args:
