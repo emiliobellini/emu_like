@@ -90,9 +90,9 @@ class Sample(object):
 
     def _is_varying(self, param):
         if isinstance(self.params[param], dict):
-            return True
-        else:
-            return False
+            if 'prior' in self.params[param].keys():
+                return True
+        return False
 
     def _print_init(self, has_params=True, from_file=False):
         if from_file:
