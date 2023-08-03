@@ -159,12 +159,13 @@ def cobaya_loglike(x, x_var, params, progress=False):
     y_tot = np.sum(y, axis=1)[:, np.newaxis]
     y = np.hstack((y, y_tot))
     y_names.append('tot_loglike')
-    # Add total logprior
-    logprior = np.array([model.logprior(sp) for sp in sp_tot])[:, np.newaxis]
-    y = np.hstack((y, logprior))
-    y_names.append('logprior')
-    # Add total logprior
-    logpost = np.array([model.logpost(sp) for sp in sp_tot])[:, np.newaxis]
-    y = np.hstack((y, logpost))
-    y_names.append('logpost')
+    # Commented logprior and logposterior
+    # # Add total logprior
+    # logprior = np.array([model.logprior(sp) for sp in sp_tot])[:, np.newaxis]
+    # y = np.hstack((y, logprior))
+    # y_names.append('logprior')
+    # # Add total logposterior
+    # logpost = np.array([model.logpost(sp) for sp in sp_tot])[:, np.newaxis]
+    # y = np.hstack((y, logpost))
+    # y_names.append('logpost')
     return y, y_names
