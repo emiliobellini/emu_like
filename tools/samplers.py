@@ -20,7 +20,9 @@ class Sampler(object):
             - Emulator (object): based on params, get the correct
               emulator and initialize it.
         """
-        if sampler_type == 'grid':
+        if sampler_type == 'evaluate':
+            return EvaluateSampler(verbose=verbose)
+        elif sampler_type == 'grid':
             return GridSampler(verbose=verbose)
         elif sampler_type == 'log_grid':
             return LogGridSampler(verbose=verbose)
@@ -33,11 +35,24 @@ class Sampler(object):
         else:
             raise ValueError('Sampler not recognized!')
 
-    def get_x(self, bounds):
+    def get_x(self):
         """
         Placeholder for get_x
         """
         return
+
+
+class EvaluateSampler(Sampler):
+
+    def __init__(self, verbose=False):
+        if verbose:
+            scp.info('Initializing Evaluate sampler.')
+        Sampler.__init__(self)
+        return
+
+    def get_x(self, params, varying, n_samples, ref_params=None):
+        x = np.array([[params[p]['ref'] for p in varying]])
+        return x
 
 
 class GridSampler(Sampler):
