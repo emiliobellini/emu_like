@@ -1,4 +1,5 @@
 import numpy as np
+import tqdm
 import sklearn.model_selection as skl_ms
 import tools.sampling_functions as fng  # noqa:F401
 import tools.defaults as de
@@ -137,9 +138,18 @@ class Sample(object):
             param_dict = self.cobaya_params
         except AttributeError:
             param_dict = self.params
-        self.y, self.y_names = self.function(
-            self.x, self.x_names,
-            param_dict, progress=verbose)
+
+        y_val, self.y_names, model = self.function(
+            self.x[0], self.x_names,
+            param_dict)
+        self.y = [y_val]
+
+        for x in tqdm.tqdm(self.x[1:]):
+            y_val, _, _ = self.function(
+                x, self.x_names,
+                param_dict, model=model)
+            self.y.append(y_val)
+        self.y = np.array(self.y)
         self.n_y = self.y.shape[1]
         return self.x, self.y
 
