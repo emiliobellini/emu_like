@@ -17,12 +17,18 @@ def sample_emu(args):
 
 
     """
+
+    if args.verbose:
+        scp.print_level(0, '\nGetting sample for Emulator\n')
+
     # Load input file
     params = io.YamlFile(args.params_file, should_exist=True)
     params.read()
 
     # Define output path
     output = io.Folder(path=params['output'])
+    if args.verbose:
+        scp.info("Writing output in {}".format(output.path))
     # Check if empty, and copy param file to output folder
     if output.is_empty():
         params.copy_to(
@@ -35,9 +41,6 @@ def sample_emu(args):
         raise Exception(
             'Output folder not empty! Exiting to avoid corruption of '
             'precious data!')
-
-    if args.verbose:
-        scp.print_level(0, "\nGetting sample for Emulator\n")
 
     # Load or generate sample
     sample = Sample()

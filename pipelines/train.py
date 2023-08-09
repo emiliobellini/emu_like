@@ -18,6 +18,10 @@ def train_emu(args):
 
 
     """
+
+    if args.verbose:
+        scp.print_level(0, "\nStarted training emulator\n")
+
     # Load input file
     params = io.YamlFile(args.params_file, should_exist=True)
     params.read()
@@ -37,6 +41,8 @@ def train_emu(args):
         # Check that the two parameter files are compatible
         params.check_with(ref_params, de.params_to_check, verbose=args.verbose)
     else:
+        if args.verbose:
+            scp.info("Writing output in {}".format(output.path))
         # Check if empty, and copy param file to output folder
         if output.is_empty():
             params.copy_to(
@@ -50,9 +56,6 @@ def train_emu(args):
                 'Output folder not empty! Exiting to avoid corruption of '
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
-
-    if args.verbose:
-        scp.print_level(0, "\nStarted training emulator\n")
 
     # Load sample
     sample = Sample()
