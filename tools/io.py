@@ -42,6 +42,11 @@ def argument_parser():
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')
+    sample_parser.add_argument(
+        '--resume', '-r',
+        help='Resume from a previous run.',
+        action='store_true')
+
     # Train arguments
     train_parser.add_argument(
         'params_file',
@@ -55,7 +60,6 @@ def argument_parser():
         '--get_plots', '-p',
         help='Generate diagnostic plots and save them (default: False)',
         action='store_true')
-    # TODO: make this boolean and add 'add_epochs' and 'learning_rate'
     train_parser.add_argument(
         '--resume', '-r',
         help='Resume from a previous run.',
@@ -257,6 +261,17 @@ class File(object):
         np.savetxt(self.path, self.content, header=header)
         if verbose:
             scp.print_level(1, 'Created file {}'.format(self.path))
+        return
+
+    def append_array(self, line, header=''):
+        with open(self.path, 'a') as fn:
+            np.savetxt(fn, line)
+        return
+
+    def load_array(self, verbose=False):
+        self.content = np.genfromtxt(self.path)
+        if verbose:
+            scp.print_level(1, 'Loading file {}'.format(self.path))
         return
 
 

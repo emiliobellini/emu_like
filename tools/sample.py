@@ -119,19 +119,42 @@ class Sample(object):
         scp.print_level(1, 'N samples: {}'.format(self.n_samples))
         return
 
-    def generate(self, params, verbose=False):
+    def generate(self, params, verbose=False, root=None, resume=False):
 
         # Initialize
         self._init_from_params(params)
+
+        # Resume
+        if resume:
+            data_x = io.File(de.file_names['x_sample']['name'], root=root)
+            data_x.load_array(verbose=verbose)
+            self.x = data_x.content
+            data_y = io.File(de.file_names['y_sample']['name'], root=root)
+            data_y.load_array(verbose=verbose)
+            self.y = data_y.content
+            if self.x.ndim == 1:
+                self.x = self.x[:, np.newaxis]
+            if self.y.ndim == 1:
+                self.y = self.y[:, np.newaxis]
+            start_y = self.y.shape[0]
+        else:
+            start_y = 1
 
         if verbose:
             scp.info('Generating sample.')
             self._print_init()
 
-        # Get x array
-        x_sampler = smp.Sampler().choose_one(self.spacing, verbose=verbose)
-        self.x = x_sampler.get_x(
-            self.params, self.x_names, self.n_samples)
+        if not resume:
+            # Get x array
+            x_sampler = smp.Sampler().choose_one(self.spacing, verbose=verbose)
+            self.x = x_sampler.get_x(
+                self.params, self.x_names, self.n_samples)
+            # Save x
+            if root:
+                data_x = io.File(de.file_names['x_sample']['name'], root=root)
+                data_x.content = self.x
+                data_x.save_array(header='\t'.join(self.x_names),
+                                  verbose=verbose)
 
         # Get y samples
         try:
@@ -142,15 +165,31 @@ class Sample(object):
         y_val, self.y_names, model = self.function(
             self.x[0], self.x_names,
             param_dict)
-        self.y = [y_val]
 
-        for x in tqdm.tqdm(self.x[1:]):
+        if resume:
+            self.y = list(self.y)
+        else:
+            self.y = [y_val]
+            # Save y
+            if root:
+                if self.y_names:
+                    header_y = '\t'.join(self.y_names)
+                else:
+                    header_y = ''
+                data_y = io.File(de.file_names['y_sample']['name'], root=root)
+                data_y.content = self.y
+                data_y.save_array(header=header_y, verbose=verbose)
+
+        for x in tqdm.tqdm(self.x[start_y:]):
             y_val, _, _ = self.function(
                 x, self.x_names,
                 param_dict, model=model)
             self.y.append(y_val)
+            if root:
+                data_y.append_array(y_val)
         self.y = np.array(self.y)
         self.n_y = self.y.shape[1]
+
         return self.x, self.y
 
     def load(self, params, verbose=False):

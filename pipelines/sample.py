@@ -27,24 +27,39 @@ def sample_emu(args):
 
     # Define output path
     output = io.Folder(path=params['output'])
-    if args.verbose:
-        scp.info("Writing output in {}".format(output.path))
-    # Check if empty, and copy param file to output folder
-    if output.is_empty():
-        params.copy_to(
-            name=de.file_names['params']['name'],
-            root=params['output'],
-            header=de.file_names['params']['header'],
-            verbose=args.verbose)
-    # Else exit, to avoid overwriting
+    if args.resume:
+        if args.verbose:
+            scp.info('Resuming from {}.'.format(output.path))
+        ref_params = io.YamlFile(
+            de.file_names['params']['name'],
+            root=output,
+            should_exist=True)
+        ref_params.read()
+        # TODO: maybe here add check that param files are consistent
     else:
-        raise Exception(
-            'Output folder not empty! Exiting to avoid corruption of '
-            'precious data!')
+        if args.verbose:
+            scp.info("Writing output in {}".format(output.path))
+        # Check if empty, and copy param file to output folder
+        if output.is_empty():
+            params.copy_to(
+                name=de.file_names['params']['name'],
+                root=params['output'],
+                header=de.file_names['params']['header'],
+                verbose=args.verbose)
+        # Else exit, to avoid overwriting
+        else:
+            raise Exception(
+                'Output folder not empty! Exiting to avoid corruption of '
+                'precious data! If you want to resume a previous run use '
+                'the --resume (-r) option.')
 
     # Load or generate sample
     sample = Sample()
-    sample.generate(params=params, verbose=args.verbose)
+    sample.generate(
+        params=params,
+        root=output,
+        resume=args.resume,
+        verbose=args.verbose)
 
     # Save in output folder sample
     sample.save(output, verbose=args.verbose)
