@@ -62,6 +62,7 @@ def sample_emu(args):
         verbose=args.verbose)
 
     # Save in output folder sample
-    sample.save(output, verbose=args.verbose)
+    # Commented out because now it saves it incrementally
+    # sample.save(output, verbose=args.verbose)
 
     return

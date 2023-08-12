@@ -265,7 +265,7 @@ class File(object):
 
     def append_array(self, line, header=''):
         with open(self.path, 'a') as fn:
-            np.savetxt(fn, line)
+            np.savetxt(fn, [line])
         return
 
     def load_array(self, verbose=False):
