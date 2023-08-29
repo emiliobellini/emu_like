@@ -36,41 +36,42 @@ class Sample(object):
         self.function = eval('fng.'+self.fn_name)
         return
 
-    def _init_from_path(self, params):
+    def _init_from_paths(self, params):
         has_params = False
-        single_path = 'path' in params.keys()
-        two_files = 'path_x' in params.keys() and 'path_y' in params.keys()
+        single_path = 'paths' in params.keys()
+        two_files = 'paths_x' in params.keys() and 'paths_y' in params.keys()
         if single_path and two_files:
             raise Exception(
                 'Too many files to load. Please specify one between '
                 'path and [path_x, path_y]')
         elif two_files:
             # Two files are specified
-            path_x = params['path_x']
-            path_y = params['path_y']
+            paths_x = params['paths_x']
+            paths_y = params['paths_y']
         elif single_path:
             try:
                 # One file is specified
-                io.File(params['path'], should_exist=True)
-                path_x = params['path']
-                path_y = params['path']
+                io.File(params['paths'][0], should_exist=True)
+                paths_x = params['paths']
+                paths_y = params['paths']
             except IOError:
                 # One folder is specified
-                path_x = io.File(de.file_names['x_sample']['name'],
-                                 root=params['path']).path
-                path_y = io.File(de.file_names['y_sample']['name'],
-                                 root=params['path']).path
-                sample_params = io.YamlFile(de.file_names['params']['name'],
-                                            root=params['path'])
-                sample_params.read()
-                self._init_from_params(sample_params)
+                paths_x = [io.File(de.file_names['x_sample']['name'],
+                                   root=x).path for x in params['paths']]
+                paths_y = [io.File(de.file_names['y_sample']['name'],
+                                   root=x).path for x in params['paths']]
+                sample_params = [io.YamlFile(de.file_names['params']['name'],
+                                             root=x) for x in params['paths']]
+                [x.read() for x in sample_params]
+                self._init_from_params(sample_params[0])
+                self.n_samples = sum([x['n_samples'] for x in sample_params])
                 two_files = True
                 has_params = True
         else:
             raise Exception(
                 'No samples to load. Please specify one between '
                 'path and [path_x, path_y]')
-        return path_x, path_y, two_files, has_params
+        return paths_x, paths_y, two_files, has_params
 
     def _get_columns(self, params, two_files=True):
         try:
@@ -97,8 +98,8 @@ class Sample(object):
 
     def _print_init(self, has_params=True, from_file=False):
         if from_file:
-            scp.print_level(1, 'x from: {}'.format(self.path_x))
-            scp.print_level(1, 'y from: {}'.format(self.path_y))
+            scp.print_level(1, 'x from: {}'.format(self.paths_x))
+            scp.print_level(1, 'y from: {}'.format(self.paths_y))
         if has_params:
             scp.print_level(1, 'Sampling function: {}'.format(self.fn_name))
             scp.print_level(1, 'Spacing: {}'.format(self.spacing))
@@ -195,8 +196,8 @@ class Sample(object):
     def load(self, params, verbose=False):
 
         # Initialize
-        self.path_x, self.path_y, two_files, has_params = \
-            self._init_from_path(params)
+        self.paths_x, self.paths_y, two_files, has_params = \
+            self._init_from_paths(params)
         # Columns to read
         idx_x, idx_y = self._get_columns(params, two_files)
 
@@ -204,12 +205,10 @@ class Sample(object):
             scp.info('Loading sample.')
 
         # Load sample
-        x = np.genfromtxt(self.path_x)
-        y = np.genfromtxt(self.path_y)
-        if x.ndim == 1:
-            x = x[:, np.newaxis]
-        if y.ndim == 1:
-            y = y[:, np.newaxis]
+        x = [np.genfromtxt(sam) for sam in self.paths_x]
+        x = np.vstack([xn[:, np.newaxis] if xn.ndim == 1 else xn for xn in x])
+        y = [np.genfromtxt(sam) for sam in self.paths_y]
+        y = np.vstack([yn[:, np.newaxis] if yn.ndim == 1 else yn for yn in y])
         x = x[:, idx_x]
         y = y[:, idx_y]
 
