@@ -89,12 +89,13 @@ class FFNNEmu(Emulator):
 
         if verbose:
             scp.info('Loading FFNN architecture')
-            scp.print_level(1, 'From: {}'.format(fname))
 
         model = keras.models.load_model(fname)
 
         if model_to_load == 'last':
             self.model = model
+            if verbose:
+                scp.print_level(1, 'From: {}'.format(fname))
         
         else:
             if model_to_load == 'best':
@@ -119,6 +120,8 @@ class FFNNEmu(Emulator):
             model_folder = self.output.subfolder(
                 de.file_names['checkpoint']['folder'])
             model_file = io.File(fname, root=model_folder)
+            if verbose:
+                scp.print_level(1, 'From: {}'.format(model_file.path))
 
             model.load_weights(model_file.path)
 
