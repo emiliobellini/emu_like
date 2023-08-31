@@ -1,4 +1,6 @@
+import joblib
 import sklearn.preprocessing as skl_pre
+import tools.printing_scripts as scp
 
 
 class Scaler(object):
@@ -38,3 +40,16 @@ class Scaler(object):
         else:
             x_scaled = x
         return self.base_scaler.inverse_transform(x_scaled)
+
+    def save(self, path, verbose=False):
+        joblib.dump(self, path.path)
+        if verbose:
+            scp.info('Saved scaler at: {}'.format(path.path))
+        return
+
+    @staticmethod
+    def load(path, verbose=False):
+        self = joblib.load(path.path)
+        if verbose:
+            scp.info('Loading scaler from: {}'.format(path.path))
+        return self

@@ -73,6 +73,14 @@ def train_emu(args):
         params['rescale_y'],
         verbose=args.verbose)
 
+    # Save scalers
+    scalers = output.subfolder(
+        de.file_names['x_scaler']['folder']).create(verbose=args.verbose)
+    scaler_x_path = io.File(de.file_names['x_scaler']['name'], root=scalers)
+    sample.scaler_x.save(scaler_x_path, verbose=args.verbose)
+    scaler_y_path = io.File(de.file_names['y_scaler']['name'], root=scalers)
+    sample.scaler_y.save(scaler_y_path, verbose=args.verbose)
+
     # Plots
     if args.get_plots:
         sample.get_plots(output, verbose=args.verbose)

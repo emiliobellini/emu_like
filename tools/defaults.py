@@ -32,6 +32,14 @@ file_names = {
         'name': 'model.keras',
         'folder': 'model',
     },
+    'x_scaler': {
+        'name': 'x_scaler.save',
+        'folder': 'scalers',
+    },
+    'y_scaler': {
+        'name': 'y_scaler.save',
+        'folder': 'scalers',
+    },
 }
 
 # Use None when you only want to check a key and not their nested keys
