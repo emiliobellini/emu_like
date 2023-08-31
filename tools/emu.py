@@ -1,6 +1,6 @@
 class Emulator(object):
     """
-    Placeholder for emulators
+    General emulator class
     """
 
     def __init__(self, params, output):
@@ -8,8 +8,8 @@ class Emulator(object):
         Initialize common sampler features.
         """
         self.name = params['emulator_type']
-        self.output = output
         self.params = params
+        self.output = output
         return
 
     @staticmethod

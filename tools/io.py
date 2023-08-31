@@ -268,8 +268,8 @@ class File(object):
             np.savetxt(fn, [line])
         return
 
-    def load_array(self, verbose=False):
-        self.content = np.genfromtxt(self.path)
+    def load_array(self, verbose=False, **kwargs):
+        self.content = np.genfromtxt(self.path, **kwargs)
         if verbose:
             scp.print_level(1, 'Loading file {}'.format(self.path))
         return

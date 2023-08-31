@@ -81,7 +81,7 @@ class FFNNEmu(Emulator):
 
         return
 
-    def load(self, verbose=False):
+    def load(self, model_to_load='last', verbose=False):
 
         path = self.output.subfolder(
             de.file_names['model']['folder'])
@@ -91,7 +91,41 @@ class FFNNEmu(Emulator):
             scp.info('Loading FFNN architecture')
             scp.print_level(1, 'From: {}'.format(fname))
 
-        self.model = keras.models.load_model(fname)
+        model = keras.models.load_model(fname)
+
+        if model_to_load == 'last':
+            self.model = model
+        
+        else:
+            if model_to_load == 'best':
+                history = self.output.subfolder(
+                    de.file_names['log']['folder'])
+                history = io.File(de.file_names['log']['name'], root=history)
+                history.load_array(delimiter=',')
+                val_loss = np.nan_to_num(history.content[:, 2], nan=np.inf)
+                epochs = history.content[:, 0]
+                idx_min = np.argmin(val_loss)
+                # We need the +1 below because files are saved from epoch=1,
+                # while the logger starts from epoch=0
+                epoch_min = {'epoch': int(epochs[idx_min])+1}
+
+            elif isinstance(model_to_load, int):
+                epoch_min = {'epoch': model_to_load}
+
+            else:
+                raise Exception('Model not recognised!')
+
+            fname = de.file_names['checkpoint']['name'].format(**epoch_min)
+            model_folder = self.output.subfolder(
+                de.file_names['checkpoint']['folder'])
+            model_file = io.File(fname, root=model_folder)
+
+            model.load_weights(model_file.path)
+
+        self.model = model
+
+        if verbose:
+            model.summary()
 
         return
 
@@ -116,7 +150,7 @@ class FFNNEmu(Emulator):
             fname.path,
             monitor='val_loss',
             verbose=int(verbose),
-            save_best_only=True,
+            save_best_only=False,
             mode='auto',
             save_freq='epoch',
             save_weights_only=True)

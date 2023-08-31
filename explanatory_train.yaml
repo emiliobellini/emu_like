@@ -1,4 +1,6 @@
 # Explanatory file.
+# Usage:
+#   python emu_like.py train explanatory_train.yaml -v -p
 
 # Output folder (str)
 output: output/test_model

@@ -1,4 +1,6 @@
 # Explanatory file.
+# Usage:
+#   python emu_like.py sample explanatory_sample.yaml -v
 
 # Output folder (str)
 output: output/test_sample
