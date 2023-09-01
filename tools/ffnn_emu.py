@@ -96,7 +96,7 @@ class FFNNEmu(Emulator):
             self.model = model
             if verbose:
                 scp.print_level(1, 'From: {}'.format(fname))
-        
+
         else:
             if model_to_load == 'best':
                 history = self.output.subfolder(

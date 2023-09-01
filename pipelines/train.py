@@ -37,7 +37,9 @@ def train_emu(args):
             should_exist=True)
         ref_params.read()
         # Update parameters with new settings
-        params.update_params(args.additional_epochs, args.learning_rate)
+        params.update_params(ref_params,
+                             args.additional_epochs,
+                             args.learning_rate)
         # Check that the two parameter files are compatible
         params.check_with(ref_params, de.params_to_check, verbose=args.verbose)
     else:

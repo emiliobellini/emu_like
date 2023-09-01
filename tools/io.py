@@ -371,9 +371,9 @@ class YamlFile(File):
             scp.info('Old parameter file is consistent with the new one')
         return
 
-    def update_params(self, add_epochs, learning_rate):
-        epochs = self['ffnn_model']['n_epochs']
-        lr = self['ffnn_model']['learning_rate']
+    def update_params(self, ref_params, add_epochs, learning_rate):
+        epochs = ref_params['ffnn_model']['n_epochs']
+        lr = ref_params['ffnn_model']['learning_rate']
         # TODO: think how to make it more general for other emulators
         if not isinstance(epochs, list):
             epochs = [epochs]
