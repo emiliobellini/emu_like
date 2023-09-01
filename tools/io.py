@@ -338,6 +338,8 @@ class YamlFile(File):
         """
         if root:
             dest = os.path.join(root, name)
+        else:
+            dest = name
         params_dest = YamlFile(dest)
         parent = Folder(path=params_dest.parent_folder)
         parent.create(verbose=verbose)

@@ -61,8 +61,13 @@ def sample_emu(args):
         resume=args.resume,
         verbose=args.verbose)
 
-    # Save in output folder sample
-    # Commented out because now it saves it incrementally
-    # sample.save(output, verbose=args.verbose)
+    # Save details in output folder
+    details_path = io.YamlFile(
+        de.file_names['sample_details']['name'],
+        root=output.subfolder(
+            de.file_names['sample_details']['folder']).create(
+                verbose=args.verbose)
+    )
+    sample.save_details(details_path, verbose=args.verbose)
 
     return

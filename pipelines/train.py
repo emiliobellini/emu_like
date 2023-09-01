@@ -61,6 +61,15 @@ def train_emu(args):
     sample = Sample()
     sample.load(params=params['training_sample'], verbose=args.verbose)
 
+    # Save details in output folder
+    details_path = io.YamlFile(
+        de.file_names['sample_details']['name'],
+        root=output.subfolder(
+            de.file_names['sample_details']['folder']).create(
+                verbose=args.verbose)
+    )
+    sample.save_details(details_path, verbose=args.verbose)
+
     # Split training and testing samples
     sample.train_test_split(
         params['frac_train'],

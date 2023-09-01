@@ -1,9 +1,9 @@
 # Explanatory file.
 # Usage:
-#   python emu_like.py sample explanatory_sample.yaml -v
+#   python emu_like.py sample simple_sample.yaml -v
 
 # Output folder (str)
-output: output/test_sample
+output: output/simple/sample
 
 # Number of samples to generate (int)
 n_samples: 1000

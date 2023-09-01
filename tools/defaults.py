@@ -40,6 +40,13 @@ file_names = {
         'name': 'y_scaler.save',
         'folder': 'scalers',
     },
+    'sample_details': {
+        'name': 'sample_details.yaml',
+        'folder': 'sample_details',
+        'header': (
+            '# This is an automatically generated file. Do not modify it!\n\n'
+            ),
+    },
 }
 
 # Use None when you only want to check a key and not their nested keys

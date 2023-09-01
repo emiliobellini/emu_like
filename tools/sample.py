@@ -239,21 +239,24 @@ class Sample(object):
         self.x_train, self.x_test, self.y_train, self.y_test = split
         return
 
-    def save(self, output, verbose=False):
-        if verbose:
-            scp.info('Saving sample.')
-        # Save x
-        data_x = io.File(de.file_names['x_sample']['name'], root=output)
-        data_x.content = self.x
-        data_x.save_array(header='\t'.join(self.x_names), verbose=verbose)
-        # Save y
-        if self.y_names:
-            header_y = '\t'.join(self.y_names)
-        else:
-            header_y = ''
-        data_y = io.File(de.file_names['y_sample']['name'], root=output)
-        data_y.content = self.y
-        data_y.save_array(header=header_y, verbose=verbose)
+    def save_details(self, path, verbose=False):
+
+        path.content = {
+            'x_names': self.x_names,
+            'n_x': self.n_x,
+            'n_y': self.n_y,
+            'n_samples': self.n_samples,
+            'spacing': self.spacing,
+            'bounds': {x: [float(self.x[:, nx].min()),
+                           float(self.x[:, nx].max())]
+                       for nx, x in enumerate(self.x_names)},
+        }
+
+        path.copy_to(
+            name=path.path,
+            header=de.file_names['sample_details']['header'],
+            verbose=verbose)
+
         return
 
     def rescale(self, rescale_x, rescale_y, verbose=False):
