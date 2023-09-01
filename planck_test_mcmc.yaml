@@ -1,11 +1,11 @@
 # Explanatory file.
 # Usage:
-#   python emu_like.py test_mcmc explanatory_test_mcmc.yaml -v -p
+#   python emu_like.py test_mcmc planck_test_mcmc.yaml -v -p
 
 # Emulator
 emulator:
   # Folder where the emulator is located (str)
-  path: output/lcdm/train/all_10k
+  path: output/planck_lcdm/train
   # Epoch to load. Options: integer, 'best', 'last'
   # If the epoch is an integer the first epoch is epoch=1, as it is
   # saved in the model checkpoints (in the history log epochs start with 0)
