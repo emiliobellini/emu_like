@@ -84,10 +84,6 @@ def argument_parser():
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')
-    test_mcmc_parser.add_argument(
-        '--get_plots', '-p',
-        help='Generate diagnostic plots and save them (default: False)',
-        action='store_true')
 
     return parser.parse_args()
 
@@ -242,7 +238,7 @@ class File(object):
             raise IOError('File {} does not exist!'.format(self.path))
         return
 
-    def create(self, verbose=False):
+    def create(self, header='', verbose=False):
         """
         Check if a file exists, otherwise create an empty file.
         """
@@ -250,6 +246,8 @@ class File(object):
             parent = Folder(path=self.parent_folder)
             parent.create(verbose=verbose)
             f = open(self.path, 'w')
+            if header:
+                f.write(header)
             f.close()
             self.exists = os.path.isfile(self.path)
             if verbose:

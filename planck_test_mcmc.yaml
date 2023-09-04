@@ -1,6 +1,9 @@
 # Explanatory file.
 # Usage:
-#   python emu_like.py test_mcmc planck_test_mcmc.yaml -v -p
+#   python emu_like.py test_mcmc planck_test_mcmc.yaml -v
+
+# Output folder
+output: output/planck_lcdm/mcmc
 
 # Emulator
 emulator:
@@ -16,6 +19,3 @@ emcee:
   n_steps: 100
   n_threads: 2
   squeeze_factor: 1.e-4
-
-# Reference chains
-reference_chains:

@@ -47,6 +47,9 @@ file_names = {
             '# This is an automatically generated file. Do not modify it!\n\n'
             ),
     },
+    'chains': {
+        'name': 'chain.txt',
+    },
 }
 
 # Use None when you only want to check a key and not their nested keys

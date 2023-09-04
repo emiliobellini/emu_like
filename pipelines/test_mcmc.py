@@ -1,5 +1,6 @@
 import emcee
 import numpy as np
+import sys
 import tools.defaults as de
 import tools.io as io
 import tools.printing_scripts as scp
@@ -102,6 +103,23 @@ def test_mcmc_emu(args):
     width = np.array([x[1]-x[0] for x in bounds])
     pos = center + width*squeeze_factor*np.random.randn(n_walkers, n_dim)
 
-    sampler.run_mcmc(pos, n_steps, progress=True)
+    # Header
+    header = '# weight\t-logprob\t'+'\t'.join(sample_details['x_names'])+'\n'
+
+    chains = io.File(de.file_names['chains']['name'],
+                     root=params['output']).create(header=header,
+                                                   verbose=args.verbose)
+    for count, result in enumerate(sampler.sample(pos, iterations=n_steps)):
+        x_vars = result[0]
+        prob = result[1]
+        f = open(chains.path, 'a')
+        for k in range(pos.shape[0]):
+            out = np.append(np.array([1., -prob[k]]), x_vars[k])
+            f.write('    '.join(['{0:.10e}'.format(x) for x in out]) + '\n')
+        f.close()
+        if np.mod(count, 10) == 0:
+            print('----> Computed {0:5.1%} of the steps'
+                  ''.format(float(count+1) / n_steps))
+        sys.stdout.flush()
 
     return
