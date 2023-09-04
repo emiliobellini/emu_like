@@ -11,5 +11,11 @@ emulator:
   # saved in the model checkpoints (in the history log epochs start with 0)
   epoch: best
 
+emcee:
+  n_walkers: 100
+  n_steps: 100
+  n_threads: 2
+  squeeze_factor: 1.e-4
+
 # Reference chains
 reference_chains:

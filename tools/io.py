@@ -347,7 +347,7 @@ class YamlFile(File):
             with open(params_dest.path, 'w') as file:
                 file.write(header)
         with open(params_dest.path, 'a') as file:
-            yaml.dump(self.content, file)
+            yaml.safe_dump(self.content, file, sort_keys=False)
         if verbose:
             scp.print_level(1, 'Created file {}'.format(params_dest.path))
         return
