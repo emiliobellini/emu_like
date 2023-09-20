@@ -265,12 +265,12 @@ class Sample(object):
             scp.print_level(1, 'x with: {}'.format(rescale_x))
             scp.print_level(1, 'y with: {}'.format(rescale_y))
         # Rescale x
-        self.scaler_x = sc.Scaler(name=rescale_x)
+        self.scaler_x = sc.Scaler.choose_one(rescale_x)
         self.scaler_x.fit(self.x_train)
         self.x_train_scaled = self.scaler_x.transform(self.x_train)
         self.x_test_scaled = self.scaler_x.transform(self.x_test)
         # Rescale y
-        self.scaler_y = sc.Scaler(name=rescale_y)
+        self.scaler_y = sc.Scaler.choose_one(rescale_y)
         self.scaler_y.fit(self.y_train)
         self.y_train_scaled = self.scaler_y.transform(self.y_train)
         self.y_test_scaled = self.scaler_y.transform(self.y_test)

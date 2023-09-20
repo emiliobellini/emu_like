@@ -40,8 +40,9 @@ train_test_random_seed: 1543
 # - StandardScaler: gaussian with mean 0 and standard deviation 1
 # - MinMaxScaler: min and max rescaled in the range [0, 1]
 # - MinMaxScalerPlus1: min and max rescaled in the range [1, 2]
+# - ExpMinMaxScaler: apply exponential and then MinMaxScaler
 rescale_x: MinMaxScaler
-rescale_y: MinMaxScaler
+rescale_y: ExpMinMaxScaler
 
 # Parameters typical of the ffnn_model.
 # These are the ones used to build the architecture
