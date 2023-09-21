@@ -17,3 +17,10 @@ if __name__ == '__main__':
     if args.mode == 'test_mcmc':
         from pipelines.test_mcmc import test_mcmc_emu
         sys.exit(test_mcmc_emu(args))
+
+    # The following are scripts used to test parts of
+    # the code. They are called without arguments and
+    # everything is hardcoded.
+    if args.mode == 'test_scalers':
+        from tests.test_scalers import test_scalers
+        sys.exit(test_scalers())
