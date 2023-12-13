@@ -299,8 +299,8 @@ class Sample(object):
         return
 
     def get_plots(self, output, verbose=False):
-        # Not implemented plots if y is more than a scalar
-        if self.n_y != 1:
+        # Avoid plots if x or y are more than a scalar
+        if self.n_y != 1 or self.n_x != 1:
             return
         if verbose:
             scp.info('Generating plots.')
