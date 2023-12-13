@@ -160,4 +160,6 @@ def cobaya_loglike(x, x_var, params, model=None):
     # Add total logposterior
     y = np.hstack((y, model.logpost(sampled_params)))
     y_names.append('logpost')
+    # Replace nans with infinities
+    y = np.nan_to_num(y, nan=-np.inf)
     return y, y_names, model
