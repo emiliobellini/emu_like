@@ -238,3 +238,12 @@ class FFNNEmu(Emulator):
                     fname='true_vs_emulated.pdf',
                     verbose=verbose).save()
         return
+
+    def get_last_epoch_run(self):
+        history = self.output.subfolder(
+            de.file_names['log']['folder'])
+        history = io.File(de.file_names['log']['name'], root=history)
+        history.load_array(delimiter=',')
+        epochs = history.content[:, 0]
+        return int(epochs[-1])
+
