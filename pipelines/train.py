@@ -104,8 +104,9 @@ def train_emu(args):
         emu.load(verbose=args.verbose)
         # In YamlFile.update_params this is converted into a list to
         # keep track of the run history
-        emu.initial_epoch = params['ffnn_model']['n_epochs'][-2]
+        emu.initial_epoch = emu.get_last_epoch_run() + 1
         emu.total_epochs = params['ffnn_model']['n_epochs'][-1]
+        params['ffnn_model']['n_epochs'][-2] = emu.initial_epoch
     # Else, build it
     else:
         emu.build(sample.n_x, sample.n_y, verbose=args.verbose)

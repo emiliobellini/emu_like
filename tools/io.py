@@ -33,6 +33,11 @@ def argument_parser():
     train_parser = subparsers.add_parser('train')
     test_mcmc_parser = subparsers.add_parser('test_mcmc')
 
+    # These are scripts used to test parts of the code.
+    # They are called without arguments and everything
+    # is hardcoded.
+    subparsers.add_parser('test_scalers')
+
     # Sample arguments
     sample_parser.add_argument(
         'params_file',

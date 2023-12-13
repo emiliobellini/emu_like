@@ -35,6 +35,16 @@ class Scaler(object):
         else:
             raise ValueError('Scaler not recognized!')
 
+    def _replace_inf(self, x, factor=10.):
+        signs = np.sign(x)
+        x_new = np.abs(x)
+        x_new[np.isinf(x_new)] = np.nan
+        inf = factor*np.nanmax(x_new, axis=0)[np.newaxis, :]
+        nans = np.multiply(np.isnan(x_new), inf)
+        x_new[np.isnan(x_new)] = 0.
+        x_new = np.multiply(x_new + nans, signs)
+        return x_new
+
     def fit(self, x):
         """
         Placeholder for fit method.
@@ -73,13 +83,17 @@ class Scaler(object):
 
 class NoneScaler(Scaler):
 
-    def __init__(self):
-        Scaler.__init__(self)
+    def __init__(self, name):
+        Scaler.__init__(self, name)
         self.skl_scaler = None
         return
 
-    def transform(self, x):
-        return x
+    def transform(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_scaled = self._replace_inf(x)
+        else:
+            x_scaled = x
+        return x_scaled
 
     def inverse_transform(self, x):
         return x
@@ -87,81 +101,113 @@ class NoneScaler(Scaler):
 
 class StandardScaler(Scaler):
 
-    def __init__(self):
-        Scaler.__init__(self)
+    def __init__(self, name):
+        Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.StandardScaler()
         return
 
-    def fit(self, x):
-        self.skl_scaler.fit(x)
+    def fit(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_to_fit = self._replace_inf(x)
+        else:
+            x_to_fit = x
+        self.skl_scaler.fit(x_to_fit)
         return
 
-    def transform(self, x):
-        x_scaled = self.base_scaler.transform(x)
+    def transform(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_scaled = self._replace_inf(x)
+        else:
+            x_scaled = x
+        x_scaled = self.skl_scaler.transform(x_scaled)
         return x_scaled
 
     def inverse_transform(self, x_scaled):
-        x = self.base_scaler.inverse_transform(x_scaled)
+        x = self.skl_scaler.inverse_transform(x_scaled)
         return x
 
 
 class MinMaxScaler(Scaler):
 
-    def __init__(self):
-        Scaler.__init__(self)
+    def __init__(self, name):
+        Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.MinMaxScaler()
         return
 
-    def fit(self, x):
-        self.skl_scaler.fit(x)
+    def fit(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_to_fit = self._replace_inf(x)
+        else:
+            x_to_fit = x
+        self.skl_scaler.fit(x_to_fit)
         return
 
-    def transform(self, x):
-        x_scaled = self.base_scaler.transform(x)
+    def transform(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_scaled = self._replace_inf(x)
+        else:
+            x_scaled = x
+        x_scaled = self.skl_scaler.transform(x_scaled)
         return x_scaled
 
     def inverse_transform(self, x_scaled):
-        x = self.base_scaler.inverse_transform(x_scaled)
+        x = self.skl_scaler.inverse_transform(x_scaled)
         return x
 
 
 class MinMaxScalerPlus1(Scaler):
 
-    def __init__(self):
-        Scaler.__init__(self)
+    def __init__(self, name):
+        Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.MinMaxScaler()
         return
 
-    def fit(self, x):
-        self.skl_scaler.fit(x)
+    def fit(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_to_fit = self._replace_inf(x)
+        else:
+            x_to_fit = x
+        self.skl_scaler.fit(x_to_fit)
         return
 
-    def transform(self, x):
-        x_scaled = self.base_scaler.transform(x) + 1.
+    def transform(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_scaled = self._replace_inf(x)
+        else:
+            x_scaled = x
+        x_scaled = self.skl_scaler.transform(x_scaled) + 1.
         return x_scaled
 
     def inverse_transform(self, x_scaled):
-        x = self.base_scaler.inverse_transform(x_scaled - 1.)
+        x = self.skl_scaler.inverse_transform(x_scaled - 1.)
         return x
 
 
 class ExpMinMaxScaler(Scaler):
 
-    def __init__(self):
-        Scaler.__init__(self)
+    def __init__(self, name):
+        Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.MinMaxScaler()
         return
-
-    def fit(self, x):
-        self.skl_scaler.fit(x)
+    
+    def fit(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_to_fit = self._replace_inf(x)
+        else:
+            x_to_fit = x
+        self.skl_scaler.fit(x_to_fit)
         return
 
-    def transform(self, x):
-        x_scaled = np.exp(x)
-        x_scaled = self.base_scaler.transform(x_scaled)
+    def transform(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_scaled = self._replace_inf(x)
+        else:
+            x_scaled = x
+        x_scaled = self.skl_scaler.transform(x_scaled)
+        x_scaled = np.exp(x_scaled)
         return x_scaled
 
     def inverse_transform(self, x_scaled):
-        x = self.base_scaler.inverse_transform(x_scaled)
-        x = np.log(x)
+        x = np.log(x_scaled)
+        x = self.skl_scaler.inverse_transform(x)
         return x
