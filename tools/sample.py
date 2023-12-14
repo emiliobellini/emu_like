@@ -211,6 +211,12 @@ class Sample(object):
         y = np.vstack([yn[:, np.newaxis] if yn.ndim == 1 else yn for yn in y])
         x = x[:, idx_x]
         y = y[:, idx_y]
+        if params['remove_non_finite']:
+            if verbose:
+                scp.info('Removing non finite data from sample.')
+            only_finites = np.any(np.isfinite(y), axis=1)
+            x = x[only_finites]
+            y = y[only_finites]
 
         self.n_y = y.shape[1]
         if has_params:

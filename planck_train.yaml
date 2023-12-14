@@ -30,6 +30,8 @@ training_sample:
   # #   - columns_y: all
   # columns_x: [1, 2]
   columns_y: [5]
+  # Remove data with non finite y (inf and nan)
+  remove_non_finite: False
 
 # Fractional samples used for training (float)
 frac_train: 0.9
