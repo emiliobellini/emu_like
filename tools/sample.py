@@ -217,6 +217,7 @@ class Sample(object):
             only_finites = np.any(np.isfinite(y), axis=1)
             x = x[only_finites]
             y = y[only_finites]
+            self.n_samples = x.shape[0]
 
         self.n_y = y.shape[1]
         if has_params:
