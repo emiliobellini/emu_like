@@ -28,8 +28,12 @@ file_names = {
         'name': 'checkpoint_epoch{epoch:04d}.hdf5',
         'folder': 'checkpoints',
     },
-    'model': {
-        'name': 'model.keras',
+    'model_last': {
+        'name': 'model_last.keras',
+        'folder': 'model',
+    },
+    'model_best': {
+        'name': 'model_best.keras',
         'folder': 'model',
     },
     'x_scaler': {

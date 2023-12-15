@@ -84,8 +84,8 @@ class FFNNEmu(Emulator):
     def load(self, model_to_load='last', verbose=False):
 
         path = self.output.subfolder(
-            de.file_names['model']['folder'])
-        fname = io.File(de.file_names['model']['name'], root=path).path
+            de.file_names['model_last']['folder'])
+        fname = io.File(de.file_names['model_last']['name'], root=path).path
 
         if verbose:
             scp.info('Loading FFNN architecture')
@@ -99,16 +99,7 @@ class FFNNEmu(Emulator):
 
         else:
             if model_to_load == 'best':
-                history = self.output.subfolder(
-                    de.file_names['log']['folder'])
-                history = io.File(de.file_names['log']['name'], root=history)
-                history.load_array(delimiter=',')
-                val_loss = np.nan_to_num(history.content[:, 2], nan=np.inf)
-                epochs = history.content[:, 0]
-                idx_min = np.argmin(val_loss)
-                # We need the +1 below because files are saved from epoch=1,
-                # while the logger starts from epoch=0
-                epoch_min = {'epoch': int(epochs[idx_min])+1}
+                epoch_min = self._get_epoch_best_model()
 
             elif isinstance(model_to_load, int):
                 epoch_min = {'epoch': model_to_load}
@@ -133,13 +124,28 @@ class FFNNEmu(Emulator):
         return
 
     def save(self, verbose=False):
-        # Save model
+        # Save last model
         path = self.output.subfolder(
-            de.file_names['model']['folder']).create(verbose=verbose)
-        fname = io.File(de.file_names['model']['name'], root=path).path
+            de.file_names['model_last']['folder']).create(verbose=verbose)
+        fname = io.File(de.file_names['model_last']['name'], root=path).path
         if verbose:
-            scp.info('Saving model at {}'.format(fname))
+            scp.info('Saving last model at {}'.format(fname))
         self.model.save(fname, overwrite=True)
+
+        # Save best model
+        epoch_min = self._get_epoch_best_model()
+        fname = de.file_names['checkpoint']['name'].format(**epoch_min)
+        model_folder = self.output.subfolder(
+            de.file_names['checkpoint']['folder'])
+        model_file = io.File(fname, root=model_folder)
+        self.model.load_weights(model_file.path)
+
+        path = self.output.subfolder(
+            de.file_names['model_best']['folder']).create(verbose=verbose)
+        fname = io.File(de.file_names['model_best']['name'], root=path).path
+        self.model.save(fname, overwrite=True)
+        if verbose:
+            scp.info('Saving best model at {}'.format(fname))
         return
 
     def call_backs(self, verbose=False):
@@ -153,7 +159,7 @@ class FFNNEmu(Emulator):
             fname.path,
             monitor='val_loss',
             verbose=int(verbose),
-            save_best_only=False,
+            save_best_only=True,
             mode='auto',
             save_freq='epoch',
             save_weights_only=True)
@@ -246,4 +252,19 @@ class FFNNEmu(Emulator):
         history.load_array(delimiter=',')
         epochs = history.content[:, 0]
         return int(epochs[-1])
+
+    def _get_epoch_best_model(self):
+        history = self.output.subfolder(
+            de.file_names['log']['folder'])
+        history = io.File(de.file_names['log']['name'], root=history)
+        history.load_array(delimiter=',')
+        val_loss = np.nan_to_num(history.content[:, 2], nan=np.inf)
+        epochs = history.content[:, 0]
+        idx_min = np.argmin(val_loss)
+        # We need the +1 below because files are saved from epoch=1,
+        # while the logger starts from epoch=0
+        epoch_min = {'epoch': int(epochs[idx_min])+1}
+        return epoch_min
+
+
 
