@@ -301,6 +301,13 @@ class YamlFile(File):
     def __getitem__(self, item):
         return self.content[item]
 
+    def __repr__(self):
+        return self.content
+
+    def __str__(self):
+        kv = ['{}: {}'.format(k, v) for k, v in self.content.items()]
+        return '\n'.join(kv)
+
     def keys(self):
         return self.content.keys()
 
