@@ -31,7 +31,7 @@ def argument_parser():
         '(iii) test: test the emulator.')
     sample_parser = subparsers.add_parser('sample')
     train_parser = subparsers.add_parser('train')
-    test_mcmc_parser = subparsers.add_parser('test_mcmc')
+    mcmc_parser = subparsers.add_parser('mcmc')
 
     # These are scripts used to test parts of the code.
     # They are called without arguments and everything
@@ -81,11 +81,11 @@ def argument_parser():
         help='New learning rate (float)')
 
     # Test arguments
-    test_mcmc_parser.add_argument(
+    mcmc_parser.add_argument(
         'params_file',
         type=str,
         help='Parameters file (.yaml)')
-    test_mcmc_parser.add_argument(
+    mcmc_parser.add_argument(
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')

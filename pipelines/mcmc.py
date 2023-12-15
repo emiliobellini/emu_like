@@ -31,7 +31,7 @@ def log_prob(x, model, x_names, bounds, scaler_x, scaler_y):
     return -0.5*log_lkl + log_prior(x, x_names, bounds)
 
 
-def test_mcmc_emu(args):
+def mcmc_emu(args):
     """ Test the emulator.
 
     Args:

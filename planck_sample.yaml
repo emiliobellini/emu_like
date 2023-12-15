@@ -2,10 +2,10 @@
 # 4*sigma range of parameters (wrt Planck18)
 
 # Usage:
-#   python emu_like.py sample simple_sample.yaml -v
+#   python emu_like.py sample planck_sample.yaml -v
 
 # Output folder (str)
-output: output/planck_lcdm/sample
+output: output/planck/lcdm/sample
 
 # Number of samples to generate (int)
 n_samples: 100
