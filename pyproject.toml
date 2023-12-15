@@ -11,6 +11,7 @@ requires-python = ">=3.8.0"
 dependencies = [
     "cobaya>=3.0",
     "numpy>=1.26",
+    "pyyaml>=6.0.1",
 ]
 
 [tool.setuptools.package-data]
