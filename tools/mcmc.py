@@ -1,6 +1,8 @@
 """
 List of mcmc samplers.
 """
+import cobaya
+# from cobaya.run import run as run_cob
 import emcee
 import numpy as np
 import sys
@@ -156,7 +158,31 @@ class EmceeMCMC(MCMC):
 class CobayaMCMC(MCMC):
 
     def __init__(self, params, verbose):
+        if verbose:
+            scp.info('Initializing CobayaMCMC sampler.')
+        self.name = 'cobaya'
+        MCMC.__init__(self, params, verbose)
+
+        # Build info dict
+        self.info = {
+            'output': self.output,
+            'sampler': {'mcmc': self.params},
+            'params': params['params'],
+            'likelihood': {
+                'like': self.log_like
+            },
+        }
+
         return
 
+    def log_like(self, *params):
+        # TODO: this is not working, it does not accept unnamed parameters
+        # Probably implement a likelihood class
+        log_lkl = self.evaluate_emulator(
+            params, self.emu.model, self.scaler_x, self.scaler_y)[0, 0]
+        print(log_lkl)
+        return log_lkl, {}
+
     def run(self):
+        updated_info, sampler = cobaya.run(self.info)
         return
