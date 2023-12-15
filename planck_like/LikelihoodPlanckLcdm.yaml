@@ -1,0 +1,10 @@
+emulator: None
+verbose: False
+params:
+  logA:
+  n_s:
+  theta_s_1e2:
+  omega_b:
+  omega_cdm:
+  tau_reio:
+  A_planck:

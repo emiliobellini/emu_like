@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "planck_like"
+version = "0.0.0"
+authors = [{name="TODO"}]
+description = "TODO"
+requires-python = ">=3.8.0"
+dependencies = [
+    "cobaya>=3.0",
+    "numpy>=1.26",
+]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.bibtex"]
+
+[tool.setuptools.packages.find]
+exclude = ["init_files", "output", "pipelines", "tests", "tools"]
+
+[project.urls]
+# Homepage = "...."
+# Documentation = "..."
+# Source = "https://gitlab.com/emilio.bellini/re_pbj"
+# Tracker = "https://gitlab.com/emilio.bellini/re_pbj/-/issues"
+# Licensing = "TODO"
