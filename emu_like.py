@@ -1,5 +1,5 @@
 import sys
-from src.io import argument_parser
+from src.utilities.io import argument_parser
 
 # -----------------MAIN-CALL-----------------------------------------
 if __name__ == '__main__':

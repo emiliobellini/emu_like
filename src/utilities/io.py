@@ -3,8 +3,8 @@ import numpy as np
 import os
 import re
 import yaml
-import src.defaults as de
-import src.printing_scripts as scp
+import src.utilities.defaults as de
+import src.utilities.printing_scripts as scp
 
 
 # ------------------- Parser -------------------------------------------------#

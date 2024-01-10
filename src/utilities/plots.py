@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import src.io as io
-import src.printing_scripts as scp
+import src.utilities.io as io
+import src.utilities.printing_scripts as scp
 
 
 class SinglePlot(object):

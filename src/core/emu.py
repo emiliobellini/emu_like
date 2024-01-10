@@ -25,7 +25,7 @@ class Emulator(object):
               emulator and initialize it.
         """
         if params['emulator_type'] == 'ffnn_emu':
-            from src.ffnn_emu import FFNNEmu
+            from src.core.ffnn_emu import FFNNEmu
             return FFNNEmu(params, output, verbose=verbose)
         else:
             raise ValueError('Emulator not recognized!')
