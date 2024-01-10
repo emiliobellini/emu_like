@@ -3,8 +3,8 @@ import numpy as np
 import os
 import re
 import yaml
-import src.utilities.defaults as de
-import src.utilities.printing_scripts as scp
+import src.emu_like.defaults as de
+import src.emu_like.printing_scripts as scp
 
 
 # ------------------- Parser -------------------------------------------------#

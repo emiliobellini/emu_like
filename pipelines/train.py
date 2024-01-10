@@ -3,11 +3,11 @@
 Main module with the pipeline used to train the emulator.
 
 """
-import src.utilities.defaults as de
-import src.utilities.io as io
-import src.utilities.printing_scripts as scp
-from src.core.emu import Emulator
-from src.core.sample import Sample
+import src.emu_like.defaults as de
+import src.emu_like.io as io
+import src.emu_like.printing_scripts as scp
+from src.emu_like.emu import Emulator
+from src.emu_like.sample import Sample
 
 
 def train_emu(args):

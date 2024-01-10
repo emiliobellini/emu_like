@@ -1,7 +1,7 @@
 import joblib
 import numpy as np
 import sklearn.preprocessing as skl_pre
-import src.utilities.printing_scripts as scp
+import src.emu_like.printing_scripts as scp
 
 
 class Scaler(object):
