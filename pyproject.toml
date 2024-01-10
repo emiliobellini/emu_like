@@ -1,11 +1,11 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "planck_like"
+name = "emu_like"
 version = "0.0.0"
-authors = [{name="TODO"}]
+authors = [{name="Emilio Bellini"}]
 description = "TODO"
 requires-python = ">=3.8.0"
 dependencies = [
@@ -14,15 +14,9 @@ dependencies = [
     "pyyaml>=6.0.1",
 ]
 
-[tool.setuptools.package-data]
-"*" = ["*.yaml", "*.bibtex"]
-
-[tool.setuptools.packages.find]
-exclude = ["init_files", "output", "pipelines", "tests", "tools"]
-
 [project.urls]
 # Homepage = "...."
 # Documentation = "..."
-# Source = "https://gitlab.com/emilio.bellini/re_pbj"
-# Tracker = "https://gitlab.com/emilio.bellini/re_pbj/-/issues"
+# Source = "https://github.com/emiliobellini/emu_like"
+# Tracker = "https://github.com/emiliobellini/emu_like/issues"
 # Licensing = "TODO"

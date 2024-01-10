@@ -1,12 +1,12 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
-import src.defaults as de
-import src.io as io
-import src.plots as pl
-import src.printing_scripts as scp
-from src.emu import Emulator
-import src.loss_functions as lf  # noqa:F401
+from . import defaults as de
+from . import io as io
+from . import plots as pl
+from . import printing_scripts as scp
+from .emu import Emulator
+from . import loss_functions as lf  # noqa:F401
 
 
 class FFNNEmu(Emulator):

@@ -1,8 +1,9 @@
 import numpy as np
-import src.scalers as sc
+import emu_like.scalers as sc
 
 
-def test_scalers():
+# -----------------MAIN-CALL-----------------------------------------
+if __name__ == '__main__':
 
     # Local variables
     scaler_name = 'ExpMinMaxScaler'
@@ -46,5 +47,3 @@ def test_scalers():
     print()
     print('Minimum differences per feature: {}'.format(abs_diff.min(axis=0)))
     print('Maximum differences per feature: {}'.format(abs_diff.max(axis=0)))
-
-    return

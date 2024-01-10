@@ -3,8 +3,8 @@ import numpy as np
 import os
 import re
 import yaml
-import src.defaults as de
-import src.printing_scripts as scp
+from . import defaults as de
+from . import printing_scripts as scp
 
 
 # ------------------- Parser -------------------------------------------------#
@@ -32,11 +32,6 @@ def argument_parser():
     sample_parser = subparsers.add_parser('sample')
     train_parser = subparsers.add_parser('train')
     mcmc_parser = subparsers.add_parser('mcmc')
-
-    # These are scripts used to test parts of the code.
-    # They are called without arguments and everything
-    # is hardcoded.
-    subparsers.add_parser('test_scalers')
 
     # Sample arguments
     sample_parser.add_argument(
