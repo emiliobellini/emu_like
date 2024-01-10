@@ -6,11 +6,11 @@ import cobaya
 import emcee
 import numpy as np
 import sys
-import tools.defaults as de
-import tools.io as io
-import tools.printing_scripts as scp
-from tools.emu import Emulator
-from tools.scalers import Scaler
+import src.defaults as de
+import src.io as io
+import src.printing_scripts as scp
+from src.emu import Emulator
+from src.scalers import Scaler
 
 
 class MCMC(object):

@@ -1,6 +1,6 @@
-import tools.io as io
-import tools.printing_scripts as scp
-from tools.mcmc import MCMC
+import src.io as io
+import src.printing_scripts as scp
+from src.mcmc import MCMC
 
 
 def mcmc_emu(args):

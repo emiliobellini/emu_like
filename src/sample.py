@@ -1,13 +1,13 @@
 import numpy as np
 import tqdm
 import sklearn.model_selection as skl_ms
-import tools.sampling_functions as fng  # noqa:F401
-import tools.defaults as de
-import tools.io as io
-import tools.plots as pl
-import tools.printing_scripts as scp
-import tools.scalers as sc
-import tools.samplers as smp
+import src.sampling_functions as fng  # noqa:F401
+import src.defaults as de
+import src.io as io
+import src.plots as pl
+import src.printing_scripts as scp
+import src.scalers as sc
+import src.samplers as smp
 
 
 class Sample(object):

@@ -12,10 +12,10 @@ changed.
 """
 import numpy as np
 from cobaya.likelihood import Likelihood
-import tools.defaults as de
-import tools.io as io
-from tools.emu import Emulator
-from tools.scalers import Scaler
+import src.defaults as de
+import src.io as io
+from src.emu import Emulator
+from src.scalers import Scaler
 
 
 class LikelihoodPlanckLcdm(Likelihood):

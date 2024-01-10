@@ -1,5 +1,5 @@
 import numpy as np
-import tools.scalers as sc
+import src.scalers as sc
 
 
 def test_scalers():

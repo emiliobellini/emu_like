@@ -1,6 +1,6 @@
 import numpy as np
 import scipy
-import tools.printing_scripts as scp
+import src.printing_scripts as scp
 
 
 class Sampler(object):
