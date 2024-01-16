@@ -300,8 +300,7 @@ class YamlFile(File):
         return self.content
 
     def __str__(self):
-        kv = ['{}: {}'.format(k, v) for k, v in self.content.items()]
-        return '\n'.join(kv)
+        return str(self.content)
 
     def keys(self):
         return self.content.keys()
