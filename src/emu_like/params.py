@@ -1,4 +1,5 @@
 import yaml
+from . import io as io
 
 
 class Params(object):
@@ -6,7 +7,9 @@ class Params(object):
     Class dealing with parameters.
     """
 
-    def __init__(self):
+    def __init__(self, content=None):
+        if content:
+            self.content = content
         return
 
     def __setitem__(self, item, value):
@@ -33,3 +36,21 @@ class Params(object):
         with open(path) as file:
             self.content = yaml.safe_load(file)
         return self
+    
+    def save(self, path, header=None, verbose=False):
+        """
+        Save parameter to path, with the header if specified.
+
+        Arguments:
+            - path (str): destination path
+            - header (str, optional): string to be prepended
+              to destination file.
+        """
+        if header:
+            with open(path, 'w') as file:
+                file.write(header)
+        with open(path, 'a') as file:
+            yaml.safe_dump(self.content, file, sort_keys=False)
+        if verbose:
+            io.print_level(1, 'Saved parameters at: {}'.format(path))
+        return

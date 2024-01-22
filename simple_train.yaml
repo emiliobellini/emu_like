@@ -63,7 +63,7 @@ ffnn_model:
   optimizer: adam
   # Name of the loss function (str). Options: any of the functions
   # defined in https://keras.io/api/losses/, plus the ones
-  # defined in tools/loss_functions.py
+  # defined in src/emu_like/loss_functions.py
   loss_function: mean_squared_error
   # Number of epochs to be run before stop (int).
   # To keep track of resuming, this is converted and saved as a list.

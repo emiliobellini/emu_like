@@ -3,8 +3,10 @@
 Main module with the pipeline used to train the emulator.
 
 """
+import os
 import src.emu_like.defaults as de
 import src.emu_like.io as io
+from src.emu_like.params import Params
 from src.emu_like.sample import Sample
 
 
@@ -20,69 +22,44 @@ def sample_emu(args):
     if args.verbose:
         io.print_level(0, '\nGetting sample for Emulator\n')
 
+    # Read params
+    params = Params().load(args.params_file)
+
     # Init Sample object
     sample = Sample()
-    sample.load('output/full_2files', verbose=args.verbose)
 
-    print()
-    sample = Sample()
-    sample.load('output/full_1file/xy_sample.txt', verbose=args.verbose)
-
-    print()
-    sample = Sample()
-    sample.load('output/full_2files/x_sample.txt',
-                path_y='output/full_2files/y_sample.txt', verbose=args.verbose)
-    exit()
-
-    # Load input file
-    print(args)
-    exit()
-    params = io.YamlFile(args.params_file, should_exist=True)
-    params.read()
-
-    # Define output path
-    output = io.Folder(path=params['output'])
+    # If resume
     if args.resume:
         if args.verbose:
-            io.info('Resuming from {}.'.format(output.path))
-        ref_params = io.YamlFile(
-            de.file_names['params']['name'],
-            root=output,
-            should_exist=True)
-        ref_params.read()
-        # TODO: maybe here add check that param files are consistent
+            io.info('Resuming from {}.'.format(params['output']))
+            io.print_level(1, 'Ignoring {}'.format(args.params_file))
+        sample.load(params['output'], verbose=args.verbose)
+        sample.resume()  # TODO
+    # Otherwise
     else:
-        if args.verbose:
-            io.info("Writing output in {}".format(output.path))
-        # Check if empty, and copy param file to output folder
-        if output.is_empty():
-            params.copy_to(
-                name=de.file_names['params']['name'],
-                root=params['output'],
-                header=de.file_names['params']['header'],
-                verbose=args.verbose)
-        # Else exit, to avoid overwriting
+        # Check if output folder is empty, otherwise stop
+        if io.Folder(params['output']).is_empty():
+            if args.verbose:
+                io.info("Writing output in {}".format(params['output']))
         else:
             raise Exception(
                 'Output folder not empty! Exiting to avoid corruption of '
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
+        # Pass correct params dict
+        if params['sampled_function'] == 'cobaya_loglike':
+            params_dict = params['cobaya']
+        else:
+            params_dict = params['params']
 
-    # Load or generate sample
-    sample = Sample()
-    sample.generate(
-        params=params,
-        root=output,
-        resume=args.resume,
-        verbose=args.verbose)
-
-    # Save details in output folder
-    details_path = io.YamlFile(
-        de.file_names['sample_details']['name'],
-        root=output.subfolder(
-            de.file_names['sample_details']['folder']).create(
-                verbose=args.verbose)
-    )
-    sample.save_details(details_path, verbose=args.verbose)
+        # Generate sample
+        sample.generate(
+            params=params_dict,
+            sampled_function=params['sampled_function'],
+            n_samples=params['n_samples'],
+            spacing=params['spacing'],
+            save_incrementally=True,
+            output_path=params['output'],
+            verbose=args.verbose)
 
     return
