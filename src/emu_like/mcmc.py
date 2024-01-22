@@ -8,7 +8,6 @@ import numpy as np
 import sys
 from . import defaults as de
 from . import io as io
-from . import printing_scripts as scp
 from .emu import Emulator
 from .scalers import Scaler
 
@@ -95,7 +94,7 @@ class EmceeMCMC(MCMC):
 
     def __init__(self, params, verbose):
         if verbose:
-            scp.info('Initializing EmceeMCMC sampler.')
+            io.info('Initializing EmceeMCMC sampler.')
         self.name = 'emcee'
         MCMC.__init__(self, params, verbose)
 
@@ -159,7 +158,7 @@ class CobayaMCMC(MCMC):
 
     def __init__(self, params, verbose):
         if verbose:
-            scp.info('Initializing CobayaMCMC sampler.')
+            io.info('Initializing CobayaMCMC sampler.')
         self.name = 'cobaya'
         MCMC.__init__(self, params, verbose)
 

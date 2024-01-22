@@ -4,7 +4,6 @@ import os
 import re
 import yaml
 from . import defaults as de
-from . import printing_scripts as scp
 
 
 # ------------------- Parser -------------------------------------------------#
@@ -126,7 +125,7 @@ class Folder(object):
             os.makedirs(self.path)
             self.exists = os.path.isdir(self.path)
             if verbose:
-                scp.print_level(1, 'Created folder {}'.format(self.path))
+                print_level(1, 'Created folder {}'.format(self.path))
         self._exists_or_error()
         return self
 
@@ -251,14 +250,14 @@ class File(object):
             f.close()
             self.exists = os.path.isfile(self.path)
             if verbose:
-                scp.print_level(1, 'Created file {}'.format(self.path))
+                print_level(1, 'Created file {}'.format(self.path))
         self._exists_or_error()
         return self
 
     def save_array(self, header='', verbose=False):
         np.savetxt(self.path, self.content, header=header)
         if verbose:
-            scp.print_level(1, 'Created file {}'.format(self.path))
+            print_level(1, 'Created file {}'.format(self.path))
         return
 
     def append_array(self, line, header=''):
@@ -269,7 +268,7 @@ class File(object):
     def load_array(self, verbose=False, **kwargs):
         self.content = np.genfromtxt(self.path, **kwargs)
         if verbose:
-            scp.print_level(1, 'Loading file {}'.format(self.path))
+            print_level(1, 'Loading file {}'.format(self.path))
         return
 
 
@@ -313,23 +312,6 @@ class YamlFile(File):
             self.content = yaml.safe_load(file)
         return
 
-    def read_param_or_default(self, param, verbose=False):
-        """
-        Read param and return its value.
-        If not present try to get the default value.
-        """
-        if not self.content:
-            self.read()
-        try:
-            return self[param]
-        except KeyError:
-            value = de.default_parameters[param]
-            self[param] = value
-            if verbose:
-                scp.print_level(
-                    1, 'Using default value ({}) for {}'.format(value, param))
-            return value
-
     def copy_to(self, name, root=None, header=None, verbose=False):
         """
         Copy YAML file to dest, with the
@@ -353,7 +335,7 @@ class YamlFile(File):
         with open(params_dest.path, 'a') as file:
             yaml.safe_dump(self.content, file, sort_keys=False)
         if verbose:
-            scp.print_level(1, 'Created file {}'.format(params_dest.path))
+            print_level(1, 'Created file {}'.format(params_dest.path))
         return
 
     def check_with(self, ref, to_check, verbose=False):
@@ -372,7 +354,7 @@ class YamlFile(File):
                     raise Exception(msg.format(key, subk))
 
         if verbose:
-            scp.info('Old parameter file is consistent with the new one')
+            info('Old parameter file is consistent with the new one')
         return
 
     def update_params(self, ref_params, add_epochs, learning_rate):
@@ -389,3 +371,37 @@ class YamlFile(File):
         self['ffnn_model']['learning_rate'] = lr
         print(self.content)
         return
+
+
+# ------------------- Scripts ------------------------------------------------#
+
+def write_red(msg):
+    return '\033[1;31m{}\033[00m'.format(msg)
+
+
+def write_green(msg):
+    return '\033[1;32m{}\033[00m'.format(msg)
+
+
+def warning(msg):
+    prepend = write_red('[WARNING]')
+    print('{} {}'.format(prepend, msg))
+    return
+
+
+def info(msg):
+    prepend = write_green('[info]')
+    print('{} {}'.format(prepend, msg))
+    return
+
+
+def print_level(num, msg, arrow=True):
+    if num > 0:
+        if arrow:
+            prepend = write_green(num*'----' + '> ')
+        else:
+            prepend = (4*num+2)*' '
+    else:
+        prepend = ''
+    print('{}{}'.format(prepend, msg))
+    return

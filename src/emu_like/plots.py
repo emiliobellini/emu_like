@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from . import io as io
-from . import printing_scripts as scp
 
 
 class SinglePlot(object):
@@ -52,7 +51,7 @@ class SinglePlot(object):
         plt.savefig(fpath)
         plt.close()
         if self.verbose:
-            scp.print_level(1, 'Saved plot at {}'.format(fpath))
+            io.print_level(1, 'Saved plot at {}'.format(fpath))
         return
 
 

@@ -1,6 +1,6 @@
 import numpy as np
 import scipy
-from . import printing_scripts as scp
+from . import io as io
 
 
 class Sampler(object):
@@ -46,7 +46,7 @@ class EvaluateSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing Evaluate sampler.')
+            io.info('Initializing Evaluate sampler.')
         Sampler.__init__(self)
         return
 
@@ -59,7 +59,7 @@ class GridSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing Grid sampler.')
+            io.info('Initializing Grid sampler.')
         Sampler.__init__(self)
         return
 
@@ -74,7 +74,7 @@ class LogGridSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing LogGrid sampler.')
+            io.info('Initializing LogGrid sampler.')
         Sampler.__init__(self)
         return
 
@@ -89,7 +89,7 @@ class RandomUniformSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing RandomUniform sampler.')
+            io.info('Initializing RandomUniform sampler.')
         Sampler.__init__(self)
         return
 
@@ -104,7 +104,7 @@ class RandomNormalSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing RandomNormal sampler.')
+            io.info('Initializing RandomNormal sampler.')
         Sampler.__init__(self)
         return
 
@@ -119,7 +119,7 @@ class LatinHypercubeSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing LatinHypercube sampler.')
+            io.info('Initializing LatinHypercube sampler.')
         Sampler.__init__(self)
         return
 

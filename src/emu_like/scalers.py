@@ -1,7 +1,7 @@
 import joblib
 import numpy as np
 import sklearn.preprocessing as skl_pre
-from . import printing_scripts as scp
+from . import io as io
 
 
 class Scaler(object):
@@ -70,14 +70,14 @@ class Scaler(object):
     def save(self, path, verbose=False):
         joblib.dump(self, path.path)
         if verbose:
-            scp.info('Saved scaler at: {}'.format(path.path))
+            io.info('Saved scaler at: {}'.format(path.path))
         return
 
     @staticmethod
     def load(path, verbose=False):
         self = joblib.load(path.path)
         if verbose:
-            scp.info('Loading scaler from: {}'.format(path.path))
+            io.info('Loading scaler from: {}'.format(path.path))
         return self
 
 

@@ -5,7 +5,6 @@ Main module with the pipeline used to train the emulator.
 """
 import src.emu_like.defaults as de
 import src.emu_like.io as io
-import src.emu_like.printing_scripts as scp
 from src.emu_like.emu import Emulator
 from src.emu_like.sample import Sample
 
@@ -20,7 +19,7 @@ def train_emu(args):
     """
 
     if args.verbose:
-        scp.print_level(0, "\nStarted training emulator\n")
+        io.print_level(0, "\nStarted training emulator\n")
 
     # Load input file
     params = io.YamlFile(args.params_file, should_exist=True)
@@ -30,7 +29,7 @@ def train_emu(args):
     output = io.Folder(path=params['output'])
     if args.resume:
         if args.verbose:
-            scp.info('Resuming from {}.'.format(output.path))
+            io.info('Resuming from {}.'.format(output.path))
         ref_params = io.YamlFile(
             de.file_names['params']['name'],
             root=output,
@@ -44,7 +43,7 @@ def train_emu(args):
         params.check_with(ref_params, de.params_to_check, verbose=args.verbose)
     else:
         if args.verbose:
-            scp.info("Writing output in {}".format(output.path))
+            io.info("Writing output in {}".format(output.path))
         # Check if empty, and copy param file to output folder
         if output.is_empty():
             params.copy_to(

@@ -4,7 +4,6 @@ from tensorflow import keras
 from . import defaults as de
 from . import io as io
 from . import plots as pl
-from . import printing_scripts as scp
 from .emu import Emulator
 from . import loss_functions as lf  # noqa:F401
 
@@ -16,14 +15,14 @@ class FFNNEmu(Emulator):
 
     def __init__(self, params, output, verbose=False):
         if verbose:
-            scp.info('Initializing FFNNEmu emulator.')
+            io.info('Initializing FFNNEmu emulator.')
         Emulator.__init__(self, params, output)
         return
 
     def build(self, n_x, n_y, verbose=False):
         # Build model architecture
         if verbose:
-            scp.info('Building FFNN architecture')
+            io.info('Building FFNN architecture')
 
         # Local variables
         neur_inp_lay = n_x
@@ -40,10 +39,10 @@ class FFNNEmu(Emulator):
             want_output_layer = True
 
         if verbose:
-            scp.print_level(1, 'Activation function: {}'.format(activation))
-            scp.print_level(1, 'Dropout rate: {}'.format(dropout_rate))
-            scp.print_level(1, 'Optimizer: {}'.format(optimizer))
-            scp.print_level(1, 'Loss function: {}'.format(loss))
+            io.print_level(1, 'Activation function: {}'.format(activation))
+            io.print_level(1, 'Dropout rate: {}'.format(dropout_rate))
+            io.print_level(1, 'Optimizer: {}'.format(optimizer))
+            io.print_level(1, 'Loss function: {}'.format(loss))
 
         # Get loss function
         try:
@@ -88,14 +87,14 @@ class FFNNEmu(Emulator):
         fname = io.File(de.file_names['model_last']['name'], root=path).path
 
         if verbose:
-            scp.info('Loading FFNN architecture')
+            io.info('Loading FFNN architecture')
 
         model = keras.models.load_model(fname)
 
         if model_to_load == 'last':
             self.model = model
             if verbose:
-                scp.print_level(1, 'From: {}'.format(fname))
+                io.print_level(1, 'From: {}'.format(fname))
 
         else:
             if model_to_load == 'best':
@@ -112,7 +111,7 @@ class FFNNEmu(Emulator):
                 de.file_names['checkpoint']['folder'])
             model_file = io.File(fname, root=model_folder)
             if verbose:
-                scp.print_level(1, 'From: {}'.format(model_file.path))
+                io.print_level(1, 'From: {}'.format(model_file.path))
 
             model.load_weights(model_file.path)
 
@@ -129,7 +128,7 @@ class FFNNEmu(Emulator):
             de.file_names['model_last']['folder']).create(verbose=verbose)
         fname = io.File(de.file_names['model_last']['name'], root=path).path
         if verbose:
-            scp.info('Saving last model at {}'.format(fname))
+            io.info('Saving last model at {}'.format(fname))
         self.model.save(fname, overwrite=True)
 
         # Save best model
@@ -145,7 +144,7 @@ class FFNNEmu(Emulator):
         fname = io.File(de.file_names['model_best']['name'], root=path).path
         self.model.save(fname, overwrite=True)
         if verbose:
-            scp.info('Saving best model at {}'.format(fname))
+            io.info('Saving best model at {}'.format(fname))
         return
 
     def call_backs(self, verbose=False):
