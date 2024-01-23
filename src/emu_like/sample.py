@@ -52,6 +52,11 @@ class Sample(object):
         self.n_x = None  # Number of x variables
         self.n_y = None  # Number of y variables
         self.settings = None  # Settings dictionary
+        self.path = None  # Path of the sample
+        self.x_train = None  # Array with x_train data
+        self.y_train = None  # Array with y_train data
+        self.x_test = None  # Array with x_test data
+        self.y_test = None  # Array with y_test data
         return
 
     def _load_array(self, path, columns):
@@ -63,6 +68,10 @@ class Sample(object):
         - verbose (bool, default: False): verbosity.
         """
         array = np.genfromtxt(path)
+        # Adjust array dimensions.
+        # If it has one feature I still want 1x2_samples
+        if array.ndim == 1:
+            array = array[:, np.newaxis]
         names = self._try_to_load_names_array(path, n_names=array.shape[1])
         array = array[:, columns]
         names = names[columns]
@@ -105,6 +114,69 @@ class Sample(object):
             else:
                 return None
         return names
+
+    def _save_settings(self, path, verbose=False):
+        """
+        Quick way to save settings dictionary in path.
+        Arguments:
+        - path (str): folder where to store settings;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: this assumes that settings is already an
+        attribute of the class, and saves them with the
+        default name and header.
+        """
+        params = Params(content=self.settings)
+        params.save(os.path.join(path, de.file_names['params']['name']),
+                    header=de.file_names['params']['header'],
+                    verbose=verbose)
+        return
+
+    def _save_x(self, path, verbose=False):
+        """
+        Quick way to save x array in path.
+        Arguments:
+        - path (str): folder where to store x array;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: this assumes that x is already an attribute
+        of the class, and saves it with the default
+        name and header.
+        """
+        fpath = os.path.join(path, de.file_names['x_sample']['name'])
+        if verbose:
+            io.print_level(1, 'Saved x array at: {}'.format(fpath))
+        np.savetxt(fpath, self.x, header='\t'.join(self.x_names))
+        return
+
+    def _save_y(self, path, verbose=False):
+        """
+        Quick way to save y array in path.
+        Arguments:
+        - path (str): folder where to store y array;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: this assumes that y is already an attribute
+        of the class, and saves it with the default
+        name and header.
+        """
+        fpath = os.path.join(path, de.file_names['y_sample']['name'])
+        if verbose:
+            io.print_level(1, 'Saved y array at: {}'.format(fpath))
+        np.savetxt(fpath, self.y, header='\t'.join(self.y_names))
+        return
+
+    def _append_y(self, path, y_val):
+        """
+        Quick way to append rows to the y array in path.
+        Arguments:
+        - path (str): folder where the y array is stored;
+        - verbose (bool, default: False): verbosity.
+        """
+        fpath = os.path.join(path, de.file_names['y_sample']['name'])
+        with open(fpath, 'a') as fn:
+            np.savetxt(fn, [y_val])
+        return
 
     def load(self,
              path,
@@ -158,6 +230,10 @@ class Sample(object):
         elif os.path.isdir(path):
             path_x = os.path.join(path, de.file_names['x_sample']['name'])
             path_y = os.path.join(path, de.file_names['y_sample']['name'])
+            # Save folder path attribute. We need it to resume sample.
+            # This case is the standard output of 'generate' and it is
+            # the only one for which resume works.
+            self.path = path
         # 3) One file for x and y
         elif os.path.isfile(path):
             # Change default columns
@@ -198,33 +274,29 @@ class Sample(object):
 
         return
 
-    def resume(self):
-        return
-
     def save(self, path, verbose=False):
         """
         Save sample to path.
         - path (str): output path;
         - verbose (bool, default: False): verbosity.
         """
+        self.path = path
+
         if verbose:
             io.print_level(1, 'Saving output at: {}'.format(path))
 
-        # Save parameters
-        params = Params(content=self.settings)
-        params.save(os.path.join(path, de.file_names['params']['name']),
-                    header=de.file_names['params']['header'],
-                    verbose=False)
+        # Create main folder
+        io.Folder(path).create(verbose=verbose)
+
+        # Save settings
+        self._save_settings(path, verbose=False)
         
         # Save x
-        np.savetxt(os.path.join(path, de.file_names['x_sample']['name']),
-                   self.x,
-                   header='\t'.join(self.x_names))
+        self._save_x(path, verbose=False)
 
         # Save y
-        np.savetxt(os.path.join(path, de.file_names['y_sample']['name']),
-                   self.y,
-                   header='\t'.join(self.y_names))
+        self._save_y(path, verbose=False)
+
         return
 
     def generate(self, params, sampled_function, n_samples, spacing,
@@ -249,9 +321,14 @@ class Sample(object):
         if verbose:
             io.info('Generating sample.')
             io.print_level(1, 'Sampled function: {}'.format(sampled_function))
-            io.print_level(1, 'Number of sampled: {}'.format(n_samples))
+            io.print_level(1, 'Number of samples: {}'.format(n_samples))
             io.print_level(1, 'Spacing: {}'.format(spacing))
         
+        # Create main folder
+        if save_incrementally:
+            self.path = output_path
+            io.Folder(output_path).create(verbose=verbose)
+
         # Create settings dictionary
         if sampled_function == 'cobaya_loglike':
             params_name = 'cobaya'
@@ -263,14 +340,19 @@ class Sample(object):
             'n_samples': n_samples,
             'spacing': spacing,
         }
+        # Save settings
+        if save_incrementally:
+            self._save_settings(output_path, verbose=verbose)
 
         # Function to be sampled
         fun = eval('fng.' + sampled_function)
 
+        # Get correct parameters to be passed to fun
         if sampled_function == 'cobaya_loglike':
             sampled_params = params['params']
         else:
             sampled_params = params
+
         # Get x names
         self.x_names = [x for x in sampled_params
                         if 'prior' in sampled_params[x]]
@@ -279,67 +361,93 @@ class Sample(object):
         x_sampler = smp.Sampler().choose_one(spacing, verbose=verbose)
         self.x = x_sampler.get_x(sampled_params, self.x_names, n_samples)
         self.n_x = self.x.shape[1]
+        # Save x array
+        if save_incrementally:
+            self._save_x(output_path, verbose=verbose)
 
-        # Get first sampled y (to retrieve y_names)
+        # Get first sampled y (to retrieve y_names and model)
         y_val, self.y_names, model = fun(self.x[0], self.x_names, params)
         self.y = [y_val]
-
+        # Save y array (first row, then we update it)
         if save_incrementally:
-            io.Folder(output_path).create(verbose=verbose)
-            self.save(output_path, verbose=verbose)
+            self._save_y(output_path, verbose=verbose)
 
         # Sample y
         for x in tqdm.tqdm(self.x[1:]):
             y_val, _, _ = fun(x, self.x_names, params, model=model)
             self.y.append(y_val)
             if save_incrementally:
-                with open(os.path.join(output_path,
-                                       de.file_names['y_sample']['name']),
-                                       'a') as fn:
-                    np.savetxt(fn, [y_val])
+                self._append_y(output_path, y_val)
 
         self.y = np.array(self.y)
         self.n_y = self.y.shape[1]
+        return
+
+    def resume(self, save_incrementally=False, verbose=False):
+        """
+        Resume a sample previously loaded (use load method
+        before resuming). Many settings are already loaded.
+        Arguments:
+        - save_incrementally (bool, default: False): save output incrementally;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: this method assumes that both settings and the fulle x array
+        are already saved into the folder. The x array is then used to
+        calculate the missing row of the y array.
+        """
+
+        remaining_steps = self.settings['n_samples']-self.y.shape[0]
+        if verbose:
+            io.info('Resuming sample.')
+            io.print_level(1, 'Sampled function: {}'
+                           ''.format(self.settings['sampled_function']))
+            io.print_level(
+                1, 'Missing samples: {}'
+                ''.format(remaining_steps))
+            io.print_level(1, 'Spacing: {}'.format(self.settings['spacing']))
+        if remaining_steps == 0:
+            if verbose:
+                io.warning('Sample complete, nothing to resume!')
+            return
+
+        # Function to be sampled
+        fun = eval('fng.' + self.settings['sampled_function'])
+
+        #
+        if self.settings['sampled_function'] == 'cobaya_loglike':
+            params = self.settings['cobaya']
+        else:
+            params = self.settings['params']
+
+        # Get first sampled y (to retrieve model)
+        _, _, model = fun(self.x[0], self.x_names, params)
+
+        # Sample y
+        for x in tqdm.tqdm(self.x[self.y.shape[0]:]):
+            y_val, _, _ = fun(x, self.x_names, params, model=model)
+            self.y = np.vstack((self.y, y_val))
+            if save_incrementally:
+                self._append_y(self.path, y_val)
         return
 
     def join(self):
         return
 
-    def generate_old(self, params, verbose=False, root=None, resume=False):
-
-        # Resume
-        if resume:
-            data_x = io.File(de.file_names['x_sample']['name'], root=root)
-            data_x.load_array(verbose=verbose)
-            self.x = data_x.content
-            data_y = io.File(de.file_names['y_sample']['name'], root=root)
-            data_y.load_array(verbose=verbose)
-            self.y = data_y.content
-            if self.x.ndim == 1:
-                self.x = self.x[:, np.newaxis]
-            if self.y.ndim == 1:
-                self.y = self.y[:, np.newaxis]
-            start_y = self.y.shape[0]
-        else:
-            start_y = 1
-
-
-        if resume:
-            self.y = list(self.y)
-
-        for x in tqdm.tqdm(self.x[start_y:]):
-            y_val, _, _ = self.function(
-                x, self.x_names,
-                param_dict, model=model)
-            self.y.append(y_val)
-            if root:
-                data_y.append_array(y_val)
-        self.y = np.array(self.y)
-        self.n_y = self.y.shape[1]
-
-        return self.x, self.y
-
     def train_test_split(self, frac_train, seed, verbose=False):
+        """
+        Split a sample into test and train samples.
+        The split is stored into the x_train, x_test,
+        y_train and y_test attributes.
+        Arguments:
+        - frac_train (float): fraction of training samples (between 0 and 1);
+        - seed (int): seed to randomly split train and test;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: this method assumes that both settings and the fulle x array
+        are already saved into the folder. The x array is then used to
+        calculate the missing row of the y array.
+        """
+
         if verbose:
             io.info('Splitting training and testing samples.')
             io.print_level(1, 'Fractional number of training samples: {}'
@@ -353,6 +461,18 @@ class Sample(object):
         return
 
     def rescale(self, rescale_x, rescale_y, verbose=False):
+        """
+        Rescale x and y of a sample. The available scalers are
+        written in src/emu_like/scalers.py
+        Arguments:
+        - rescale_x (str): scaler for x;
+        - rescale_x (str): scaler for y;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: this method assumes that we already splitted
+        train and test samples.
+        """
+
         if verbose:
             io.info('Rescaling x and y.')
             io.print_level(1, 'x with: {}'.format(rescale_x))
@@ -392,6 +512,10 @@ class Sample(object):
         return
 
     def get_plots(self, output, verbose=False):
+        """
+        TODO: implement meaningful plots
+        """
+        return
         # Avoid plots if x or y are more than a scalar
         if self.n_y != 1 or self.n_x != 1:
             return

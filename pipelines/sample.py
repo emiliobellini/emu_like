@@ -34,7 +34,7 @@ def sample_emu(args):
             io.info('Resuming from {}.'.format(params['output']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
         sample.load(params['output'], verbose=args.verbose)
-        sample.resume()  # TODO
+        sample.resume(save_incrementally=True, verbose=args.verbose)
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
