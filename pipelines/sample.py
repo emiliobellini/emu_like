@@ -3,8 +3,6 @@
 Main module with the pipeline used to train the emulator.
 
 """
-import os
-import src.emu_like.defaults as de
 import src.emu_like.io as io
 from src.emu_like.params import Params
 from src.emu_like.sample import Sample
