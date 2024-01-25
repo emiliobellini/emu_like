@@ -28,7 +28,7 @@ emulator:
     # Name of the loss function (str). Options: any of the functions
     # defined in https://keras.io/api/losses/ (prepending keras.losses.),
     # plus the ones defined in src/emu_like/loss_functions.py
-    loss: mean_squared_error
+    loss: keras.losses.mean_squared_error
     # Number of epochs to be run before stop (int).
     # To keep track of resuming, this is converted and saved as a list.
     # In case a list is provided, the last two values are the starting and

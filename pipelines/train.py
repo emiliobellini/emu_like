@@ -25,6 +25,31 @@ def train_emu(args):
     # Read params
     params = Params().load(args.params_file)
 
+    # If resume
+    if args.resume:
+        if args.verbose:
+            io.info('Resuming from {}.'.format(params['output']))
+            io.print_level(1, 'Ignoring {}'.format(args.params_file))
+    # Otherwise
+    else:
+        # Check if output folder is empty, otherwise stop
+        if io.Folder(params['output']).is_empty():
+            if args.verbose:
+                io.info("Writing output in {}".format(params['output']))
+        else:
+            raise Exception(
+                'Output folder not empty! Exiting to avoid corruption of '
+                'precious data! If you want to resume a previous run use '
+                'the --resume (-r) option.')
+        # Create output folder
+        io.Folder(params['output']).create(args.verbose)
+        # Save params
+        params.save(
+            de.file_names['params']['name'],
+            root=params['output'],
+            header=de.file_names['params']['header'],
+            verbose=args.verbose)
+
     # Get default values
     try:
         columns_x = params['training_sample']['columns_x']
@@ -68,31 +93,30 @@ def train_emu(args):
         params['training_sample']['rescale_x'],
         params['training_sample']['rescale_y'],
         verbose=args.verbose)
+    # Save scalers
+    sample.scaler_x.save(de.file_names['x_scaler']['name'],
+                         root=params['output'],
+                         verbose=args.verbose)
+    sample.scaler_y.save(de.file_names['y_scaler']['name'],
+                         root=params['output'],
+                         verbose=args.verbose)
 
     # Call the right emulator
     emu = Emulator.choose_one(params['emulator']['type'],
                               verbose=args.verbose)
 
+    exit()
     # If resume
     if args.resume:
-        if args.verbose:
-            io.info('Resuming from {}.'.format(params['output']))
-            io.print_level(1, 'Ignoring {}'.format(args.params_file))
+        print('resuming')
     # Otherwise
     else:
-        # Check if output folder is empty, otherwise stop
-        if io.Folder(params['output']).is_empty():
-            if args.verbose:
-                io.info("Writing output in {}".format(params['output']))
-        else:
-            raise Exception(
-                'Output folder not empty! Exiting to avoid corruption of '
-                'precious data! If you want to resume a previous run use '
-                'the --resume (-r) option.')
-
         params['emulator']['params']['sample_n_x'] = sample.n_x
         params['emulator']['params']['sample_n_y'] = sample.n_y
+        # Build architecture
         emu.build(params['emulator']['params'], verbose=args.verbose)
+        # Save architecture
+        emu.save(params['output'], verbose=args.verbose)
 
     exit()
     # Save scalers

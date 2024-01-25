@@ -1,5 +1,6 @@
 import joblib
 import numpy as np
+import os
 import sklearn.preprocessing as skl_pre
 from . import io as io
 
@@ -81,13 +82,18 @@ class Scaler(object):
             io.info('Loading scaler from: {}'.format(path))
         return self
 
-    def save(self, path, verbose=False):
+    def save(self, path, root=None, verbose=False):
         """
         Save a scaler to path.
         Arguments:
         - path (str): file where to save the scaler;
+        - root (str, default: None): root where to save the file;
         - verbose (bool, default: False): verbosity.
         """
+        # Join root
+        if root:
+            path = os.path.join(root, path)
+
         joblib.dump(self, path)
         if verbose:
             io.info('Saved scaler at: {}'.format(path))

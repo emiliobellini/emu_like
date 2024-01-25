@@ -22,7 +22,6 @@ file_names = {
     },
     'log': {
         'name': 'history_log.cvs',
-        'folder': 'history_log',
     },
     'checkpoint': {
         'name': 'checkpoint_epoch{epoch:04d}.hdf5',
@@ -30,26 +29,15 @@ file_names = {
     },
     'model_last': {
         'name': 'model_last.keras',
-        'folder': 'model',
     },
     'model_best': {
         'name': 'model_best.keras',
-        'folder': 'model',
     },
     'x_scaler': {
         'name': 'x_scaler.save',
-        'folder': 'scalers',
     },
     'y_scaler': {
         'name': 'y_scaler.save',
-        'folder': 'scalers',
-    },
-    'sample_details': {
-        'name': 'sample_details.yaml',
-        'folder': 'sample_details',
-        'header': (
-            '# This is an automatically generated file. Do not modify it!\n\n'
-            ),
     },
     'chains': {
         'name': 'chain.txt',

@@ -3,6 +3,7 @@
 Main module with the pipeline used to train the emulator.
 
 """
+import src.emu_like.defaults as de
 import src.emu_like.io as io
 from src.emu_like.params import Params
 from src.emu_like.sample import Sample
@@ -44,6 +45,16 @@ def sample_emu(args):
                 'Output folder not empty! Exiting to avoid corruption of '
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
+
+        # Create output folder
+        io.Folder(params['output']).create(args.verbose)
+        # Save params
+        params.save(
+            de.file_names['params']['name'],
+            root=params['output'],
+            header=de.file_names['params']['header'],
+            verbose=args.verbose)
+
         # Pass correct params dict
         if params['sampled_function'] == 'cobaya_loglike':
             params_dict = params['cobaya']

@@ -1,4 +1,6 @@
+import os
 import yaml
+from . import defaults as de
 from . import io as io
 
 
@@ -37,15 +39,20 @@ class Params(object):
             self.content = yaml.safe_load(file)
         return self
     
-    def save(self, path, header=None, verbose=False):
+    def save(self, path, root=None, header=None, verbose=False):
         """
         Save parameter to path, with the header if specified.
-
         Arguments:
-            - path (str): destination path
-            - header (str, optional): string to be prepended
-              to destination file.
+        - path (str): destination file name, relative to root if specified;
+        - root (str, default: None): root where to save the file;
+        - header (str, optional): string to be prepended to destination file;
+        - verbose (bool, default: False): verbosity.
         """
+
+        # Join root
+        if root:
+            path = os.path.join(root, path)
+
         if header:
             with open(path, 'w') as file:
                 file.write(header)

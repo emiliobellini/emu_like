@@ -17,7 +17,7 @@ class FFNNEmu(Emulator):
       to continue training;
     - save: save emulator into a folder;
     - train: train the emulator;
-    - eval: evaluate the emulator on a list of x's.
+    - eval: evaluate the emulator on a x vector.
     """
 
     def __init__(self, verbose=False):
@@ -122,11 +122,33 @@ class FFNNEmu(Emulator):
         """
         return
 
-    def save(self):
+    def save(self, path, verbose=False):
         """
-        Placeholder for save.
-        TODO: write description
+        Save the emulator to path.
+        Arguments:
+        - path (str): output path;
+        - verbose (bool, default: False): verbosity.
         """
+        self.path = path
+
+        if verbose:
+            io.print_level(1, 'Saving output at: {}'.format(path))
+
+        # Create main folder
+        io.Folder(path).create(verbose=verbose)
+
+        # Save scalers
+        print()
+        exit()
+
+        # Save settings
+        self._save_settings(path, verbose=False)
+        
+        # Save x
+        self._save_x(path, verbose=False)
+
+        # Save y
+        self._save_y(path, verbose=False)
         return
 
     def train(self):

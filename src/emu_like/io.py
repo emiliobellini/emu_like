@@ -3,7 +3,6 @@ import numpy as np
 import os
 import re
 import yaml
-from . import defaults as de
 
 
 # ------------------- Parser -------------------------------------------------#

@@ -130,9 +130,11 @@ class Sample(object):
         default name and header.
         """
         params = Params(content=self.settings)
-        params.save(os.path.join(path, de.file_names['params']['name']),
-                    header=de.file_names['params']['header'],
-                    verbose=verbose)
+        params.save(
+            de.file_names['params']['name'],
+            root=params['output'],
+            header=de.file_names['params']['header'],
+            verbose=verbose)
         return
 
     def _save_x(self, path, verbose=False):
