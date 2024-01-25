@@ -563,35 +563,3 @@ class Sample(object):
                 io.print_level(
                     2, 'y_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
         return
-
-    def get_plots(self, output, verbose=False):
-        """
-        TODO: implement meaningful plots
-        """
-        return
-        # Avoid plots if x or y are more than a scalar
-        if self.n_y != 1 or self.n_x != 1:
-            return
-        if verbose:
-            io.info('Generating plots.')
-        for nx in range(self.n_x):
-            for ny in range(self.n_y):
-                # Plot original sample
-                pl.ScatterPlot(
-                    [(self.x_train[:, nx], self.y_train[:, ny]),
-                     (self.x_test[:, nx], self.y_test[:, ny])],
-                    labels=['train', 'test'],
-                    x_label='x_{}'.format(nx),
-                    y_label='y_{}'.format(ny),
-                    root=output.subfolder('plots'),
-                    verbose=verbose).save()
-                # Plot rescaled sample
-                pl.ScatterPlot(
-                    [(self.x_train_scaled[:, nx], self.y_train_scaled[:, ny]),
-                     (self.x_test_scaled[:, nx], self.y_test_scaled[:, ny])],
-                    labels=['train_scaled', 'test_scaled'],
-                    x_label='x_scaled_{}'.format(nx),
-                    y_label='y_scaled_{}'.format(ny),
-                    root=output.subfolder('plots'),
-                    verbose=verbose).save()
-        return

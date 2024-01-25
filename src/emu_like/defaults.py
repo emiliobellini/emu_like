@@ -43,23 +43,3 @@ file_names = {
         'name': 'chain.txt',
     },
 }
-
-# Use None when you only want to check a key and not their nested keys
-params_to_check = {
-    'output': None,
-    'emulator_type': None,
-    'frac_train': None,
-    'train_test_random_seed': None,
-    'rescale_x': None,
-    'rescale_y': None,
-    'ffnn_model': (
-      'activation_function',
-      'neurons_hidden_layer',
-      'batch_normalization',
-      'dropout_rate',
-      'optimizer',
-      'loss_function',
-      'batch_size',
-      'want_output_layer',
-    )
-}

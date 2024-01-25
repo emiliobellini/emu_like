@@ -105,70 +105,28 @@ def train_emu(args):
     emu = Emulator.choose_one(params['emulator']['type'],
                               verbose=args.verbose)
 
-    exit()
     # If resume
     if args.resume:
-        print('resuming')
+        emu.load(verbose=args.verbose)
     # Otherwise
     else:
         params['emulator']['params']['sample_n_x'] = sample.n_x
         params['emulator']['params']['sample_n_y'] = sample.n_y
         # Build architecture
         emu.build(params['emulator']['params'], verbose=args.verbose)
-        # Save architecture
-        emu.save(params['output'], verbose=args.verbose)
+
+    # Train the emulator
+    emu.train(sample, verbose=args.verbose)
+
+    # # Save emulator
+    # emu.save(params['output'], verbose=args.verbose)
 
     exit()
-    # Save scalers
-    scaler_path = io.Folder(params['output']).subfolder(de.file_names['x_scaler']['folder'])
-    print(params['output'])
-    print(scaler_path.path)
-    print(de.file_names['x_scaler']['folder'])
-    print(de.file_names['x_scaler']['name'])
-    exit()
-    # io.Folder()
-    scalers = output.subfolder(
-        de.file_names['x_scaler']['folder']).create(verbose=args.verbose)
-    scaler_x_path = io.File(de.file_names['x_scaler']['name'], root=scalers)
-    sample.scaler_x.save(scaler_x_path, verbose=args.verbose)
-    scaler_y_path = io.File(de.file_names['y_scaler']['name'], root=scalers)
-    sample.scaler_y.save(scaler_y_path, verbose=args.verbose)
-
-    exit()
-
-
-    # Define output path
-    output = io.Folder(path=params['output'])
     if args.resume:
         # Update parameters with new settings
         params.update_params(ref_params,
                              args.additional_epochs,
                              args.learning_rate)
-        # Check that the two parameter files are compatible
-        params.check_with(ref_params, de.params_to_check, verbose=args.verbose)
-    else:
-        if args.verbose:
-            io.info("Writing output in {}".format(output.path))
-        # Check if empty, and copy param file to output folder
-        if output.is_empty():
-            params.copy_to(
-                name=de.file_names['params']['name'],
-                root=params['output'],
-                header=de.file_names['params']['header'],
-                verbose=args.verbose)
-        # Else exit, to avoid overwriting
-        else:
-            raise Exception(
-                'Output folder not empty! Exiting to avoid corruption of '
-                'precious data! If you want to resume a previous run use '
-                'the --resume (-r) option.')
-
-    # Plots
-    if args.get_plots:
-        sample.get_plots(output, verbose=args.verbose)
-
-    # Call the right emulator
-    emu = Emulator.choose_one(params, output, verbose=args.verbose)
 
     # If resume, load emulator
     if args.resume:
@@ -188,11 +146,6 @@ def train_emu(args):
         if isinstance(emu.total_epochs, list):
             emu.total_epochs = emu.total_epochs[-1]
 
-    # Train the emulator
-    emu.train(sample, verbose=args.verbose, get_plots=args.get_plots)
-
-    # Save the emulator
-    emu.save(verbose=args.verbose)
 
     # Replace parameter file
     if args.resume:

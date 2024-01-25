@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import tensorflow as tf
 from tensorflow import keras
 from . import defaults as de
@@ -115,7 +116,7 @@ class FFNNEmu(Emulator):
 
         return
 
-    def load(self):
+    def load(self, verbose=False):
         """
         Placeholder for load.
         TODO: write description
@@ -138,17 +139,27 @@ class FFNNEmu(Emulator):
         io.Folder(path).create(verbose=verbose)
 
         # Save scalers
-        print()
-        exit()
+        try:
+            self.sample.scaler_x.save(de.file_names['x_scaler']['name'],
+                                    root=path,
+                                    verbose=verbose)
+        except AttributeError:
+            io.warning('x_scaler not loaded yet, impossible to save it!')
+        try:
+            self.sample.scaler_y.save(de.file_names['y_scaler']['name'],
+                                    root=path,
+                                    verbose=verbose)
+        except AttributeError:
+            io.warning('y_scaler not loaded yet, impossible to save it!')
 
-        # Save settings
-        self._save_settings(path, verbose=False)
-        
-        # Save x
-        self._save_x(path, verbose=False)
+        # Save last model
+        fname = os.path.join(path, de.file_names['model_last']['name'])
+        if verbose:
+            io.info('Saving last model at {}'.format(fname))
+        self.model.save(fname, overwrite=True)
 
-        # Save y
-        self._save_y(path, verbose=False)
+        # Save best model TODO
+
         return
 
     def train(self):
@@ -209,13 +220,6 @@ class FFNNEmu(Emulator):
         return
 
     def save_old(self, verbose=False):
-        # Save last model
-        path = self.output.subfolder(
-            de.file_names['model_last']['folder']).create(verbose=verbose)
-        fname = io.File(de.file_names['model_last']['name'], root=path).path
-        if verbose:
-            io.info('Saving last model at {}'.format(fname))
-        self.model.save(fname, overwrite=True)
 
         # Save best model
         epoch_min = self._get_epoch_best_model()
