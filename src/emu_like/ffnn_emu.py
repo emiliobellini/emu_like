@@ -10,43 +10,76 @@ from . import loss_functions as lf  # noqa:F401
 
 class FFNNEmu(Emulator):
     """
-    Evaluate sampler.
+    Feed Forward Neural Network emulator.
+    Available methods:
+    - build: build the emulator architecture from a dictionary of parameters;
+    - load: load an existing emulator from a folder, either to resume it or
+      to continue training;
+    - save: save emulator into a folder;
+    - train: train the emulator;
+    - eval: evaluate the emulator on a list of x's.
     """
 
-    def __init__(self, params, output, verbose=False):
+    def __init__(self, verbose=False):
+        """
+        Initialise FFNN Emulator.
+        Arguments:
+        - verbose (bool, default: False): verbosity.
+        """
         if verbose:
             io.info('Initializing FFNNEmu emulator.')
-        Emulator.__init__(self, params, output)
+        Emulator.__init__(self)
+        self.name = 'ffnn_emu'
         return
 
-    def build(self, n_x, n_y, verbose=False):
+    def build(self, params, verbose=False):
+        """
+        Build emulator architecture.
+        Arguments:
+        - params (dict, default: None): parameters for the emulator;
+        - verbose (bool, default: False): verbosity.
+
+        The params dictionary should contain the following keys:
+        - activation (str): any activation function from (str)
+          https://keras.io/api/layers/activations;
+        - sample_n_x (int): number of x variables. Here we use it to fix
+          the number of neurons of the input layer;
+        - neurons_hidden (list of positive int): number of neurons
+          for each hidden layer;
+        - sample_n_y (int): number of y variables. Here we use it to fix
+          the number of neurons of the output layer;
+        - batch_normalization (bool): normalize tensors with mean and variance;
+        - dropout_rate (float): relative dropout during training.
+          It helps with overfitting;
+        - optimizer (str): any optimizer from
+          https://www.tensorflow.org/api_docs/python/tf/keras/optimizers
+        - loss (str): name of the loss function. Options: any of the functions
+          defined in https://keras.io/api/losses/ (prepending keras.losses.),
+          plus the ones defined in src/emu_like/loss_functions.py;
+        - want_output_layer (bool, default: True): if False remove the
+          output layer. If False, useful to reduce to linear regression case.
+        """
         # Build model architecture
         if verbose:
             io.info('Building FFNN architecture')
 
         # Local variables
-        neur_inp_lay = n_x
-        neur_out_lay = n_y
-        activation = self.params['ffnn_model']['activation_function']
-        neur_hid_lay = self.params['ffnn_model']['neurons_hidden_layer']
-        batch_norm = self.params['ffnn_model']['batch_normalization']
-        dropout_rate = self.params['ffnn_model']['dropout_rate']
-        optimizer = self.params['ffnn_model']['optimizer']
-        loss = self.params['ffnn_model']['loss_function']
         try:
-            want_output_layer = self.params['ffnn_model']['want_output_layer']
+            want_output_layer = params['want_output_layer']
         except KeyError:
             want_output_layer = True
 
         if verbose:
-            io.print_level(1, 'Activation function: {}'.format(activation))
-            io.print_level(1, 'Dropout rate: {}'.format(dropout_rate))
-            io.print_level(1, 'Optimizer: {}'.format(optimizer))
-            io.print_level(1, 'Loss function: {}'.format(loss))
+            io.print_level(1, 'Activation function: {}'
+                           ''.format(params['activation']))
+            io.print_level(1, 'Dropout rate: {}'
+                           ''.format(params['dropout_rate']))
+            io.print_level(1, 'Optimizer: {}'.format(params['optimizer']))
+            io.print_level(1, 'Loss function: {}'.format(params['loss']))
 
         # Get loss function
         try:
-            loss = eval('lf.'+loss)
+            loss = eval('lf.'+params['loss'])
         except AttributeError:
             pass
 
@@ -54,24 +87,26 @@ class FFNNEmu(Emulator):
         # Input layer
         model.add(
             keras.layers.Dense(
-                neur_inp_lay,
-                activation=activation,
-                input_shape=(neur_inp_lay,)))
-        if batch_norm:
+                params['sample_n_x'],
+                activation=params['activation'],
+                input_shape=(params['sample_n_x'],)))
+        if params['batch_normalization']:
             model.add(keras.layers.BatchNormalization())
         # Hidden layers
-        for i in range(len(neur_hid_lay)):
+        for i in range(len(params['neurons_hidden'])):
             model.add(
-                keras.layers.Dense(neur_hid_lay[i], activation=activation))
-        if batch_norm:
+                keras.layers.Dense(params['neurons_hidden'][i],
+                                   activation=params['activation']))
+        if params['batch_normalization']:
             model.add(keras.layers.BatchNormalization())
-        if dropout_rate > 0:
-            model.add(keras.layers.Dropout(dropout_rate))
+        if params['dropout_rate'] > 0:
+            model.add(keras.layers.Dropout(params['dropout_rate']))
         # Output layer
         if want_output_layer:
-            model.add(keras.layers.Dense(neur_out_lay, activation=None))
+            model.add(keras.layers.Dense(params['sample_n_y'],
+                                         activation=None))
 
-        model.compile(optimizer=optimizer, loss=loss)
+        model.compile(optimizer=params['optimizer'], loss=loss)
 
         self.model = model
 
@@ -80,7 +115,36 @@ class FFNNEmu(Emulator):
 
         return
 
-    def load(self, model_to_load='last', verbose=False):
+    def load(self):
+        """
+        Placeholder for load.
+        TODO: write description
+        """
+        return
+
+    def save(self):
+        """
+        Placeholder for save.
+        TODO: write description
+        """
+        return
+
+    def train(self):
+        """
+        Placeholder for train.
+        TODO: write description
+        """
+        return
+
+    def eval(self):
+        """
+        Placeholder for eval.
+        TODO: write description
+        """
+        return
+
+
+    def load_old(self, model_to_load='last', verbose=False):
 
         path = self.output.subfolder(
             de.file_names['model_last']['folder'])
@@ -122,7 +186,7 @@ class FFNNEmu(Emulator):
 
         return
 
-    def save(self, verbose=False):
+    def save_old(self, verbose=False):
         # Save last model
         path = self.output.subfolder(
             de.file_names['model_last']['folder']).create(verbose=verbose)
@@ -147,7 +211,7 @@ class FFNNEmu(Emulator):
             io.info('Saving best model at {}'.format(fname))
         return
 
-    def call_backs(self, verbose=False):
+    def call_backs_old(self, verbose=False):
 
         # Checkpoint
         path = self.output.subfolder(
@@ -185,7 +249,7 @@ class FFNNEmu(Emulator):
 
         return call_backs
 
-    def train(self, sample, verbose=False, get_plots=False):
+    def train_old(self, sample, verbose=False, get_plots=False):
         """
         Train Feed-forward Neural-Network emulator.
         """
@@ -244,7 +308,7 @@ class FFNNEmu(Emulator):
                     verbose=verbose).save()
         return
 
-    def get_last_epoch_run(self):
+    def get_last_epoch_run_old(self):
         history = self.output.subfolder(
             de.file_names['log']['folder'])
         history = io.File(de.file_names['log']['name'], root=history)
@@ -252,7 +316,7 @@ class FFNNEmu(Emulator):
         epochs = history.content[:, 0]
         return int(epochs[-1])
 
-    def _get_epoch_best_model(self):
+    def _get_epoch_best_model_old(self):
         history = self.output.subfolder(
             de.file_names['log']['folder'])
         history = io.File(de.file_names['log']['name'], root=history)
@@ -264,6 +328,3 @@ class FFNNEmu(Emulator):
         # while the logger starts from epoch=0
         epoch_min = {'epoch': int(epochs[idx_min])+1}
         return epoch_min
-
-
-

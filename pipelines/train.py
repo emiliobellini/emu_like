@@ -6,6 +6,7 @@ Main module with the pipeline used to train the emulator.
 import src.emu_like.defaults as de
 import src.emu_like.io as io
 from src.emu_like.emu import Emulator
+from src.emu_like.params import Params
 from src.emu_like.sample import Sample
 
 
@@ -21,20 +22,100 @@ def train_emu(args):
     if args.verbose:
         io.print_level(0, "\nStarted training emulator\n")
 
-    # Load input file
-    params = io.YamlFile(args.params_file, should_exist=True)
-    params.read()
+    # Read params
+    params = Params().load(args.params_file)
+
+    # Get default values
+    try:
+        columns_x = params['training_sample']['columns_x']
+    except KeyError:
+        columns_x = slice(None)
+    try:
+        columns_y = params['training_sample']['columns_y']
+    except KeyError:
+        columns_y = slice(None)
+    try:
+        remove_non_finite = params['training_sample']['remove_non_finite']
+    except KeyError:
+        remove_non_finite = False
+
+    # Load all Samples in a single list
+    try:
+        sample_paths = params['training_sample']['paths_x']
+        sample_paths_y = params['training_sample']['paths_y']
+    except KeyError:
+        sample_paths = params['training_sample']['paths']
+        sample_paths_y = [None for x in params['training_sample']['paths']]
+    samples = [Sample().load(
+                    path=path,
+                    path_y=path_y,
+                    columns_x=columns_x,
+                    columns_y=columns_y,
+                    remove_non_finite=remove_non_finite,
+                    verbose=False)
+               for path, path_y in zip(sample_paths, sample_paths_y)]
+    # Join all samples
+    sample = Sample.join(samples, verbose=args.verbose)
+
+    # Split training and testing samples
+    sample.train_test_split(
+        params['training_sample']['frac_train'],
+        params['training_sample']['train_test_random_seed'],
+        verbose=args.verbose)
+
+    # If requested, rescale training and testing samples
+    sample.rescale(
+        params['training_sample']['rescale_x'],
+        params['training_sample']['rescale_y'],
+        verbose=args.verbose)
+
+    # Call the right emulator
+    emu = Emulator.choose_one(params['emulator']['type'],
+                              verbose=args.verbose)
+
+    # If resume
+    if args.resume:
+        if args.verbose:
+            io.info('Resuming from {}.'.format(params['output']))
+            io.print_level(1, 'Ignoring {}'.format(args.params_file))
+    # Otherwise
+    else:
+        # Check if output folder is empty, otherwise stop
+        if io.Folder(params['output']).is_empty():
+            if args.verbose:
+                io.info("Writing output in {}".format(params['output']))
+        else:
+            raise Exception(
+                'Output folder not empty! Exiting to avoid corruption of '
+                'precious data! If you want to resume a previous run use '
+                'the --resume (-r) option.')
+
+        params['emulator']['params']['sample_n_x'] = sample.n_x
+        params['emulator']['params']['sample_n_y'] = sample.n_y
+        emu.build(params['emulator']['params'], verbose=args.verbose)
+
+    exit()
+    # Save scalers
+    scaler_path = io.Folder(params['output']).subfolder(de.file_names['x_scaler']['folder'])
+    print(params['output'])
+    print(scaler_path.path)
+    print(de.file_names['x_scaler']['folder'])
+    print(de.file_names['x_scaler']['name'])
+    exit()
+    # io.Folder()
+    scalers = output.subfolder(
+        de.file_names['x_scaler']['folder']).create(verbose=args.verbose)
+    scaler_x_path = io.File(de.file_names['x_scaler']['name'], root=scalers)
+    sample.scaler_x.save(scaler_x_path, verbose=args.verbose)
+    scaler_y_path = io.File(de.file_names['y_scaler']['name'], root=scalers)
+    sample.scaler_y.save(scaler_y_path, verbose=args.verbose)
+
+    exit()
+
 
     # Define output path
     output = io.Folder(path=params['output'])
     if args.resume:
-        if args.verbose:
-            io.info('Resuming from {}.'.format(output.path))
-        ref_params = io.YamlFile(
-            de.file_names['params']['name'],
-            root=output,
-            should_exist=True)
-        ref_params.read()
         # Update parameters with new settings
         params.update_params(ref_params,
                              args.additional_epochs,
@@ -57,39 +138,6 @@ def train_emu(args):
                 'Output folder not empty! Exiting to avoid corruption of '
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
-
-    # Load sample
-    sample = Sample()
-    sample.load(params=params['training_sample'], verbose=args.verbose)
-
-    # Save details in output folder
-    details_path = io.YamlFile(
-        de.file_names['sample_details']['name'],
-        root=output.subfolder(
-            de.file_names['sample_details']['folder']).create(
-                verbose=args.verbose)
-    )
-    sample.save_details(details_path, verbose=args.verbose)
-
-    # Split training and testing samples
-    sample.train_test_split(
-        params['frac_train'],
-        params['train_test_random_seed'],
-        verbose=args.verbose)
-
-    # If requested, rescale training and testing samples
-    sample.rescale(
-        params['rescale_x'],
-        params['rescale_y'],
-        verbose=args.verbose)
-
-    # Save scalers
-    scalers = output.subfolder(
-        de.file_names['x_scaler']['folder']).create(verbose=args.verbose)
-    scaler_x_path = io.File(de.file_names['x_scaler']['name'], root=scalers)
-    sample.scaler_x.save(scaler_x_path, verbose=args.verbose)
-    scaler_y_path = io.File(de.file_names['y_scaler']['name'], root=scalers)
-    sample.scaler_y.save(scaler_y_path, verbose=args.verbose)
 
     # Plots
     if args.get_plots:

@@ -275,7 +275,7 @@ class Sample(object):
             io.print_level(1, 'n_x: {}'.format(self.n_x))
             io.print_level(1, 'n_y: {}'.format(self.n_y))
 
-        return
+        return self
 
     def save(self, path, verbose=False):
         """
@@ -433,8 +433,56 @@ class Sample(object):
                 self._append_y(self.path, y_val)
         return
 
-    def join(self):
-        return
+    @staticmethod
+    def join(samples, verbose=False):
+        """
+        Join a list of Sample into a unique one.
+        This defines the minimum number of attributes
+        required to use a sample for tranining, i.e.
+        x, y, n_x, n_y, n_samples, x_names and y_names.
+        Before joining them it checks that n_x and n_y are
+        the same for each sample.
+        Arguments:
+        - samples (list of Sample): list of Sample classes (already loaded);
+        - verbose (bool, default: False): verbosity.
+        """
+
+        if verbose:
+            io.info('Joining samples')
+            for sample in samples:
+                io.print_level(1, '{}'.format(sample.path))
+        
+        sample = Sample()
+
+        # n_x
+        if all(s.n_x == samples[0].n_x for s in samples):
+            sample.n_x = samples[0].n_x
+        else:
+            raise ValueError('Samples can not be joined as they have '
+                             'different number of x variables')
+
+        # n_y
+        if all(s.n_y == samples[0].n_y for s in samples):
+            sample.n_y = samples[0].n_y
+        else:
+            raise ValueError('Samples can not be joined as they have '
+                             'different number of x variables')
+
+        # x array
+        total = tuple([s.x for s in samples])
+        sample.x = np.vstack(total)
+
+        # y array
+        total = tuple([s.y for s in samples])
+        sample.y = np.vstack(total)
+
+        # x and y names
+        sample.x_names = samples[0].x_names
+        sample.y_names = samples[0].y_names
+
+        # n_samples
+        sample.n_samples = sum([s.n_samples for s in samples])
+        return sample
 
     def train_test_split(self, frac_train, seed, verbose=False):
         """
@@ -455,7 +503,7 @@ class Sample(object):
             io.info('Splitting training and testing samples.')
             io.print_level(1, 'Fractional number of training samples: {}'
                             ''.format(frac_train))
-            io.print_level(1, 'Random seed for training/testing split: '
+            io.print_level(1, 'Random seed for train/test split: '
                             '{}'.format(seed))
         split = skl_ms.train_test_split(self.x, self.y,
                                         train_size=frac_train,
