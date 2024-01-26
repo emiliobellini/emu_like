@@ -1,3 +1,12 @@
+"""
+.. module:: mcmc
+
+:Synopsis: MCMC pipeline
+:Author: Emilio Bellini
+
+Pipeline used to run MCMC with an emulator.
+"""
+
 import src.emu_like.io as io
 from src.emu_like.mcmc import MCMC
 

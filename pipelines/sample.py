@@ -1,8 +1,12 @@
 """
+.. module:: sample
 
-Main module with the pipeline used to train the emulator.
+:Synopsis: Sample pipeline
+:Author: Emilio Bellini
 
+Pipeline used to generate samples.
 """
+
 import src.emu_like.defaults as de
 import src.emu_like.io as io
 from src.emu_like.params import Params

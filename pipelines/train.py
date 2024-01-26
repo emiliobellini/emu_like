@@ -1,8 +1,12 @@
 """
+.. module:: train
 
-Main module with the pipeline used to train the emulator.
+:Synopsis: Train pipeline
+:Author: Emilio Bellini
 
+Pipeline used to train an emulator.
 """
+
 import src.emu_like.defaults as de
 import src.emu_like.io as io
 from src.emu_like.emu import Emulator
