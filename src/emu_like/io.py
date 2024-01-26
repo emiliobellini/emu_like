@@ -55,10 +55,6 @@ def argument_parser():
         help='Verbose (default: False)',
         action='store_true')
     train_parser.add_argument(
-        '--get_plots', '-p',
-        help='Generate diagnostic plots and save them (default: False)',
-        action='store_true')
-    train_parser.add_argument(
         '--resume', '-r',
         help='Resume from a previous run.',
         action='store_true')

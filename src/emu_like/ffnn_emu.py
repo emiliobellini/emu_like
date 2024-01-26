@@ -211,7 +211,7 @@ class FFNNEmu(Emulator):
             checkpoint_folder = io.Folder(path).subfolder(
                 de.file_names['checkpoint']['folder']).create(verbose=verbose)
             fname = os.path.join(checkpoint_folder.path,
-                                de.file_names['checkpoint']['name'])
+                                 de.file_names['checkpoint']['name'])
             # TODO: understand what should be passed by the user
             checkpoint = keras.callbacks.ModelCheckpoint(
                 fname,
@@ -287,8 +287,8 @@ class FFNNEmu(Emulator):
 
         return params
 
-    def train(self, sample, epochs, learning_rate,
-              batch_size, path=None, verbose=False):
+    def train(self, sample, epochs, learning_rate, batch_size,
+              path=None, get_plot=False, verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -307,6 +307,7 @@ class FFNNEmu(Emulator):
         - batch_size (int): divide sample into batches of this size;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
+        - get_plot (bool, default: False): get loss vs epoch plot;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -339,26 +340,27 @@ class FFNNEmu(Emulator):
             verbose=int(verbose))
 
         # Plot - Loss per epoch
-        if path:
-            fname = os.path.join(path, de.file_names['log']['name'])
-            data = np.genfromtxt(fname, delimiter=",", skip_header=1)
-            eps = data[:, 0] + 1
-            loss = data[:, 1]
-            val_loss = data[:, 2]
-        else:
-            eps = self.model.history.epoch
-            loss = self.model.history.history['loss']
-            val_loss = self.model.history.history['val_loss']
-        # Do plot
-        plt.semilogy(eps, loss, label='loss')
-        plt.semilogy(eps, val_loss, label='val_loss')
-        plt.xlabel('epoch')
-        plt.ylabel(self.model.loss.__name__)
-        plt.legend()
-        if path:
-            plt.savefig(os.path.join(path, 'loss_function.pdf'))
-        plt.close()
-        
+        if get_plot:
+            if path:
+                fname = os.path.join(path, de.file_names['log']['name'])
+                data = np.genfromtxt(fname, delimiter=",", skip_header=1)
+                eps = data[:, 0] + 1
+                loss = data[:, 1]
+                val_loss = data[:, 2]
+            else:
+                eps = self.model.history.epoch
+                loss = self.model.history.history['loss']
+                val_loss = self.model.history.history['val_loss']
+            # Do plot
+            plt.semilogy(eps, loss, label='loss')
+            plt.semilogy(eps, val_loss, label='val_loss')
+            plt.xlabel('epoch')
+            plt.ylabel(self.model.loss.__name__)
+            plt.legend()
+            if path:
+                plt.savefig(os.path.join(path, 'loss_function.pdf'))
+            plt.close()
+
         return
 
     def load(self, path, model_to_load='best', verbose=False):
@@ -404,7 +406,7 @@ class FFNNEmu(Emulator):
         if verbose:
             io.print_level(1, 'From: {}'.format(fname))
             self.model.summary()
-        
+
         # Load scalers
         fname = os.path.join(path, de.file_names['x_scaler']['name'])
         self.scaler_x = Scaler.load(fname, verbose=verbose)
@@ -418,18 +420,9 @@ class FFNNEmu(Emulator):
 
         return
 
-
     def eval(self):
         """
         Placeholder for eval.
         TODO: write description
         """
         return
-
-    def get_last_epoch_run_old(self):
-        history = self.output.subfolder(
-            de.file_names['log']['folder'])
-        history = io.File(de.file_names['log']['name'], root=history)
-        history.load_array(delimiter=',')
-        epochs = history.content[:, 0]
-        return int(epochs[-1])

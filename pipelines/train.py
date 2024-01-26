@@ -136,6 +136,7 @@ def train_emu(args):
         params['emulator']['params']['learning_rate'],
         params['emulator']['params']['batch_size'],
         path=params['output'],
+        get_plot=True,
         verbose=args.verbose)
 
     # Save emulator
