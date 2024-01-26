@@ -1,11 +1,12 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 import tensorflow as tf
 from tensorflow import keras
 from . import defaults as de
 from . import io as io
-from . import plots as pl
 from .emu import Emulator
+from .scalers import Scaler
 from . import loss_functions as lf  # noqa:F401
 
 
@@ -31,6 +32,7 @@ class FFNNEmu(Emulator):
             io.info('Initializing FFNNEmu emulator.')
         Emulator.__init__(self)
         self.name = 'ffnn_emu'
+        self.initial_epoch = 0
         return
 
     def build(self, params, verbose=False):
@@ -116,12 +118,28 @@ class FFNNEmu(Emulator):
 
         return
 
-    def load(self, verbose=False):
+    def _get_best_model_epoch(self, path=None):
         """
-        Placeholder for load.
-        TODO: write description
+        Method to get the epoch of the best model,
+        i.e. the one with lesser val_loss.
+        It can be retrieved from path (if specified)
+        or from a loaded model.
+        Arguments:
+        - path (str): path to the emulator.
         """
-        return
+        if path:
+            fname = os.path.join(path, de.file_names['log']['name'])
+            history = np.genfromtxt(fname, delimiter=",", skip_header=1)
+            val_loss = np.nan_to_num(history[:, 2], nan=np.inf)
+            epochs = history[:, 0]
+        else:
+            val_loss = self.model.history.history['val_loss']
+            epochs = self.model.history.epoch
+        idx_min = np.argmin(val_loss)
+        # We need the +1 below because files are saved from epoch=1,
+        # while the logger starts from epoch=0
+        epoch_min = {'epoch': int(epochs[idx_min])+1}
+        return epoch_min
 
     def save(self, path, verbose=False):
         """
@@ -130,7 +148,6 @@ class FFNNEmu(Emulator):
         - path (str): output path;
         - verbose (bool, default: False): verbosity.
         """
-        self.path = path
 
         if verbose:
             io.print_level(1, 'Saving output at: {}'.format(path))
@@ -140,15 +157,15 @@ class FFNNEmu(Emulator):
 
         # Save scalers
         try:
-            self.sample.scaler_x.save(de.file_names['x_scaler']['name'],
-                                    root=path,
-                                    verbose=verbose)
+            self.scaler_x.save(de.file_names['x_scaler']['name'],
+                               root=path,
+                               verbose=verbose)
         except AttributeError:
             io.warning('x_scaler not loaded yet, impossible to save it!')
         try:
-            self.sample.scaler_y.save(de.file_names['y_scaler']['name'],
-                                    root=path,
-                                    verbose=verbose)
+            self.scaler_y.save(de.file_names['y_scaler']['name'],
+                               root=path,
+                               verbose=verbose)
         except AttributeError:
             io.warning('y_scaler not loaded yet, impossible to save it!')
 
@@ -158,106 +175,57 @@ class FFNNEmu(Emulator):
             io.info('Saving last model at {}'.format(fname))
         self.model.save(fname, overwrite=True)
 
-        # Save best model TODO
-
-        return
-
-    def train(self):
-        """
-        Placeholder for train.
-        TODO: write description
-        """
-        return
-
-    def eval(self):
-        """
-        Placeholder for eval.
-        TODO: write description
-        """
-        return
-
-
-    def load_old(self, model_to_load='last', verbose=False):
-
-        path = self.output.subfolder(
-            de.file_names['model_last']['folder'])
-        fname = io.File(de.file_names['model_last']['name'], root=path).path
-
-        if verbose:
-            io.info('Loading FFNN architecture')
-
-        model = keras.models.load_model(fname)
-
-        if model_to_load == 'last':
-            self.model = model
-            if verbose:
-                io.print_level(1, 'From: {}'.format(fname))
-
-        else:
-            if model_to_load == 'best':
-                epoch_min = self._get_epoch_best_model()
-
-            elif isinstance(model_to_load, int):
-                epoch_min = {'epoch': model_to_load}
-
-            else:
-                raise Exception('Model not recognised!')
-
-            fname = de.file_names['checkpoint']['name'].format(**epoch_min)
-            model_folder = self.output.subfolder(
-                de.file_names['checkpoint']['folder'])
-            model_file = io.File(fname, root=model_folder)
-            if verbose:
-                io.print_level(1, 'From: {}'.format(model_file.path))
-
-            model.load_weights(model_file.path)
-
-        self.model = model
-
-        if verbose:
-            model.summary()
-
-        return
-
-    def save_old(self, verbose=False):
-
         # Save best model
-        epoch_min = self._get_epoch_best_model()
-        fname = de.file_names['checkpoint']['name'].format(**epoch_min)
-        model_folder = self.output.subfolder(
-            de.file_names['checkpoint']['folder'])
-        model_file = io.File(fname, root=model_folder)
-        self.model.load_weights(model_file.path)
-
-        path = self.output.subfolder(
-            de.file_names['model_best']['folder']).create(verbose=verbose)
-        fname = io.File(de.file_names['model_best']['name'], root=path).path
+        epoch_min = self._get_best_model_epoch(path=path)
+        fname = os.path.join(
+            path,
+            de.file_names['checkpoint']['folder'],
+            de.file_names['checkpoint']['name'].format(**epoch_min)
+        )
+        self.model.load_weights(fname)
+        fname = os.path.join(path, de.file_names['model_best']['name'])
         self.model.save(fname, overwrite=True)
         if verbose:
             io.info('Saving best model at {}'.format(fname))
+
         return
 
-    def call_backs_old(self, verbose=False):
+    def _callbacks(self, path=None, verbose=False):
+        """
+        Callbacks.
+        Arguments:
+        - path (str, default: None): output path. If None, the callbacks
+          that require saving some output will be ignored;
+        - verbose (bool, default: False): verbosity.
+
+        Callbacks implemented:
+        - Checkpoint: save the weights of a model each time that
+          loss function is improved;
+        - Logfile: saves a log file in the main directory
+        - Early Stopping: stop earlier if loss of the validation
+          sample does not improve for a certain number of epochs.
+        """
 
         # Checkpoint
-        path = self.output.subfolder(
-            de.file_names['checkpoint']['folder']).create(verbose=verbose)
-        fname = io.File(de.file_names['checkpoint']['name'], root=path)
-        # TODO: understand what should be passed by the user
-        checkpoint = keras.callbacks.ModelCheckpoint(
-            fname.path,
-            monitor='val_loss',
-            verbose=int(verbose),
-            save_best_only=True,
-            mode='auto',
-            save_freq='epoch',
-            save_weights_only=True)
+        if path:
+            checkpoint_folder = io.Folder(path).subfolder(
+                de.file_names['checkpoint']['folder']).create(verbose=verbose)
+            fname = os.path.join(checkpoint_folder.path,
+                                de.file_names['checkpoint']['name'])
+            # TODO: understand what should be passed by the user
+            checkpoint = keras.callbacks.ModelCheckpoint(
+                fname,
+                monitor='val_loss',
+                verbose=int(verbose),
+                save_best_only=True,
+                mode='auto',
+                save_freq='epoch',
+                save_weights_only=True)
 
         # Logfile
-        path = self.output.subfolder(
-            de.file_names['log']['folder']).create(verbose=verbose)
-        fname = io.File(de.file_names['log']['name'], root=path)
-        csv_logger = keras.callbacks.CSVLogger(fname.path, append=True)
+        if path:
+            fname = os.path.join(path, de.file_names['log']['name'])
+            csv_logger = keras.callbacks.CSVLogger(fname, append=True)
 
         # Early Stopping
         # TODO: understand what should be passed by the user
@@ -271,67 +239,191 @@ class FFNNEmu(Emulator):
             restore_best_weights=True,
         )
 
-        call_backs = [csv_logger, early_stopping, checkpoint]
+        if path:
+            callbacks = [csv_logger, early_stopping, checkpoint]
+        else:
+            callbacks = [early_stopping]
 
-        return call_backs
+        return callbacks
 
-    def train_old(self, sample, verbose=False, get_plots=False):
+    @staticmethod
+    def _update_params(params, add_epochs=None, learning_rate=None):
         """
-        Train Feed-forward Neural-Network emulator.
+        Update the parameters of the emulator.
+        In particular, it updates the learning rate
+        and the number of epochs to be run.
+        Arguments:
+        - params (src.emu_like.params.Params class):
+          the params class that should be updated;
+        - add_epochs (int, default: None): additional
+          epochs that should be added to the total;
+        - learning rate (float): learning rate to be
+          used.
+        """
+        # Local variables
+        epochs = params['emulator']['params']['epochs']
+        old_learning_rate = params['emulator']['params']['learning_rate']
+        change_epochs = False
+        change_learning_rate = False
+
+        # Convert to list (this is useful when resuming to append new settings)
+        if isinstance(epochs, int):
+            epochs = [epochs]
+        if isinstance(old_learning_rate, float):
+            old_learning_rate = [old_learning_rate]
+
+        # Decide if we have to change them
+        if add_epochs and add_epochs > 0:
+            change_epochs = True
+        if learning_rate and learning_rate != old_learning_rate[-1]:
+            change_learning_rate = True
+
+        # Do the change
+        if change_epochs or change_learning_rate:
+            epochs.append(epochs[-1] + add_epochs)
+            old_learning_rate.append(learning_rate)
+        params['emulator']['params']['epochs'] = epochs
+        params['emulator']['params']['learning_rate'] = old_learning_rate
+
+        return params
+
+    def train(self, sample, epochs, learning_rate,
+              batch_size, path=None, verbose=False):
+        """
+        Train the emulator.
+        Arguments:
+        - sample (src.emu_like_sample.Sample object): class
+          with the sample (already loaded, rescaled and split
+          into training and testing samples) that should be
+          used to train the emulator;
+        - epochs (int or list of ints): total epochs to be
+          run. If it is a list of ints, the last element
+          will be used. List is used to keep record of resume
+          with different values;
+        - learning_rate (float or list of floats): learning
+          rate. If it is a list of floats, the last element
+          will be used. List is used to keep record of resume
+          with different values;
+        - batch_size (int): divide sample into batches of this size;
+        - path (str, default: None): output path. If None,
+          the emulator will not be saved;
+        - verbose (bool, default: False): verbosity.
         """
 
-        # Get call_backs
-        call_backs = self.call_backs(verbose=verbose)
+        # Save scalers as attributes
+        self.scaler_x = sample.scaler_x
+        self.scaler_y = sample.scaler_y
 
-        # Learning rate
-        lr = self.params['ffnn_model']['learning_rate']
-        # In YamlFile.update_params this is converted into a list to
-        # keep track of the run history
-        if isinstance(lr, list):
-            lr = lr[-1]
-        self.model.optimizer.learning_rate = lr
+        # Take the last element of the list and use this
+        if isinstance(epochs, list):
+            epochs = epochs[-1]
+        if isinstance(learning_rate, list):
+            learning_rate = learning_rate[-1]
+
+        # Callbacks
+        callbacks = self._callbacks(path, verbose=verbose)
+
+        self.model.optimizer.learning_rate = learning_rate
 
         # Fit model
         self.model.fit(
             sample.x_train_scaled,
             sample.y_train_scaled,
-            epochs=self.total_epochs,
+            epochs=epochs,
             initial_epoch=self.initial_epoch,
-            batch_size=self.params['ffnn_model']['batch_size'],
+            batch_size=batch_size,
             validation_data=(
                 sample.x_test_scaled,
                 sample.y_test_scaled),
-            callbacks=call_backs,
+            callbacks=callbacks,
             verbose=int(verbose))
 
-        if get_plots:
-            # Loss per epoch
-            path = self.output.subfolder(
-                de.file_names['log']['folder']).create(verbose=verbose)
-            fname = io.File(de.file_names['log']['name'], root=path).path
+        # Plot - Loss per epoch
+        if path:
+            fname = os.path.join(path, de.file_names['log']['name'])
             data = np.genfromtxt(fname, delimiter=",", skip_header=1)
-            pl.LogLogPlot(
-                [(data[:, 0] + 1, data[:, 1]),
-                 (data[:, 0] + 1, data[:, 2])],
-                labels=['loss', 'val_loss'],
-                x_label='epoch',
-                y_label=self.params['ffnn_model']['loss_function'],
-                fname='loss_function.pdf',
-                root=self.output.subfolder('plots'),
-                verbose=verbose).save()
+            eps = data[:, 0] + 1
+            loss = data[:, 1]
+            val_loss = data[:, 2]
+        else:
+            eps = self.model.history.epoch
+            loss = self.model.history.history['loss']
+            val_loss = self.model.history.history['val_loss']
+        # Do plot
+        plt.semilogy(eps, loss, label='loss')
+        plt.semilogy(eps, val_loss, label='val_loss')
+        plt.xlabel('epoch')
+        plt.ylabel(self.model.loss.__name__)
+        plt.legend()
+        if path:
+            plt.savefig(os.path.join(path, 'loss_function.pdf'))
+        plt.close()
+        
+        return
 
-            if sample.n_x == 1 and sample.n_y == 1:
-                y_emu = self.model(sample.x_train_scaled, training=False)
-                y_emu = sample.scaler_y.inverse_transform(y_emu)
-                pl.ScatterPlot(
-                    [(sample.x_train[:, 0], sample.y_train[:, 0]),
-                     (sample.x_train[:, 0], y_emu[:, 0])],
-                    labels=['true', 'emulated'],
-                    x_label='x_0',
-                    y_label='y_0',
-                    root=self.output.subfolder('plots'),
-                    fname='true_vs_emulated.pdf',
-                    verbose=verbose).save()
+    def load(self, path, model_to_load='best', verbose=False):
+        """
+        Load from path a model for the emulator.
+        This can be used both for using the emulator
+        with eval and for resuming training.
+        Arguments:
+        - path (str): emulator path;
+        - model_to_load (str or int, default: best): which
+          model shall I load? Options: 'last', 'best' or an
+          integer number specifying the epoch to load;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: if model_to_load is an integer, make sure that the
+        epoch is saved in checkpoints, since the code does not
+        save every epoch, but only when the val_loss improves
+        (to save space).
+        """
+
+        if verbose:
+            io.info('Loading FFNN architecture')
+
+        # Load last model
+        if model_to_load == 'last':
+            fname = os.path.join(path, de.file_names['model_last']['name'])
+            self.model = keras.models.load_model(fname)
+        elif model_to_load == 'best':
+            fname = os.path.join(path, de.file_names['model_best']['name'])
+            self.model = keras.models.load_model(fname)
+        elif isinstance(model_to_load, int):
+            fname = os.path.join(path, de.file_names['model_last']['name'])
+            self.model = keras.models.load_model(fname)
+            epoch = {'epoch': model_to_load}
+            fname = os.path.join(
+                path,
+                de.file_names['checkpoint']['folder'],
+                de.file_names['checkpoint']['name'].format(**epoch))
+            self.model.load_weights(fname)
+        else:
+            raise Exception('Model not recognised!')
+
+        if verbose:
+            io.print_level(1, 'From: {}'.format(fname))
+            self.model.summary()
+        
+        # Load scalers
+        fname = os.path.join(path, de.file_names['x_scaler']['name'])
+        self.scaler_x = Scaler.load(fname, verbose=verbose)
+        fname = os.path.join(path, de.file_names['y_scaler']['name'])
+        self.scaler_y = Scaler.load(fname, verbose=verbose)
+
+        # Get last epoch from history for resume
+        fname = os.path.join(path, de.file_names['log']['name'])
+        history = np.genfromtxt(fname, delimiter=",", skip_header=1)
+        self.initial_epoch = int(history[:, 0][-1]) + 1
+
+        return
+
+
+    def eval(self):
+        """
+        Placeholder for eval.
+        TODO: write description
+        """
         return
 
     def get_last_epoch_run_old(self):
@@ -341,16 +433,3 @@ class FFNNEmu(Emulator):
         history.load_array(delimiter=',')
         epochs = history.content[:, 0]
         return int(epochs[-1])
-
-    def _get_epoch_best_model_old(self):
-        history = self.output.subfolder(
-            de.file_names['log']['folder'])
-        history = io.File(de.file_names['log']['name'], root=history)
-        history.load_array(delimiter=',')
-        val_loss = np.nan_to_num(history.content[:, 2], nan=np.inf)
-        epochs = history.content[:, 0]
-        idx_min = np.argmin(val_loss)
-        # We need the +1 below because files are saved from epoch=1,
-        # while the logger starts from epoch=0
-        epoch_min = {'epoch': int(epochs[idx_min])+1}
-        return epoch_min

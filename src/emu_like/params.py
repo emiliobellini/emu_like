@@ -29,12 +29,18 @@ class Params(object):
     def keys(self):
         return self.content.keys()
 
-    def load(self, path):
+    def load(self, path, root=None):
         """
         Load .yaml file and store it into a dictionary.
         Arguments:
         - path (str): path to the parameters file.
+        - root (str, default: None): root of the file;
         """
+
+        # Join root
+        if root:
+            path = os.path.join(root, path)
+
         with open(path) as file:
             self.content = yaml.safe_load(file)
         return self

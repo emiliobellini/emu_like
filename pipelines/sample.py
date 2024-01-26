@@ -32,6 +32,9 @@ def sample_emu(args):
         if args.verbose:
             io.info('Resuming from {}.'.format(params['output']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
+        # Read params from output folder
+        params = Params().load(de.file_names['params']['name'],
+                               root=params['output'])
         sample.load(params['output'], verbose=args.verbose)
         sample.resume(save_incrementally=True, verbose=args.verbose)
     # Otherwise

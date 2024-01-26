@@ -97,6 +97,12 @@ class Folder(object):
         - should_exist (bool, optional): check that the folder exists
     """
 
+    def __repr__(self):
+        return self.path
+
+    def __str__(self):
+        return str(self.path)
+
     def __init__(self, path, should_exist=False):
         self.path = os.path.abspath(path)
         # Check existence

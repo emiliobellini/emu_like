@@ -25,11 +25,14 @@ def train_emu(args):
     # Read params
     params = Params().load(args.params_file)
 
-    # If resume
+    # If resume load parameters from output folder
     if args.resume:
         if args.verbose:
             io.info('Resuming from {}.'.format(params['output']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
+        # Read params from output folder
+        params = Params().load(de.file_names['params']['name'],
+                               root=params['output'])
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
@@ -43,12 +46,22 @@ def train_emu(args):
                 'the --resume (-r) option.')
         # Create output folder
         io.Folder(params['output']).create(args.verbose)
-        # Save params
-        params.save(
-            de.file_names['params']['name'],
-            root=params['output'],
-            header=de.file_names['params']['header'],
-            verbose=args.verbose)
+
+    # Call the right emulator
+    emu = Emulator.choose_one(params['emulator']['type'],
+                              verbose=args.verbose)
+
+    # Update parameters with input
+    params = emu._update_params(params,
+                                add_epochs=args.additional_epochs,
+                                learning_rate=args.learning_rate)
+
+    # Save params
+    params.save(
+        de.file_names['params']['name'],
+        root=params['output'],
+        header=de.file_names['params']['header'],
+        verbose=args.verbose)
 
     # Get default values
     try:
@@ -101,13 +114,10 @@ def train_emu(args):
                          root=params['output'],
                          verbose=args.verbose)
 
-    # Call the right emulator
-    emu = Emulator.choose_one(params['emulator']['type'],
-                              verbose=args.verbose)
-
     # If resume
     if args.resume:
-        emu.load(verbose=args.verbose)
+        # Load emulator
+        emu.load(params['output'], model_to_load='best', verbose=args.verbose)
     # Otherwise
     else:
         params['emulator']['params']['sample_n_x'] = sample.n_x
@@ -116,43 +126,15 @@ def train_emu(args):
         emu.build(params['emulator']['params'], verbose=args.verbose)
 
     # Train the emulator
-    emu.train(sample, verbose=args.verbose)
+    emu.train(
+        sample,
+        params['emulator']['params']['epochs'],
+        params['emulator']['params']['learning_rate'],
+        params['emulator']['params']['batch_size'],
+        path=params['output'],
+        verbose=args.verbose)
 
-    # # Save emulator
-    # emu.save(params['output'], verbose=args.verbose)
-
-    exit()
-    if args.resume:
-        # Update parameters with new settings
-        params.update_params(ref_params,
-                             args.additional_epochs,
-                             args.learning_rate)
-
-    # If resume, load emulator
-    if args.resume:
-        emu.load(verbose=args.verbose)
-        # In YamlFile.update_params this is converted into a list to
-        # keep track of the run history
-        emu.initial_epoch = emu.get_last_epoch_run() + 1
-        emu.total_epochs = params['ffnn_model']['n_epochs'][-1]
-        params['ffnn_model']['n_epochs'][-2] = emu.initial_epoch
-    # Else, build it
-    else:
-        emu.build(sample.n_x, sample.n_y, verbose=args.verbose)
-        emu.initial_epoch = 0
-        emu.total_epochs = params['ffnn_model']['n_epochs']
-        # In YamlFile.update_params this is converted into a list to
-        # keep track of the run history
-        if isinstance(emu.total_epochs, list):
-            emu.total_epochs = emu.total_epochs[-1]
-
-
-    # Replace parameter file
-    if args.resume:
-        params.copy_to(
-            name=de.file_names['params']['name'],
-            root=params['output'],
-            header=de.file_names['params']['header'],
-            verbose=args.verbose)
+    # Save emulator
+    emu.save(params['output'], verbose=args.verbose)
 
     return
