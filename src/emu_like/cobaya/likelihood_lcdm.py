@@ -66,7 +66,7 @@ class LikelihoodPlanckLcdm(Likelihood):
         parameter values params_values and return
         a log-likelihood.
         """
-        params = [params_values[x] for x in self.x_names]
+        params = [params_values[x] for x in self.names_x]
 
         chi2 = self.evaluate_emulator(
             params,

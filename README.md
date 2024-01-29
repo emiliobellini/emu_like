@@ -63,7 +63,7 @@ Ready to use parameter files can also be found in the main directory
 
 The train pipeline can be run from the main folder with
 ```
-python emu_like.py train params.yaml -v -p
+python emu_like.py train params.yaml -v
 ```
 Ready to use parameter files can also be found in the main directory
 - `simple_train.yaml`: to train an emulator that fits a straight line in 1D;
@@ -78,8 +78,11 @@ where `planck_mcmc.yaml` contains all the information needed by the mcmc sampler
 **NOTE**: all the parameter files mentioned here can be used as a guidance to understand the input parameters at each step and their usage.
 
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Credits
+The sampling part of this code depends on [Cobaya](https://cobaya.readthedocs.io/en/latest/) and its likelihoods.
+If you use Cobaya, please cite its pre-print, [arXiv:2005.05290](https://arxiv.org/abs/2005.05290), and its ASCL record, [ascl:1910.019](https://ascl.net/1910.019).
+If you use any of the likelihoods implemented in Cobaya, make sure you cite the relevant papers.
+
 
 ## Contributing
 For bugs and feature requests consider using the [issue tracker](https://github.com/emiliobellini/emu_like/issues).

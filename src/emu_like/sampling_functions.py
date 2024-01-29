@@ -25,7 +25,7 @@ def linear_1d(x, x_var, params, model=None):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (1)
-        y_names: list of names for each of the y column
+        names_y: list of names for each of the y column
         (it is possible to leave it None)
 
     y = a*x + b
@@ -46,7 +46,7 @@ def quadratic_1d(x, x_var, params, model=None):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (1)
-        y_names: list of names for each of the y column
+        names_y: list of names for each of the y column
         (it is possible to leave it None)
 
     y = a*x^2 + b*x + c
@@ -68,7 +68,7 @@ def gaussian_1d(x, x_var, params, model=None):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (1)
-        y_names: list of names for each of the y column
+        names_y: list of names for each of the y column
         (it is possible to leave it None)
 
     y = exp(-(x-mean^2)/std/2)
@@ -91,7 +91,7 @@ def linear_2d(x, x_var, params, model=None):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (1)
-        y_names: list of names for each of the y column
+        names_y: list of names for each of the y column
         (it is possible to leave it None)
 
     y = a*x1 + b*x2 + c
@@ -114,7 +114,7 @@ def quadratic_2d(x, x_var, params, model=None):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (1)
-        y_names: list of names for each of the y column
+        names_y: list of names for each of the y column
         (it is possible to leave it None)
 
     y = a*x1^2 + b*x2^2 + c*x1*x2 + d*x1 + e*x2 + f
@@ -142,12 +142,12 @@ def cobaya_loglike(x, x_var, params, model=None):
         params: dictionary of all parameters
     Output:
         y: array with dimensions (n_likelihoods+3)
-        y_names: list of names for each of the y column
+        names_y: list of names for each of the y column
         (it is possible to leave it None)
 
     """
-    # Get y_names
-    y_names = list(params['likelihood'].keys())
+    # Get names_y
+    names_y = list(params['likelihood'].keys())
     # Define model
     if model is None:
         model = cobaya.model.get_model(params)
@@ -156,16 +156,16 @@ def cobaya_loglike(x, x_var, params, model=None):
     # Get loglike
     loglikes = model.loglikes(sampled_params, as_dict=True)[0]
     # Get y array
-    y = np.array([loglikes[b] for b in y_names])
+    y = np.array([loglikes[b] for b in names_y])
     # Add total loglike
     y = np.hstack((y, np.sum(y, axis=0)))
-    y_names.append('tot_loglike')
+    names_y.append('tot_loglike')
     # Add total logprior
     y = np.hstack((y, model.logprior(sampled_params)))
-    y_names.append('logprior')
+    names_y.append('logprior')
     # Add total logposterior
     y = np.hstack((y, model.logpost(sampled_params)))
-    y_names.append('logpost')
+    names_y.append('logpost')
     # Replace nans with infinities
     y = np.nan_to_num(y, nan=-np.inf)
-    return y, y_names, model
+    return y, names_y, model

@@ -56,15 +56,15 @@ class MCMC(object):
         y = scaler_y.inverse_transform(y_scaled)
         return y
 
-    def log_prior(self, x, x_names, bounds):
-        for pos, name in enumerate(x_names):
+    def log_prior(self, x, names_x, bounds):
+        for pos, name in enumerate(names_x):
             if (x[pos] < bounds[name][0]) or (x[pos] > bounds[name][1]):
                 return -np.inf
         return 0.0
 
-    def log_prob(self, x, model, x_names, bounds, scaler_x, scaler_y):
+    def log_prob(self, x, model, names_x, bounds, scaler_x, scaler_y):
         log_lkl = self.evaluate_emulator(x, model, scaler_x, scaler_y)[0, 0]
-        return -0.5*log_lkl + self.log_prior(x, x_names, bounds)
+        return -0.5*log_lkl + self.log_prior(x, names_x, bounds)
 
     def run(self):
         return
@@ -80,7 +80,7 @@ class EmceeMCMC(MCMC):
 
         # Define emcee parameters
         n_walkers = self.params['n_walkers']
-        n_dim = len(self.sample_details['x_names'])
+        n_dim = len(self.sample_details['names_x'])
         n_threads = self.params['n_threads']
         squeeze_factor = self.params['squeeze_factor']
 
@@ -90,7 +90,7 @@ class EmceeMCMC(MCMC):
             self.log_prob,
             args=[
                 self.emu.model,
-                self.sample_details['x_names'],
+                self.sample_details['names_x'],
                 self.sample_details['bounds'],
                 self.scaler_x,
                 self.scaler_y],
@@ -98,7 +98,7 @@ class EmceeMCMC(MCMC):
 
         # Initial positions
         bounds = np.array([self.sample_details['bounds'][x]
-                           for x in self.sample_details['x_names']])
+                           for x in self.sample_details['names_x']])
         center = np.mean(bounds, axis=1)
         width = np.array([x[1]-x[0] for x in bounds])
         self.pos = center + width*squeeze_factor*np.random.randn(
@@ -106,7 +106,7 @@ class EmceeMCMC(MCMC):
 
         # Header
         # header = '# weight\t-logprob\t'+'\t'.join(
-        #     self.sample_details['x_names'])+'\n'
+        #     self.sample_details['names_x'])+'\n'
 
         # Create chains file
         return

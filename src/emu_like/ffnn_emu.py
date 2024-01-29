@@ -14,6 +14,7 @@ from tensorflow import keras
 from . import defaults as de
 from . import io as io
 from .emu import Emulator
+from .params import Params
 from .scalers import Scaler
 from . import loss_functions as lf  # noqa:F401
 
@@ -45,6 +46,9 @@ class FFNNEmu(Emulator):
         self.model = None
         self.scaler_x = None
         self.scaler_y = None
+        self.names_x = None
+        self.names_y = None
+        self.ranges_x = None
         return
 
     @staticmethod
@@ -222,6 +226,13 @@ class FFNNEmu(Emulator):
         history = np.genfromtxt(fname, delimiter=",", skip_header=1)
         self.initial_epoch = int(history[:, 0][-1]) + 1
 
+        # Load sample details
+        fname = os.path.join(path, de.file_names['sample_details']['name'])
+        details = Params().load(fname)
+        self.names_x = details['names_x']
+        self.names_y = details['names_y']
+        self.ranges_x = details['ranges_x']
+
         return
 
     def save(self, path, verbose=False):
@@ -270,6 +281,25 @@ class FFNNEmu(Emulator):
         self.model.save(fname, overwrite=True)
         if verbose:
             io.info('Saving best model at {}'.format(fname))
+
+        # Save sample details
+        # We do not always have names for 'x' and 'y'
+        # In case we do not have them, just store None.
+        try:
+            save_x = self.names_x.tolist()
+        except AttributeError:
+            save_x = None
+        try:
+            save_y = self.names_y.tolist()
+        except AttributeError:
+            save_y = None
+        details = Params({
+            'names_x': save_x,
+            'names_y': save_y,
+            'ranges_x': self.ranges_x.tolist(),
+        })
+        fname = os.path.join(path, de.file_names['sample_details']['name'])
+        details.save(fname, header=de.file_names['sample_details']['header'])
 
         return
 
@@ -380,9 +410,12 @@ class FFNNEmu(Emulator):
         - verbose (bool, default: False): verbosity.
         """
 
-        # Save scalers as attributes
+        # Save sample details as attributes
         self.scaler_x = sample.scaler_x
         self.scaler_y = sample.scaler_y
+        self.names_x = sample.names_x
+        self.names_y = sample.names_y
+        self.ranges_x = sample.ranges_x
 
         # Take the last element of the list and use this
         if isinstance(epochs, list):

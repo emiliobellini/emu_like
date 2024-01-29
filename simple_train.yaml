@@ -1,6 +1,6 @@
 # Explanatory file.
 # Usage:
-#   python emu_like.py train simple_train.yaml -v -p
+#   python emu_like.py train simple_train.yaml -v
 
 # Output folder (str)
 output: output/simple/train

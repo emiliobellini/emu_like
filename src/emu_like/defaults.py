@@ -36,6 +36,12 @@ file_names = {
     'y_scaler': {
         'name': 'y_scaler.save',
     },
+    'sample_details': {
+        'name': 'sample_details.yaml',
+        'header': (
+            '# This is an automatically generated file. Do not modify it!\n'
+            '# It is used to resume training instead of the input one.\n\n'),
+    },
     'chains': {
         'name': 'chain.txt',
     },

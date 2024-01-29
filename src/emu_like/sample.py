@@ -56,8 +56,8 @@ class Sample(object):
         """
         self.x = None  # Array with x data
         self.y = None  # Array with y data
-        self.x_names = None  # List of names of x data
-        self.y_names = None  # List of names of y data
+        self.names_x = None  # List of names of x data
+        self.names_y = None  # List of names of y data
         self.n_samples = None  # Number of samples
         self.n_x = None  # Number of x variables
         self.n_y = None  # Number of y variables
@@ -67,6 +67,7 @@ class Sample(object):
         self.y_train = None  # Array with y_train data
         self.x_test = None  # Array with x_test data
         self.y_test = None  # Array with y_test data
+        self.ranges_x = None  # Range of x data
         return
 
     def _load_array(self, path, columns):
@@ -84,7 +85,10 @@ class Sample(object):
             array = array[:, np.newaxis]
         names = self._try_to_load_names_array(path, n_names=array.shape[1])
         array = array[:, columns]
-        names = names[columns]
+        try:
+            names = names[columns]
+        except TypeError:
+            pass
         return array, names
 
     def _try_to_load_names_array(self, path, n_names=None,
@@ -114,7 +118,10 @@ class Sample(object):
                 else:
                     is_comment = False
         # Split names
-        names = re.sub(comments, '', names)
+        try:
+            names = re.sub(comments, '', names)
+        except TypeError:
+            return None
         names = names.split(delimiter)
         names = np.array([x.strip() for x in names])
         # Check names have the right dimensions
@@ -158,7 +165,7 @@ class Sample(object):
         fpath = os.path.join(path, de.file_names['x_sample']['name'])
         if verbose:
             io.print_level(1, 'Saved x array at: {}'.format(fpath))
-        np.savetxt(fpath, self.x, header='\t'.join(self.x_names))
+        np.savetxt(fpath, self.x, header='\t'.join(self.names_x))
         return
 
     def _save_y(self, path, verbose=False):
@@ -174,7 +181,7 @@ class Sample(object):
         """
         fpath = os.path.join(path, de.file_names['y_sample']['name'])
         try:
-            header = '\t'.join(self.y_names)
+            header = '\t'.join(self.names_y)
         except TypeError:
             header = ''
         if verbose:
@@ -273,8 +280,10 @@ class Sample(object):
                 'identify the x and y paths')
 
         # Load data
-        self.x, self.x_names = self._load_array(path_x, columns_x)
-        self.y, self.y_names = self._load_array(path_y, columns_y)
+        self.x, self.names_x = self._load_array(path_x, columns_x)
+        self.y, self.names_y = self._load_array(path_y, columns_y)
+        self.ranges_x = list(zip(np.min(self.x, axis=0),
+                                 np.max(self.x, axis=0)))
 
         # Remove non finite if requested
         if remove_non_finite:
@@ -380,19 +389,19 @@ class Sample(object):
             sampled_params = params
 
         # Get x names
-        self.x_names = [x for x in sampled_params
+        self.names_x = [x for x in sampled_params
                         if self._is_varying(sampled_params, x)]
 
         # Get x array
         x_sampler = smp.Sampler().choose_one(spacing, verbose=verbose)
-        self.x = x_sampler.get_x(sampled_params, self.x_names, n_samples)
+        self.x = x_sampler.get_x(sampled_params, self.names_x, n_samples)
         self.n_x = self.x.shape[1]
         # Save x array
         if save_incrementally:
             self._save_x(output_path, verbose=verbose)
 
-        # Get first sampled y (to retrieve y_names and model)
-        y_val, self.y_names, model = fun(self.x[0], self.x_names, params)
+        # Get first sampled y (to retrieve names_y and model)
+        y_val, self.names_y, model = fun(self.x[0], self.names_x, params)
         self.y = [y_val]
         # Save y array (first row, then we update it)
         if save_incrementally:
@@ -400,7 +409,7 @@ class Sample(object):
 
         # Sample y
         for x in tqdm.tqdm(self.x[1:]):
-            y_val, _, _ = fun(x, self.x_names, params, model=model)
+            y_val, _, _ = fun(x, self.names_x, params, model=model)
             self.y.append(y_val)
             if save_incrementally:
                 self._append_y(output_path, y_val)
@@ -446,11 +455,11 @@ class Sample(object):
             params = self.settings['params']
 
         # Get first sampled y (to retrieve model)
-        _, _, model = fun(self.x[0], self.x_names, params)
+        _, _, model = fun(self.x[0], self.names_x, params)
 
         # Sample y
         for x in tqdm.tqdm(self.x[self.y.shape[0]:]):
-            y_val, _, _ = fun(x, self.x_names, params, model=model)
+            y_val, _, _ = fun(x, self.names_x, params, model=model)
             self.y = np.vstack((self.y, y_val))
             if save_incrementally:
                 self._append_y(self.path, y_val)
@@ -462,7 +471,7 @@ class Sample(object):
         Join a list of Sample into a unique one.
         This defines the minimum number of attributes
         required to use a sample for tranining, i.e.
-        x, y, n_x, n_y, n_samples, x_names and y_names.
+        x, y, n_x, n_y, n_samples, names_x and names_y.
         Before joining them it checks that n_x and n_y are
         the same for each sample.
         Arguments:
@@ -494,14 +503,17 @@ class Sample(object):
         # x array
         total = tuple([s.x for s in samples])
         sample.x = np.vstack(total)
+        sample.ranges_x = np.stack((
+            np.min(sample.x, axis=0),
+            np.max(sample.x, axis=0))).T
 
         # y array
         total = tuple([s.y for s in samples])
         sample.y = np.vstack(total)
 
         # x and y names
-        sample.x_names = samples[0].x_names
-        sample.y_names = samples[0].y_names
+        sample.names_x = samples[0].names_x
+        sample.names_y = samples[0].names_y
 
         # n_samples
         sample.n_samples = sum([s.n_samples for s in samples])
