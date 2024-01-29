@@ -33,6 +33,15 @@ python -m pip install .
 ```
 This will take care of installing all the dependencies.
 
+After installing the dependencies, if you plan to use Cobaya and its likelihoods, follow instructions [here](https://cobaya.readthedocs.io/en/latest/installation_cosmo.html). In short, to install the basic cosmological modules and likelihoods use
+```
+cobaya-install cosmo -p /path/to/packages
+```
+For the Planck clik likelihoods use, e.g.
+```
+cobaya-install planck_2018_highl_plik.TTTEEE
+```
+
 PS: we recommend to use it with a virtual environment, running
 ```
 python -m venv /path/to/new/virtual/environment

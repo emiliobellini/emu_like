@@ -3,7 +3,7 @@
 #   python emu_like.py train planck_train.yaml -v -p
 
 # Output folder (str)
-output: output/planck/lcdm/train
+output: output/planck/train
 
 
 # Emulator architecture.
@@ -57,7 +57,7 @@ training_sample:
   # is known and some additional info can be inferred, e.g. the name of
   # parameters), or they can point to files.
   paths:
-    - output/planck/lcdm/sample
+    - output/planck/sample
   # # In alternative, one can use different paths for x and y (list of str)
   # paths_x:
   # paths_y:

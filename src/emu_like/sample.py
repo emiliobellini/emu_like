@@ -139,7 +139,7 @@ class Sample(object):
         params = Params(content=self.settings)
         params.save(
             de.file_names['params']['name'],
-            root=params['output'],
+            root=path,
             header=de.file_names['params']['header'],
             verbose=verbose)
         return
@@ -173,9 +173,13 @@ class Sample(object):
         name and header.
         """
         fpath = os.path.join(path, de.file_names['y_sample']['name'])
+        try:
+            header = '\t'.join(self.y_names)
+        except TypeError:
+            header = ''
         if verbose:
             io.print_level(1, 'Saved y array at: {}'.format(fpath))
-        np.savetxt(fpath, self.y, header='\t'.join(self.y_names))
+        np.savetxt(fpath, self.y, header=header)
         return
 
     def _append_y(self, path, y_val):
@@ -189,6 +193,16 @@ class Sample(object):
         with open(fpath, 'a') as fn:
             np.savetxt(fn, [y_val])
         return
+
+    def _is_varying(self, params, param):
+        """
+        Return True if param has key 'prior',
+        False otherwise.
+        """
+        if isinstance(params[param], dict):
+            if 'prior' in params[param].keys():
+                return True
+        return False
 
     def load(self,
              path,
@@ -367,7 +381,7 @@ class Sample(object):
 
         # Get x names
         self.x_names = [x for x in sampled_params
-                        if 'prior' in sampled_params[x]]
+                        if self._is_varying(sampled_params, x)]
 
         # Get x array
         x_sampler = smp.Sampler().choose_one(spacing, verbose=verbose)

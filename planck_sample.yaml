@@ -5,7 +5,7 @@
 #   python emu_like.py sample planck_sample.yaml -v
 
 # Output folder (str)
-output: output/planck/lcdm/sample
+output: output/planck/sample
 
 # Number of samples to generate (int)
 n_samples: 100
