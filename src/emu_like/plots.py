@@ -1,3 +1,11 @@
+"""
+.. module:: plots
+
+:Synopsis: Module managing plots.
+:Author: Emilio Bellini
+TODO: improve it
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 from . import io as io

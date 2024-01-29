@@ -1,3 +1,11 @@
+"""
+.. module:: train
+
+:Synopsis: Module with the Feed Forward Neural Network emulator class.
+:Author: Emilio Bellini
+
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -33,6 +41,236 @@ class FFNNEmu(Emulator):
         Emulator.__init__(self)
         self.name = 'ffnn_emu'
         self.initial_epoch = 0
+        # Placeholders
+        self.model = None
+        self.scaler_x = None
+        self.scaler_y = None
+        return
+
+    @staticmethod
+    def _update_params(params, add_epochs=None, learning_rate=None):
+        """
+        Update the parameters of the emulator.
+        In particular, it updates the learning rate
+        and the number of epochs to be run.
+        Arguments:
+        - params (src.emu_like.params.Params class):
+          the params class that should be updated;
+        - add_epochs (int, default: None): additional
+          epochs that should be added to the total;
+        - learning rate (float): learning rate to be
+          used.
+        """
+        # Local variables
+        epochs = params['emulator']['params']['epochs']
+        old_learning_rate = params['emulator']['params']['learning_rate']
+        change_epochs = False
+        change_learning_rate = False
+
+        # Convert to list (this is useful when resuming to append new settings)
+        if isinstance(epochs, int):
+            epochs = [epochs]
+        if isinstance(old_learning_rate, float):
+            old_learning_rate = [old_learning_rate]
+
+        # Decide if we have to change them
+        if add_epochs and add_epochs > 0:
+            change_epochs = True
+        if learning_rate and learning_rate != old_learning_rate[-1]:
+            change_learning_rate = True
+
+        # Do the change
+        if change_epochs or change_learning_rate:
+            epochs.append(epochs[-1] + add_epochs)
+            old_learning_rate.append(learning_rate)
+        params['emulator']['params']['epochs'] = epochs
+        params['emulator']['params']['learning_rate'] = old_learning_rate
+
+        return params
+
+    def _get_best_model_epoch(self, path=None):
+        """
+        Method to get the epoch of the best model,
+        i.e. the one with smaller val_loss.
+        It can be retrieved from path (preferentially,
+        if specified) or from a loaded model.
+        Arguments:
+        - path (str): path to the emulator.
+        """
+        if path:
+            fname = os.path.join(path, de.file_names['log']['name'])
+            history = np.genfromtxt(fname, delimiter=",", skip_header=1)
+            val_loss = np.nan_to_num(history[:, 2], nan=np.inf)
+            epochs = history[:, 0]
+        else:
+            val_loss = self.model.history.history['val_loss']
+            epochs = self.model.history.epoch
+        idx_min = np.argmin(val_loss)
+        # We need the +1 below because files are saved from epoch=1,
+        # while the logger starts from epoch=0
+        epoch_min = {'epoch': int(epochs[idx_min])+1}
+        return epoch_min
+
+    def _callbacks(self, path=None, verbose=False):
+        """
+        Define and initialise callbacks.
+        Arguments:
+        - path (str, default: None): output path. If None, the callbacks
+          that require saving some output will be ignored;
+        - verbose (bool, default: False): verbosity.
+
+        Callbacks implemented:
+        - Checkpoint: save the weights of a model each time that
+          loss function is improved;
+        - Logfile: saves a log file in the main directory
+        - Early Stopping: stop earlier if loss of the validation
+          sample does not improve for a certain number of epochs.
+        """
+
+        # Checkpoint
+        if path:
+            checkpoint_folder = io.Folder(path).subfolder(
+                de.file_names['checkpoint']['folder']).create(verbose=verbose)
+            fname = os.path.join(checkpoint_folder.path,
+                                 de.file_names['checkpoint']['name'])
+            # TODO: understand what should be passed by the user
+            checkpoint = keras.callbacks.ModelCheckpoint(
+                fname,
+                monitor='val_loss',
+                verbose=int(verbose),
+                save_best_only=True,
+                mode='auto',
+                save_freq='epoch',
+                save_weights_only=True)
+
+        # Logfile
+        if path:
+            fname = os.path.join(path, de.file_names['log']['name'])
+            csv_logger = keras.callbacks.CSVLogger(fname, append=True)
+
+        # Early Stopping
+        # TODO: understand what should be passed by the user
+        early_stopping = keras.callbacks.EarlyStopping(
+            monitor="val_loss",
+            min_delta=0,
+            patience=15000,
+            verbose=1,
+            mode="auto",
+            baseline=None,
+            restore_best_weights=True,
+        )
+
+        if path:
+            callbacks = [csv_logger, early_stopping, checkpoint]
+        else:
+            callbacks = [early_stopping]
+
+        return callbacks
+
+    def load(self, path, model_to_load='best', verbose=False):
+        """
+        Load from path a model for the emulator.
+        This can be used both for using the emulator
+        with eval and for resuming training.
+        Arguments:
+        - path (str): emulator path;
+        - model_to_load (str or int, default: best): which
+          model shall I load? Options: 'last', 'best' or an
+          integer number specifying the epoch to load;
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: if model_to_load is an integer, make sure that the
+        epoch is saved in checkpoints, since the code does not
+        save every epoch, but only when the val_loss improves
+        (to save space).
+        """
+
+        if verbose:
+            io.info('Loading FFNN architecture')
+
+        # Load last model
+        if model_to_load == 'last':
+            fname = os.path.join(path, de.file_names['model_last']['name'])
+            self.model = keras.models.load_model(fname)
+        elif model_to_load == 'best':
+            fname = os.path.join(path, de.file_names['model_best']['name'])
+            self.model = keras.models.load_model(fname)
+        elif isinstance(model_to_load, int):
+            fname = os.path.join(path, de.file_names['model_last']['name'])
+            self.model = keras.models.load_model(fname)
+            epoch = {'epoch': model_to_load}
+            fname = os.path.join(
+                path,
+                de.file_names['checkpoint']['folder'],
+                de.file_names['checkpoint']['name'].format(**epoch))
+            self.model.load_weights(fname)
+        else:
+            raise Exception('Model not recognised!')
+
+        if verbose:
+            io.print_level(1, 'From: {}'.format(fname))
+            self.model.summary()
+
+        # Load scalers
+        fname = os.path.join(path, de.file_names['x_scaler']['name'])
+        self.scaler_x = Scaler.load(fname, verbose=verbose)
+        fname = os.path.join(path, de.file_names['y_scaler']['name'])
+        self.scaler_y = Scaler.load(fname, verbose=verbose)
+
+        # Get last epoch from history for resume
+        fname = os.path.join(path, de.file_names['log']['name'])
+        history = np.genfromtxt(fname, delimiter=",", skip_header=1)
+        self.initial_epoch = int(history[:, 0][-1]) + 1
+
+        return
+
+    def save(self, path, verbose=False):
+        """
+        Save the emulator to path.
+        Arguments:
+        - path (str): output path;
+        - verbose (bool, default: False): verbosity.
+        """
+
+        if verbose:
+            io.print_level(1, 'Saving output at: {}'.format(path))
+
+        # Create main folder
+        io.Folder(path).create(verbose=verbose)
+
+        # Save scalers
+        try:
+            self.scaler_x.save(de.file_names['x_scaler']['name'],
+                               root=path,
+                               verbose=verbose)
+        except AttributeError:
+            io.warning('x_scaler not loaded yet, impossible to save it!')
+        try:
+            self.scaler_y.save(de.file_names['y_scaler']['name'],
+                               root=path,
+                               verbose=verbose)
+        except AttributeError:
+            io.warning('y_scaler not loaded yet, impossible to save it!')
+
+        # Save last model
+        fname = os.path.join(path, de.file_names['model_last']['name'])
+        if verbose:
+            io.info('Saving last model at {}'.format(fname))
+        self.model.save(fname, overwrite=True)
+
+        # Save best model
+        epoch_min = self._get_best_model_epoch(path=path)
+        fname = os.path.join(
+            path,
+            de.file_names['checkpoint']['folder'],
+            de.file_names['checkpoint']['name'].format(**epoch_min)
+        )
+        self.model.load_weights(fname)
+        fname = os.path.join(path, de.file_names['model_best']['name'])
+        self.model.save(fname, overwrite=True)
+        if verbose:
+            io.info('Saving best model at {}'.format(fname))
+
         return
 
     def build(self, params, verbose=False):
@@ -118,175 +356,6 @@ class FFNNEmu(Emulator):
 
         return
 
-    def _get_best_model_epoch(self, path=None):
-        """
-        Method to get the epoch of the best model,
-        i.e. the one with lesser val_loss.
-        It can be retrieved from path (if specified)
-        or from a loaded model.
-        Arguments:
-        - path (str): path to the emulator.
-        """
-        if path:
-            fname = os.path.join(path, de.file_names['log']['name'])
-            history = np.genfromtxt(fname, delimiter=",", skip_header=1)
-            val_loss = np.nan_to_num(history[:, 2], nan=np.inf)
-            epochs = history[:, 0]
-        else:
-            val_loss = self.model.history.history['val_loss']
-            epochs = self.model.history.epoch
-        idx_min = np.argmin(val_loss)
-        # We need the +1 below because files are saved from epoch=1,
-        # while the logger starts from epoch=0
-        epoch_min = {'epoch': int(epochs[idx_min])+1}
-        return epoch_min
-
-    def save(self, path, verbose=False):
-        """
-        Save the emulator to path.
-        Arguments:
-        - path (str): output path;
-        - verbose (bool, default: False): verbosity.
-        """
-
-        if verbose:
-            io.print_level(1, 'Saving output at: {}'.format(path))
-
-        # Create main folder
-        io.Folder(path).create(verbose=verbose)
-
-        # Save scalers
-        try:
-            self.scaler_x.save(de.file_names['x_scaler']['name'],
-                               root=path,
-                               verbose=verbose)
-        except AttributeError:
-            io.warning('x_scaler not loaded yet, impossible to save it!')
-        try:
-            self.scaler_y.save(de.file_names['y_scaler']['name'],
-                               root=path,
-                               verbose=verbose)
-        except AttributeError:
-            io.warning('y_scaler not loaded yet, impossible to save it!')
-
-        # Save last model
-        fname = os.path.join(path, de.file_names['model_last']['name'])
-        if verbose:
-            io.info('Saving last model at {}'.format(fname))
-        self.model.save(fname, overwrite=True)
-
-        # Save best model
-        epoch_min = self._get_best_model_epoch(path=path)
-        fname = os.path.join(
-            path,
-            de.file_names['checkpoint']['folder'],
-            de.file_names['checkpoint']['name'].format(**epoch_min)
-        )
-        self.model.load_weights(fname)
-        fname = os.path.join(path, de.file_names['model_best']['name'])
-        self.model.save(fname, overwrite=True)
-        if verbose:
-            io.info('Saving best model at {}'.format(fname))
-
-        return
-
-    def _callbacks(self, path=None, verbose=False):
-        """
-        Callbacks.
-        Arguments:
-        - path (str, default: None): output path. If None, the callbacks
-          that require saving some output will be ignored;
-        - verbose (bool, default: False): verbosity.
-
-        Callbacks implemented:
-        - Checkpoint: save the weights of a model each time that
-          loss function is improved;
-        - Logfile: saves a log file in the main directory
-        - Early Stopping: stop earlier if loss of the validation
-          sample does not improve for a certain number of epochs.
-        """
-
-        # Checkpoint
-        if path:
-            checkpoint_folder = io.Folder(path).subfolder(
-                de.file_names['checkpoint']['folder']).create(verbose=verbose)
-            fname = os.path.join(checkpoint_folder.path,
-                                 de.file_names['checkpoint']['name'])
-            # TODO: understand what should be passed by the user
-            checkpoint = keras.callbacks.ModelCheckpoint(
-                fname,
-                monitor='val_loss',
-                verbose=int(verbose),
-                save_best_only=True,
-                mode='auto',
-                save_freq='epoch',
-                save_weights_only=True)
-
-        # Logfile
-        if path:
-            fname = os.path.join(path, de.file_names['log']['name'])
-            csv_logger = keras.callbacks.CSVLogger(fname, append=True)
-
-        # Early Stopping
-        # TODO: understand what should be passed by the user
-        early_stopping = keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            min_delta=0,
-            patience=15000,
-            verbose=1,
-            mode="auto",
-            baseline=None,
-            restore_best_weights=True,
-        )
-
-        if path:
-            callbacks = [csv_logger, early_stopping, checkpoint]
-        else:
-            callbacks = [early_stopping]
-
-        return callbacks
-
-    @staticmethod
-    def _update_params(params, add_epochs=None, learning_rate=None):
-        """
-        Update the parameters of the emulator.
-        In particular, it updates the learning rate
-        and the number of epochs to be run.
-        Arguments:
-        - params (src.emu_like.params.Params class):
-          the params class that should be updated;
-        - add_epochs (int, default: None): additional
-          epochs that should be added to the total;
-        - learning rate (float): learning rate to be
-          used.
-        """
-        # Local variables
-        epochs = params['emulator']['params']['epochs']
-        old_learning_rate = params['emulator']['params']['learning_rate']
-        change_epochs = False
-        change_learning_rate = False
-
-        # Convert to list (this is useful when resuming to append new settings)
-        if isinstance(epochs, int):
-            epochs = [epochs]
-        if isinstance(old_learning_rate, float):
-            old_learning_rate = [old_learning_rate]
-
-        # Decide if we have to change them
-        if add_epochs and add_epochs > 0:
-            change_epochs = True
-        if learning_rate and learning_rate != old_learning_rate[-1]:
-            change_learning_rate = True
-
-        # Do the change
-        if change_epochs or change_learning_rate:
-            epochs.append(epochs[-1] + add_epochs)
-            old_learning_rate.append(learning_rate)
-        params['emulator']['params']['epochs'] = epochs
-        params['emulator']['params']['learning_rate'] = old_learning_rate
-
-        return params
-
     def train(self, sample, epochs, learning_rate, batch_size,
               path=None, get_plot=False, verbose=False):
         """
@@ -363,66 +432,9 @@ class FFNNEmu(Emulator):
 
         return
 
-    def load(self, path, model_to_load='best', verbose=False):
-        """
-        Load from path a model for the emulator.
-        This can be used both for using the emulator
-        with eval and for resuming training.
-        Arguments:
-        - path (str): emulator path;
-        - model_to_load (str or int, default: best): which
-          model shall I load? Options: 'last', 'best' or an
-          integer number specifying the epoch to load;
-        - verbose (bool, default: False): verbosity.
-
-        NOTE: if model_to_load is an integer, make sure that the
-        epoch is saved in checkpoints, since the code does not
-        save every epoch, but only when the val_loss improves
-        (to save space).
-        """
-
-        if verbose:
-            io.info('Loading FFNN architecture')
-
-        # Load last model
-        if model_to_load == 'last':
-            fname = os.path.join(path, de.file_names['model_last']['name'])
-            self.model = keras.models.load_model(fname)
-        elif model_to_load == 'best':
-            fname = os.path.join(path, de.file_names['model_best']['name'])
-            self.model = keras.models.load_model(fname)
-        elif isinstance(model_to_load, int):
-            fname = os.path.join(path, de.file_names['model_last']['name'])
-            self.model = keras.models.load_model(fname)
-            epoch = {'epoch': model_to_load}
-            fname = os.path.join(
-                path,
-                de.file_names['checkpoint']['folder'],
-                de.file_names['checkpoint']['name'].format(**epoch))
-            self.model.load_weights(fname)
-        else:
-            raise Exception('Model not recognised!')
-
-        if verbose:
-            io.print_level(1, 'From: {}'.format(fname))
-            self.model.summary()
-
-        # Load scalers
-        fname = os.path.join(path, de.file_names['x_scaler']['name'])
-        self.scaler_x = Scaler.load(fname, verbose=verbose)
-        fname = os.path.join(path, de.file_names['y_scaler']['name'])
-        self.scaler_y = Scaler.load(fname, verbose=verbose)
-
-        # Get last epoch from history for resume
-        fname = os.path.join(path, de.file_names['log']['name'])
-        history = np.genfromtxt(fname, delimiter=",", skip_header=1)
-        self.initial_epoch = int(history[:, 0][-1]) + 1
-
-        return
-
     def eval(self):
         """
         Placeholder for eval.
-        TODO: write description
+        TODO: implement it
         """
         return

@@ -1,6 +1,14 @@
+"""
+.. module:: params
+
+:Synopsis: Module with the Params class, dealing with
+    dictionaries of parameters.
+:Author: Emilio Bellini
+
+"""
+
 import os
 import yaml
-from . import defaults as de
 from . import io as io
 
 
@@ -44,7 +52,7 @@ class Params(object):
         with open(path) as file:
             self.content = yaml.safe_load(file)
         return self
-    
+
     def save(self, path, root=None, header=None, verbose=False):
         """
         Save parameter to path, with the header if specified.

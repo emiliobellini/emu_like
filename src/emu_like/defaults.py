@@ -1,10 +1,7 @@
 """
-This is the single place that contains all the default
+This is the place that contains all the default
 values and names of the code.
 """
-
-default_parameters = {
-}
 
 # File names
 file_names = {

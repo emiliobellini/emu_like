@@ -1,3 +1,12 @@
+"""
+.. module:: emu
+
+:Synopsis: Module with the base emulator class.
+:Author: Emilio Bellini
+
+"""
+
+
 class Emulator(object):
     """
     Base emulator class.
@@ -28,6 +37,24 @@ class Emulator(object):
         else:
             raise ValueError('Emulator not recognized!')
 
+    def load(self):
+        """
+        Load a model.
+        This should store the model into the 'model'
+        attribute. Along with that, it should load all
+        the other elements necessary to run the emulator,
+        e.g. scaler_x, scaler_y and and initial_epoch.
+        """
+        return
+
+    def save(self):
+        """
+        Save a model in a folder.
+        This method should be compatible with the attributes
+        loaded with 'load'.
+        """
+        return
+
     def build(self):
         """
         Build the emulator architecture from a
@@ -36,30 +63,18 @@ class Emulator(object):
         """
         return
 
-    def load(self):
-        """
-        Placeholder for load.
-        TODO: write description
-        """
-        return
-
-    def save(self):
-        """
-        Placeholder for save.
-        TODO: write description
-        """
-        return
-
     def train(self):
         """
-        Placeholder for train.
-        TODO: write description
+        Train the emulator.
+        This can be used after calling 'build', to train
+        a freshly new created architecture, or after 'load'
+        to resume training.
         """
         return
 
     def eval(self):
         """
-        Placeholder for eval.
-        TODO: write description
+        Evaluate the emulator at a single point,
+        and return its output.
         """
         return

@@ -1,3 +1,11 @@
+"""
+.. module:: samplers
+
+:Synopsis: Various sampler classes, dealing with different sampling spacing.
+:Author: Emilio Bellini
+
+"""
+
 import numpy as np
 import scipy
 from . import io as io

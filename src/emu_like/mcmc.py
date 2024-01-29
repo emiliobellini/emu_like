@@ -1,6 +1,11 @@
 """
-List of mcmc samplers.
+.. module:: mcmc
+
+:Synopsis: Module containing list of mcmc samplers.
+:Author: Emilio Bellini
+TODO: this does not work
 """
+
 import cobaya
 # from cobaya.run import run as run_cob
 import emcee

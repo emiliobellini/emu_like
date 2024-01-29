@@ -1,10 +1,16 @@
 """
+.. module:: sampling_functions
+
+:Synopsis: List of sampling functions.
+:Author: Emilio Bellini
+
 List of analytic functions that can be used to check
 the performance of the emulator on known problems.
 If you want to implement a new function do it here
 and call it in the params file with the 'generate_sample'
 variable.
 """
+
 import numpy as np
 import cobaya
 

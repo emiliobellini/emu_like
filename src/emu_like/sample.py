@@ -1,3 +1,11 @@
+"""
+.. module:: sample
+
+:Synopsis: Module with the Sample class, dealing samples of data.
+:Author: Emilio Bellini
+
+"""
+
 import numpy as np
 import os
 import re
@@ -6,7 +14,6 @@ import sklearn.model_selection as skl_ms
 from . import sampling_functions as fng  # noqa:F401
 from . import defaults as de
 from . import io as io
-from . import plots as pl
 from . import scalers as sc
 from . import samplers as smp
 from .params import Params
@@ -81,7 +88,7 @@ class Sample(object):
         return array, names
 
     def _try_to_load_names_array(self, path, n_names=None,
-                                     comments='#', delimiter='\t'):
+                                 comments='#', delimiter='\t'):
         """
         Try to load name of parameters from array.
         Names are extracted from the last comment row
@@ -262,7 +269,7 @@ class Sample(object):
             only_finites = np.any(np.isfinite(self.y), axis=1)
             self.x = self.x[only_finites]
             self.y = self.y[only_finites]
-        
+
         # Get sample attributes
         self.n_samples = self.x.shape[0]
         self.n_x = self.x.shape[1]
@@ -295,7 +302,7 @@ class Sample(object):
 
         # Save settings
         self._save_settings(path, verbose=False)
-        
+
         # Save x
         self._save_x(path, verbose=False)
 
@@ -328,7 +335,7 @@ class Sample(object):
             io.print_level(1, 'Sampled function: {}'.format(sampled_function))
             io.print_level(1, 'Number of samples: {}'.format(n_samples))
             io.print_level(1, 'Spacing: {}'.format(spacing))
-        
+
         # Create main folder
         if save_incrementally:
             self.path = output_path
@@ -453,7 +460,7 @@ class Sample(object):
             io.info('Joining samples')
             for sample in samples:
                 io.print_level(1, '{}'.format(sample.path))
-        
+
         sample = Sample()
 
         # n_x
@@ -504,9 +511,9 @@ class Sample(object):
         if verbose:
             io.info('Splitting training and testing samples.')
             io.print_level(1, 'Fractional number of training samples: {}'
-                            ''.format(frac_train))
+                           ''.format(frac_train))
             io.print_level(1, 'Random seed for train/test split: '
-                            '{}'.format(seed))
+                           '{}'.format(seed))
         split = skl_ms.train_test_split(self.x, self.y,
                                         train_size=frac_train,
                                         random_state=seed)

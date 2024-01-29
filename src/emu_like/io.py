@@ -1,3 +1,11 @@
+"""
+.. module:: emu
+
+:Synopsis: Input/output related functions and classes.
+:Author: Emilio Bellini
+
+"""
+
 import argparse
 import numpy as np
 import os
@@ -87,6 +95,8 @@ def argument_parser():
 class Folder(object):
     """
     Generic class for folders.
+    Here we implemented some ad-hoc method
+    to ease some common task with folders.
 
     Arguments:
         - path (str): path to the folder
@@ -204,6 +214,7 @@ class Folder(object):
 
 # ------------------- Files --------------------------------------------------#
 
+# TODO: remove this
 class File(object):
     """
     Generic class for files.
@@ -273,6 +284,7 @@ class File(object):
         return
 
 
+# TODO: remove this
 class YamlFile(File):
     """
     Class for yaml files.

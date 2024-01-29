@@ -1,10 +1,9 @@
 """
 .. module:: sample
 
-:Synopsis: Sample pipeline
+:Synopsis: Pipeline used to generate samples.
 :Author: Emilio Bellini
 
-Pipeline used to generate samples.
 """
 
 import src.emu_like.defaults as de

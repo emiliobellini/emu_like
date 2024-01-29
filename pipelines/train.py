@@ -1,10 +1,9 @@
 """
 .. module:: train
 
-:Synopsis: Train pipeline
+:Synopsis: Pipeline used to train an emulator.
 :Author: Emilio Bellini
 
-Pipeline used to train an emulator.
 """
 
 import src.emu_like.defaults as de

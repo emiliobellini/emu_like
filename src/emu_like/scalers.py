@@ -1,3 +1,11 @@
+"""
+.. module:: scalers
+
+:Synopsis: List of possible scalers.
+:Author: Emilio Bellini
+
+"""
+
 import joblib
 import numpy as np
 import os
@@ -14,7 +22,7 @@ class Scaler(object):
     - choose_one: redirects to the correct subclass
     - load: load a scaler from a file
     - save: save scaler to a file.
-    
+
     Each one of the other scalers (see below), should
     inherit from this and define three other methods:
     - fit: fit scaler
@@ -257,7 +265,7 @@ class ExpMinMaxScaler(Scaler):
         Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.MinMaxScaler()
         return
-    
+
     def fit(self, x, replace_infinity=True):
         if replace_infinity:
             x_to_fit = self._replace_inf(x)
