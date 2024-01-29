@@ -8,6 +8,7 @@ TODO: improve it
 
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from . import io as io
 
 
@@ -55,7 +56,7 @@ class SinglePlot(object):
             name = self.fname
         else:
             name = '{}_vs_{}.pdf'.format(self.x_label, self.y_label)
-        fpath = io.File(name, root=self.root).path
+        fpath = os.path.join(self.root, name)
         plt.savefig(fpath)
         plt.close()
         if self.verbose:

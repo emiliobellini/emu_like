@@ -1,21 +1,18 @@
 """
-This is the base class for the PBJ likelihoods.
-It is an example of a working gaussian likelihood,
-with two uncorrelated parameters one from the
-theory module, and one from the likelihood.
-On top of that it contains all the methods with
-instructions that should be used to define a new
-likelihood.
-In particular the '_get_chi2' method is designed
-to be general enough so that it has not to be
-changed.
+.. module:: likelihood_lcdm
+
+:Synopsis: Module containing the likelihood for Cobaya sampling
+:Author: Emilio Bellini
+TODO: this does not work
+
 """
+
 import numpy as np
 from cobaya.likelihood import Likelihood
 from .. import defaults as de
 from .. import io as io
 from ..emu import Emulator
-from ..scalers import Scaler
+from ..params import Params
 
 
 class LikelihoodPlanckLcdm(Likelihood):
@@ -29,24 +26,21 @@ class LikelihoodPlanckLcdm(Likelihood):
         # Init base class
         super().initialize()
 
-        # Load params emulator
-        emu_params = io.YamlFile(
+        # Read params
+        emu_params = Params().load(
             de.file_names['params']['name'],
-            root=self.emulator['path'],
-            should_exist=True)
-        emu_params.read()
+            root=self.emulator['path']
+        )
+
+        # Call the right emulator
+        self.emu = Emulator.choose_one(emu_params['emulator']['type'],
+                                       verbose=self.verbose)
+        # Load emulator
+        self.emu.load(emu_params['output'], model_to_load='best',
+                      verbose=self.verbose)
 
         # Define emulator folder
         emu_folder = io.Folder(path=self.emulator['path'])
-
-        # Load scalers
-        scalers = emu_folder.subfolder(de.file_names['x_scaler']['folder'])
-        scaler_x_path = io.File(de.file_names['x_scaler']['name'],
-                                root=scalers)
-        scaler_y_path = io.File(de.file_names['y_scaler']['name'],
-                                root=scalers)
-        self.scaler_x = Scaler.load(scaler_x_path, verbose=self.verbose)
-        self.scaler_y = Scaler.load(scaler_y_path, verbose=self.verbose)
 
         # Call the right emulator
         self.emulator['emu'] = Emulator.choose_one(
@@ -56,16 +50,6 @@ class LikelihoodPlanckLcdm(Likelihood):
         self.emulator['emu'].load(
             model_to_load=self.emulator['epoch'],
             verbose=self.verbose)
-
-        # Load sample details
-        sample_path = emu_folder.subfolder(
-            de.file_names['sample_details']['folder'])
-        sample_details = io.YamlFile(
-            de.file_names['sample_details']['name'],
-            root=sample_path)
-        sample_details.read()
-        self.x_names = sample_details['x_names']
-
 
     def get_requirements(self):
         """

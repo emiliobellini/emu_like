@@ -11,10 +11,10 @@ import cobaya
 import emcee
 import numpy as np
 import sys
-from . import defaults as de
+# from . import defaults as de
 from . import io as io
 from .emu import Emulator
-from .scalers import Scaler
+# from .params import Params
 
 
 class MCMC(object):
@@ -24,40 +24,15 @@ class MCMC(object):
         self.output = params['output']
 
         # Load params emulator
-        emu_params = io.YamlFile(
-            de.file_names['params']['name'],
-            root=params['emulator']['path'],
-            should_exist=True)
-        emu_params.read()
-
-        # Define emulator folder
-        emu_folder = io.Folder(path=params['emulator']['path'])
-
-        # Load scalers
-        scalers = emu_folder.subfolder(de.file_names['x_scaler']['folder'])
-        scaler_x_path = io.File(de.file_names['x_scaler']['name'],
-                                root=scalers)
-        scaler_y_path = io.File(de.file_names['y_scaler']['name'],
-                                root=scalers)
-        self.scaler_x = Scaler.load(scaler_x_path, verbose=verbose)
-        self.scaler_y = Scaler.load(scaler_y_path, verbose=verbose)
+        # emu_params = Params().load(
+        #     de.file_names['params']['name'],
+        #     root=params['emulator']['path'])
 
         # Call the right emulator
-        self.emu = Emulator.choose_one(
-            emu_params, emu_folder, verbose=verbose)
-
+        self.emu = Emulator.choose_one(params['emulator']['type'],
+                                       verbose=verbose)
         # Load emulator
-        self.emu.load(
-            model_to_load=params['emulator']['epoch'],
-            verbose=verbose)
-
-        # Load sample details
-        sample_path = emu_folder.subfolder(
-            de.file_names['sample_details']['folder'])
-        self.sample_details = io.YamlFile(
-            de.file_names['sample_details']['name'],
-            root=sample_path)
-        self.sample_details.read()
+        self.emu.load(params['output'], model_to_load='best', verbose=verbose)
 
         return
 
@@ -130,12 +105,10 @@ class EmceeMCMC(MCMC):
             n_walkers, n_dim)
 
         # Header
-        header = '# weight\t-logprob\t'+'\t'.join(
-            self.sample_details['x_names'])+'\n'
+        # header = '# weight\t-logprob\t'+'\t'.join(
+        #     self.sample_details['x_names'])+'\n'
 
-        self.chains = io.File(
-            de.file_names['chains']['name'],
-            root=params['output']).create(header=header, verbose=verbose)
+        # Create chains file
         return
 
     def run(self):
