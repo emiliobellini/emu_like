@@ -233,7 +233,7 @@ class FFNNEmu(Emulator):
         self.names_y = details['names_y']
         self.ranges_x = details['ranges_x']
 
-        return
+        return self
 
     def save(self, path, verbose=False):
         """
@@ -465,9 +465,36 @@ class FFNNEmu(Emulator):
 
         return
 
-    def eval(self):
+    def eval(self, x):
         """
-        Placeholder for eval.
-        TODO: implement it
+        Evaluate the emulator at a given point.
+        Arguments:
+        - x (dict or array): these are the input parameters.
+          They can be passed as an array or as a dictionary
+          with the names of x as keys.
+        It returns the value(s) for y
         """
-        return
+
+        # Adjust input
+        if isinstance(x, list) or isinstance(x, np.ndarray):
+            x_reshaped = np.array([x])
+        elif isinstance(x, dict):
+            x_reshaped = np.array([[x[el] for el in self.names_x]])
+        elif isinstance(x, float) or isinstance(x, int):
+            x_reshaped = np.array([[x]])
+        else:
+            raise ValueError('Unkown input for x!')
+
+        # Scale x
+        if self.scaler_x:
+            x_scaled = self.scaler_x.transform(x_reshaped)
+        else:
+            x_scaled = x_reshaped
+
+        # Emulate y
+        y_scaled = self.model(x_scaled, training=False)
+
+        # Scale back y
+        y = self.scaler_y.inverse_transform(y_scaled)[0]
+
+        return y

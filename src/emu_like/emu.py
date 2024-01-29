@@ -6,6 +6,9 @@
 
 """
 
+from . import defaults as de
+from .params import Params
+
 
 class Emulator(object):
     """
@@ -32,20 +35,29 @@ class Emulator(object):
           emulator and initialize it.
         """
         if type == 'ffnn_emu':
-            from src.emu_like.ffnn_emu import FFNNEmu
+            from .ffnn_emu import FFNNEmu
             return FFNNEmu(verbose=verbose)
         else:
             raise ValueError('Emulator not recognized!')
 
-    def load(self):
+    def load(self, path, model_to_load='best', verbose=False):
         """
         Load a model.
         This should store the model into the 'model'
         attribute. Along with that, it should load all
         the other elements necessary to run the emulator,
         e.g. scaler_x, scaler_y and and initial_epoch.
+
+        This method redirects to the correct emulator.
         """
-        return
+        params = Params().load(de.file_names['params']['name'], root=path)
+        if params['emulator']['type'] == 'ffnn_emu':
+            from .ffnn_emu import FFNNEmu
+            emu = FFNNEmu(verbose=verbose)
+            emu.load(path, model_to_load=model_to_load, verbose=verbose)
+            return emu
+        else:
+            raise ValueError('Emulator not recognized!')
 
     def save(self):
         """
