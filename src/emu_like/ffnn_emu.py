@@ -44,11 +44,11 @@ class FFNNEmu(Emulator):
         self.initial_epoch = 0
         # Placeholders
         self.model = None
-        self.scaler_x = None
-        self.scaler_y = None
-        self.names_x = None
-        self.names_y = None
-        self.ranges_x = None
+        self.x_scaler = None
+        self.y_scaler = None
+        self.x_names = None
+        self.y_names = None
+        self.x_ranges = None
         return
 
     @staticmethod
@@ -217,9 +217,9 @@ class FFNNEmu(Emulator):
 
         # Load scalers
         fname = os.path.join(path, de.file_names['x_scaler']['name'])
-        self.scaler_x = Scaler.load(fname, verbose=verbose)
+        self.x_scaler = Scaler.load(fname, verbose=verbose)
         fname = os.path.join(path, de.file_names['y_scaler']['name'])
-        self.scaler_y = Scaler.load(fname, verbose=verbose)
+        self.y_scaler = Scaler.load(fname, verbose=verbose)
 
         # Get last epoch from history for resume
         fname = os.path.join(path, de.file_names['log']['name'])
@@ -229,9 +229,9 @@ class FFNNEmu(Emulator):
         # Load sample details
         fname = os.path.join(path, de.file_names['sample_details']['name'])
         details = Params().load(fname)
-        self.names_x = details['names_x']
-        self.names_y = details['names_y']
-        self.ranges_x = details['ranges_x']
+        self.x_names = details['x_names']
+        self.y_names = details['y_names']
+        self.x_ranges = details['x_ranges']
 
         return self
 
@@ -251,13 +251,13 @@ class FFNNEmu(Emulator):
 
         # Save scalers
         try:
-            self.scaler_x.save(de.file_names['x_scaler']['name'],
+            self.x_scaler.save(de.file_names['x_scaler']['name'],
                                root=path,
                                verbose=verbose)
         except AttributeError:
             io.warning('x_scaler not loaded yet, impossible to save it!')
         try:
-            self.scaler_y.save(de.file_names['y_scaler']['name'],
+            self.y_scaler.save(de.file_names['y_scaler']['name'],
                                root=path,
                                verbose=verbose)
         except AttributeError:
@@ -286,17 +286,17 @@ class FFNNEmu(Emulator):
         # We do not always have names for 'x' and 'y'
         # In case we do not have them, just store None.
         try:
-            save_x = self.names_x.tolist()
+            save_x = self.x_names.tolist()
         except AttributeError:
             save_x = None
         try:
-            save_y = self.names_y.tolist()
+            save_y = self.y_names.tolist()
         except AttributeError:
             save_y = None
         details = Params({
-            'names_x': save_x,
-            'names_y': save_y,
-            'ranges_x': self.ranges_x.tolist(),
+            'x_names': save_x,
+            'y_names': save_y,
+            'x_ranges': self.x_ranges.tolist(),
         })
         fname = os.path.join(path, de.file_names['sample_details']['name'])
         details.save(fname, header=de.file_names['sample_details']['header'])
@@ -411,11 +411,11 @@ class FFNNEmu(Emulator):
         """
 
         # Save sample details as attributes
-        self.scaler_x = sample.scaler_x
-        self.scaler_y = sample.scaler_y
-        self.names_x = sample.names_x
-        self.names_y = sample.names_y
-        self.ranges_x = sample.ranges_x
+        self.x_scaler = sample.x_scaler
+        self.y_scaler = sample.y_scaler
+        self.x_names = sample.x_names
+        self.y_names = sample.y_names
+        self.x_ranges = sample.x_ranges
 
         # Take the last element of the list and use this
         if isinstance(epochs, list):
@@ -479,15 +479,15 @@ class FFNNEmu(Emulator):
         if isinstance(x, list) or isinstance(x, np.ndarray):
             x_reshaped = np.array([x])
         elif isinstance(x, dict):
-            x_reshaped = np.array([[x[el] for el in self.names_x]])
+            x_reshaped = np.array([[x[el] for el in self.x_names]])
         elif isinstance(x, float) or isinstance(x, int):
             x_reshaped = np.array([[x]])
         else:
             raise ValueError('Unkown input for x!')
 
         # Scale x
-        if self.scaler_x:
-            x_scaled = self.scaler_x.transform(x_reshaped)
+        if self.x_scaler:
+            x_scaled = self.x_scaler.transform(x_reshaped)
         else:
             x_scaled = x_reshaped
 
@@ -495,6 +495,6 @@ class FFNNEmu(Emulator):
         y_scaled = self.model(x_scaled, training=False)
 
         # Scale back y
-        y = self.scaler_y.inverse_transform(y_scaled)[0]
+        y = self.y_scaler.inverse_transform(y_scaled)[0]
 
         return y

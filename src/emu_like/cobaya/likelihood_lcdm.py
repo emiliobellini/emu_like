@@ -66,21 +66,21 @@ class LikelihoodPlanckLcdm(Likelihood):
         parameter values params_values and return
         a log-likelihood.
         """
-        params = [params_values[x] for x in self.names_x]
+        params = [params_values[x] for x in self.x_names]
 
         chi2 = self.evaluate_emulator(
             params,
             self.emulator['emu'].model,
-            self.scaler_x,
-            self.scaler_y)[0, 0]
+            self.x_scaler,
+            self.y_scaler)[0, 0]
         return -chi2/2.
 
-    def evaluate_emulator(self, x, model, scaler_x, scaler_y):
+    def evaluate_emulator(self, x, model, x_scaler, y_scaler):
         x_reshaped = np.array([x])
-        if scaler_x:
-            x_scaled = scaler_x.transform(x_reshaped)
+        if x_scaler:
+            x_scaled = x_scaler.transform(x_reshaped)
         else:
             x_scaled = x_reshaped
         y_scaled = model(x_scaled, training=False)
-        y = scaler_y.inverse_transform(y_scaled)
+        y = y_scaler.inverse_transform(y_scaled)
         return y

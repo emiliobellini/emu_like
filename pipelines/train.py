@@ -110,10 +110,10 @@ def train_emu(args):
         params['training_sample']['rescale_y'],
         verbose=args.verbose)
     # Save scalers
-    sample.scaler_x.save(de.file_names['x_scaler']['name'],
+    sample.x_scaler.save(de.file_names['x_scaler']['name'],
                          root=params['output'],
                          verbose=args.verbose)
-    sample.scaler_y.save(de.file_names['y_scaler']['name'],
+    sample.y_scaler.save(de.file_names['y_scaler']['name'],
                          root=params['output'],
                          verbose=args.verbose)
 

@@ -46,7 +46,7 @@ class Emulator(object):
         This should store the model into the 'model'
         attribute. Along with that, it should load all
         the other elements necessary to run the emulator,
-        e.g. scaler_x, scaler_y and and initial_epoch.
+        e.g. x_scaler, y_scaler and and initial_epoch.
 
         This method redirects to the correct emulator.
         """

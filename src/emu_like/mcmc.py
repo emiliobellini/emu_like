@@ -46,25 +46,25 @@ class MCMC(object):
         else:
             raise ValueError('MCMC Sampler not recognized!')
 
-    def evaluate_emulator(self, x, model, scaler_x, scaler_y):
+    def evaluate_emulator(self, x, model, x_scaler, y_scaler):
         x_reshaped = np.array([x])
-        if scaler_x:
-            x_scaled = scaler_x.transform(x_reshaped)
+        if x_scaler:
+            x_scaled = x_scaler.transform(x_reshaped)
         else:
             x_scaled = x_reshaped
         y_scaled = model(x_scaled, training=False)
-        y = scaler_y.inverse_transform(y_scaled)
+        y = y_scaler.inverse_transform(y_scaled)
         return y
 
-    def log_prior(self, x, names_x, bounds):
-        for pos, name in enumerate(names_x):
+    def log_prior(self, x, x_names, bounds):
+        for pos, name in enumerate(x_names):
             if (x[pos] < bounds[name][0]) or (x[pos] > bounds[name][1]):
                 return -np.inf
         return 0.0
 
-    def log_prob(self, x, model, names_x, bounds, scaler_x, scaler_y):
-        log_lkl = self.evaluate_emulator(x, model, scaler_x, scaler_y)[0, 0]
-        return -0.5*log_lkl + self.log_prior(x, names_x, bounds)
+    def log_prob(self, x, model, x_names, bounds, x_scaler, y_scaler):
+        log_lkl = self.evaluate_emulator(x, model, x_scaler, y_scaler)[0, 0]
+        return -0.5*log_lkl + self.log_prior(x, x_names, bounds)
 
     def run(self):
         return
@@ -80,7 +80,7 @@ class EmceeMCMC(MCMC):
 
         # Define emcee parameters
         n_walkers = self.params['n_walkers']
-        n_dim = len(self.sample_details['names_x'])
+        n_dim = len(self.sample_details['x_names'])
         n_threads = self.params['n_threads']
         squeeze_factor = self.params['squeeze_factor']
 
@@ -90,15 +90,15 @@ class EmceeMCMC(MCMC):
             self.log_prob,
             args=[
                 self.emu.model,
-                self.sample_details['names_x'],
+                self.sample_details['x_names'],
                 self.sample_details['bounds'],
-                self.scaler_x,
-                self.scaler_y],
+                self.x_scaler,
+                self.y_scaler],
             threads=n_threads)
 
         # Initial positions
         bounds = np.array([self.sample_details['bounds'][x]
-                           for x in self.sample_details['names_x']])
+                           for x in self.sample_details['x_names']])
         center = np.mean(bounds, axis=1)
         width = np.array([x[1]-x[0] for x in bounds])
         self.pos = center + width*squeeze_factor*np.random.randn(
@@ -106,7 +106,7 @@ class EmceeMCMC(MCMC):
 
         # Header
         # header = '# weight\t-logprob\t'+'\t'.join(
-        #     self.sample_details['names_x'])+'\n'
+        #     self.sample_details['x_names'])+'\n'
 
         # Create chains file
         return
@@ -156,7 +156,7 @@ class CobayaMCMC(MCMC):
         # TODO: this is not working, it does not accept unnamed parameters
         # Probably implement a likelihood class
         log_lkl = self.evaluate_emulator(
-            params, self.emu.model, self.scaler_x, self.scaler_y)[0, 0]
+            params, self.emu.model, self.x_scaler, self.y_scaler)[0, 0]
         print(log_lkl)
         return log_lkl, {}
 
