@@ -461,7 +461,7 @@ class FFNNEmu(Emulator):
             plt.legend()
             if path:
                 plt.savefig(os.path.join(path, 'loss_function.pdf'))
-            plt.close()
+                plt.close()
 
         return
 
