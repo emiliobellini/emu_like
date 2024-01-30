@@ -51,13 +51,15 @@ def train_emu(args):
         io.Folder(params['output']).create(args.verbose)
 
     # Call the right emulator
-    emu = Emulator.choose_one(params['emulator']['type'],
-                              verbose=args.verbose)
+    emu = Emulator.choose_one(
+        params['emulator']['type'],
+        verbose=args.verbose)
 
     # Update parameters with input
-    params = emu._update_params(params,
-                                add_epochs=args.additional_epochs,
-                                learning_rate=args.learning_rate)
+    params = emu._update_params(
+        params,
+        epochs=args.additional_epochs,
+        learning_rate=args.learning_rate)
 
     # Save params
     params.save(

@@ -41,7 +41,6 @@ class FFNNEmu(Emulator):
             io.info('Initializing FFNNEmu emulator.')
         Emulator.__init__(self)
         self.name = 'ffnn_emu'
-        self.initial_epoch = 0
         # Placeholders
         self.model = None
         self.x_scaler = None
@@ -49,45 +48,48 @@ class FFNNEmu(Emulator):
         self.x_names = None
         self.y_names = None
         self.x_ranges = None
+        self.epochs = []  # List of the epochs run
+        self.loss = []  # List of the losses per epoch
+        self.val_loss = []  # List of the validation losses per epoch
         return
 
     @staticmethod
-    def _update_params(params, add_epochs=None, learning_rate=None):
+    def _update_params(params, epochs=None, learning_rate=None):
         """
         Update the parameters of the emulator.
         In particular, it updates the learning rate
-        and the number of epochs to be run.
+        and the number of epochs to run.
         Arguments:
         - params (src.emu_like.params.Params class):
           the params class that should be updated;
-        - add_epochs (int, default: None): additional
-          epochs that should be added to the total;
+        - epochs (int, default: None): epochs that
+          should be run;
         - learning rate (float): learning rate to be
           used.
         """
         # Local variables
-        epochs = params['emulator']['params']['epochs']
+        old_epochs = params['emulator']['params']['epochs']
         old_learning_rate = params['emulator']['params']['learning_rate']
         change_epochs = False
         change_learning_rate = False
 
         # Convert to list (this is useful when resuming to append new settings)
-        if isinstance(epochs, int):
-            epochs = [epochs]
+        if isinstance(old_epochs, int):
+            old_epochs = [old_epochs]
         if isinstance(old_learning_rate, float):
             old_learning_rate = [old_learning_rate]
 
         # Decide if we have to change them
-        if add_epochs and add_epochs > 0:
+        if epochs > 0:
             change_epochs = True
         if learning_rate and learning_rate != old_learning_rate[-1]:
             change_learning_rate = True
 
         # Do the change
         if change_epochs or change_learning_rate:
-            epochs.append(epochs[-1] + add_epochs)
+            old_epochs.append(epochs)
             old_learning_rate.append(learning_rate)
-        params['emulator']['params']['epochs'] = epochs
+        params['emulator']['params']['epochs'] = old_epochs
         params['emulator']['params']['learning_rate'] = old_learning_rate
 
         return params
@@ -221,17 +223,19 @@ class FFNNEmu(Emulator):
         fname = os.path.join(path, de.file_names['y_scaler']['name'])
         self.y_scaler = Scaler.load(fname, verbose=verbose)
 
-        # Get last epoch from history for resume
-        fname = os.path.join(path, de.file_names['log']['name'])
-        history = np.genfromtxt(fname, delimiter=",", skip_header=1)
-        self.initial_epoch = int(history[:, 0][-1]) + 1
-
         # Load sample details
         fname = os.path.join(path, de.file_names['sample_details']['name'])
         details = Params().load(fname)
         self.x_names = details['x_names']
         self.y_names = details['y_names']
         self.x_ranges = details['x_ranges']
+
+        # Load history
+        fname = os.path.join(path, de.file_names['log']['name'])
+        history = np.genfromtxt(fname, delimiter=",", skip_header=1)
+        self.epochs = [int(x) for x in history[:, 0]]
+        self.loss = history[:, 1]
+        self.val_loss = history[:, 2]
 
         return self
 
@@ -395,14 +399,12 @@ class FFNNEmu(Emulator):
           with the sample (already loaded, rescaled and split
           into training and testing samples) that should be
           used to train the emulator;
-        - epochs (int or list of ints): total epochs to be
-          run. If it is a list of ints, the last element
-          will be used. List is used to keep record of resume
-          with different values;
+        - epochs (int or list of ints): epochs to run. If it is
+          a list of ints, the last element will be used. List is
+          used to keep record of resume;
         - learning_rate (float or list of floats): learning
           rate. If it is a list of floats, the last element
-          will be used. List is used to keep record of resume
-          with different values;
+          will be used. List is used to keep record of resume;
         - batch_size (int): divide sample into batches of this size;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
@@ -429,11 +431,15 @@ class FFNNEmu(Emulator):
         self.model.optimizer.learning_rate = learning_rate
 
         # Fit model
+        if self.epochs:
+            initial_epoch = self.epochs[-1] + 1
+        else:
+            initial_epoch = 0
         self.model.fit(
             sample.x_train_scaled,
             sample.y_train_scaled,
-            epochs=epochs,
-            initial_epoch=self.initial_epoch,
+            epochs=initial_epoch+epochs,
+            initial_epoch=initial_epoch,
             batch_size=batch_size,
             validation_data=(
                 sample.x_test_scaled,
@@ -441,21 +447,15 @@ class FFNNEmu(Emulator):
             callbacks=callbacks,
             verbose=int(verbose))
 
+        # Update history
+        self.epochs = self.epochs + self.model.history.epoch
+        self.loss = self.loss + self.model.history.history['loss']
+        self.val_loss = self.val_loss + self.model.history.history['val_loss']
+
         # Plot - Loss per epoch
         if get_plot:
-            if path:
-                fname = os.path.join(path, de.file_names['log']['name'])
-                data = np.genfromtxt(fname, delimiter=",", skip_header=1)
-                eps = data[:, 0] + 1
-                loss = data[:, 1]
-                val_loss = data[:, 2]
-            else:
-                eps = self.model.history.epoch
-                loss = self.model.history.history['loss']
-                val_loss = self.model.history.history['val_loss']
-            # Do plot
-            plt.semilogy(eps, loss, label='training sample')
-            plt.semilogy(eps, val_loss, label='validation sample')
+            plt.semilogy(self.epochs, self.loss, label='training sample')
+            plt.semilogy(self.epochs, self.val_loss, label='validation sample')
             plt.xlabel('epoch')
             plt.ylabel(self.model.loss.__name__)
             plt.legend()
