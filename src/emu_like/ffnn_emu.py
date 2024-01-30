@@ -454,8 +454,8 @@ class FFNNEmu(Emulator):
                 loss = self.model.history.history['loss']
                 val_loss = self.model.history.history['val_loss']
             # Do plot
-            plt.semilogy(eps, loss, label='loss')
-            plt.semilogy(eps, val_loss, label='val_loss')
+            plt.semilogy(eps, loss, label='training sample')
+            plt.semilogy(eps, val_loss, label='validation sample')
             plt.xlabel('epoch')
             plt.ylabel(self.model.loss.__name__)
             plt.legend()
