@@ -159,7 +159,7 @@ class FFNNEmu(Emulator):
         early_stopping = keras.callbacks.EarlyStopping(
             monitor="val_loss",
             min_delta=0,
-            patience=15000,
+            patience=300,
             verbose=1,
             mode="auto",
             baseline=None,
