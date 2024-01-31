@@ -74,7 +74,13 @@ class GridSampler(Sampler):
     def get_x(self, params, varying, n_samples):
         mins = [params[x]['prior']['min'] for x in varying]
         maxs = [params[x]['prior']['max'] for x in varying]
-        x = np.linspace(mins, maxs, num=n_samples)
+        # Get points per size
+        size = int(np.power(n_samples, 1./len(varying)))
+        # Get coordinates
+        coords = [np.linspace(m, M, num=size) for m, M in zip(mins, maxs)]
+        coords = np.meshgrid(*coords)
+        coords = tuple([x.ravel() for x in coords])
+        x = np.vstack(coords).T
         return x
 
 
@@ -89,7 +95,13 @@ class LogGridSampler(Sampler):
     def get_x(self, params, varying, n_samples):
         mins = [np.log10(params[x]['prior']['min']) for x in varying]
         maxs = [np.log10(params[x]['prior']['max']) for x in varying]
-        x = np.logspace(mins, maxs, num=n_samples)
+        # Get points per size
+        size = int(np.power(n_samples, 1./len(varying)))
+        # Get coordinates
+        coords = [np.logspace(m, M, num=size) for m, M in zip(mins, maxs)]
+        coords = np.meshgrid(*coords)
+        coords = tuple([x.ravel() for x in coords])
+        x = np.vstack(coords).T
         return x
 
 
