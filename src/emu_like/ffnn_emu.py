@@ -217,6 +217,9 @@ class FFNNEmu(Emulator):
             io.print_level(1, 'From: {}'.format(fname))
             self.model.summary()
 
+        # Get additional model properties
+        self.batch_size = self.model.inputs[0].shape[0]
+
         # Load scalers
         fname = os.path.join(path, de.file_names['x_scaler']['name'])
         self.x_scaler = Scaler.load(fname, verbose=verbose)
