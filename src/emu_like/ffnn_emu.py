@@ -326,6 +326,7 @@ class FFNNEmu(Emulator):
         - batch_normalization (bool): normalize tensors with mean and variance;
         - dropout_rate (float): relative dropout during training.
           It helps with overfitting;
+        - batch_size (int): divide sample into batches of this size;
         - optimizer (str): any optimizer from
           https://www.tensorflow.org/api_docs/python/tf/keras/optimizers
         - loss (str): name of the loss function. Options: any of the functions
@@ -343,6 +344,7 @@ class FFNNEmu(Emulator):
             want_output_layer = params['want_output_layer']
         except KeyError:
             want_output_layer = True
+        self.batch_size = params['batch_size']
 
         if verbose:
             io.print_level(1, 'Activation function: {}'
@@ -353,18 +355,15 @@ class FFNNEmu(Emulator):
             io.print_level(1, 'Loss function: {}'.format(params['loss']))
 
         # Get loss function
-        try:
-            loss = eval('lf.'+params['loss'])
-        except AttributeError:
-            pass
+        loss = eval('lf.'+params['loss'])
 
         model = tf.keras.Sequential()
         # Input layer
         model.add(
-            keras.layers.Dense(
-                params['sample_n_x'],
-                activation=params['activation'],
-                input_shape=(params['sample_n_x'],)))
+            keras.layers.Input(
+                shape=(params['sample_n_x'],),
+                batch_size=self.batch_size)
+            )
         if params['batch_normalization']:
             model.add(keras.layers.BatchNormalization())
         # Hidden layers
@@ -390,7 +389,7 @@ class FFNNEmu(Emulator):
 
         return
 
-    def train(self, sample, epochs, learning_rate, batch_size,
+    def train(self, sample, epochs, learning_rate,
               path=None, get_plot=False, verbose=False):
         """
         Train the emulator.
@@ -405,7 +404,6 @@ class FFNNEmu(Emulator):
         - learning_rate (float or list of floats): learning
           rate. If it is a list of floats, the last element
           will be used. List is used to keep record of resume;
-        - batch_size (int): divide sample into batches of this size;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
         - get_plot (bool, default: False): get loss vs epoch plot;
@@ -440,7 +438,7 @@ class FFNNEmu(Emulator):
             sample.y_train_scaled,
             epochs=initial_epoch+epochs,
             initial_epoch=initial_epoch,
-            batch_size=batch_size,
+            batch_size=self.batch_size,
             validation_data=(
                 sample.x_test_scaled,
                 sample.y_test_scaled),
