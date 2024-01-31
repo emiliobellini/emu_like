@@ -237,8 +237,8 @@ class FFNNEmu(Emulator):
         fname = os.path.join(path, de.file_names['log']['name'])
         history = np.genfromtxt(fname, delimiter=",", skip_header=1)
         self.epochs = [int(x) for x in history[:, 0]]
-        self.loss = history[:, 1]
-        self.val_loss = history[:, 2]
+        self.loss = list(history[:, 1])
+        self.val_loss = list(history[:, 2])
 
         return self
 
