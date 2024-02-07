@@ -2,7 +2,7 @@
 # 4*sigma range of parameters (wrt Planck18)
 
 # Usage:
-#   python emu_like.py sample planck_sample.yaml -v
+#   python main.py sample planck_sample.yaml -v
 
 # Output folder (str)
 output: output/planck/sample

@@ -141,7 +141,7 @@ class NoneScaler(Scaler):
     Do not rescale.
     """
 
-    def __init__(self, name):
+    def __init__(self, name='None'):
         Scaler.__init__(self, name)
         self.skl_scaler = None
         return
@@ -163,7 +163,7 @@ class StandardScaler(Scaler):
     mean and scaling to unit variance.
     """
 
-    def __init__(self, name):
+    def __init__(self, name='StandardScaler'):
         Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.StandardScaler()
         return
@@ -196,7 +196,7 @@ class MinMaxScaler(Scaler):
     """
 
     def __init__(self, name):
-        Scaler.__init__(self, name)
+        Scaler.__init__(self, name='MinMaxScaler')
         self.skl_scaler = skl_pre.MinMaxScaler()
         return
 
@@ -229,7 +229,7 @@ class MinMaxScalerPlus1(Scaler):
     """
 
     def __init__(self, name):
-        Scaler.__init__(self, name)
+        Scaler.__init__(self, name='MinMaxScalerPlus1')
         self.skl_scaler = skl_pre.MinMaxScaler()
         return
 
@@ -261,7 +261,7 @@ class ExpMinMaxScaler(Scaler):
     takes the exponential of the result.
     """
 
-    def __init__(self, name):
+    def __init__(self, name='ExpMinMaxScaler'):
         Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.MinMaxScaler()
         return

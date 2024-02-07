@@ -55,7 +55,7 @@ If you plan to create your own pipeline, follow examples in [this folder](exampl
 
 The sample pipeline can be run from the main folder with
 ```
-python emu_like.py sample params.yaml -v
+python main.py sample params.yaml -v
 ```
 Ready to use parameter files can also be found in the main directory
 - `simple_sample.yaml`: to sample a straight line in 1D on a grid;
@@ -63,7 +63,7 @@ Ready to use parameter files can also be found in the main directory
 
 The train pipeline can be run from the main folder with
 ```
-python emu_like.py train params.yaml -v
+python main.py train params.yaml -v
 ```
 Ready to use parameter files can also be found in the main directory
 - `simple_train.yaml`: to train an emulator that fits a straight line in 1D;
@@ -71,7 +71,7 @@ Ready to use parameter files can also be found in the main directory
 
 Finally, it is possible to test the emulator created with
 ```
-python emu_like.py mcmc planck_mcmc.yaml -v
+python main.py mcmc planck_mcmc.yaml -v
 ```
 where `planck_mcmc.yaml` contains all the information needed by the mcmc sampler.
 

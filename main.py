@@ -11,7 +11,7 @@ This just redirects to the requested pipeline:
 """
 
 import sys
-from src.emu_like.io import argument_parser
+from emu_like.io import argument_parser
 
 
 # -----------------MAIN-CALL-----------------------------------------

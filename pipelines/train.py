@@ -6,11 +6,11 @@
 
 """
 
-import src.emu_like.defaults as de
-import src.emu_like.io as io
-from src.emu_like.emu import Emulator
-from src.emu_like.params import Params
-from src.emu_like.sample import Sample
+import emu_like.defaults as de
+import emu_like.io as io
+from emu_like.emu import Emulator
+from emu_like.params import Params
+from emu_like.sample import Sample
 
 
 def train_emu(args):

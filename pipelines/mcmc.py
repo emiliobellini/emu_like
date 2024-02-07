@@ -6,9 +6,9 @@
 
 """
 
-import src.emu_like.io as io
-from src.emu_like.mcmc import MCMC
-from src.emu_like.params import Params
+import emu_like.io as io
+from emu_like.mcmc import MCMC
+from emu_like.params import Params
 
 
 def mcmc_emu(args):

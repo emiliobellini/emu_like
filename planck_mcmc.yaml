@@ -1,6 +1,6 @@
 # Explanatory file.
 # Usage:
-#   python emu_like.py mcmc planck_mcmc.yaml -v
+#   python main.py mcmc planck_mcmc.yaml -v
 
 # Output folder
 output: output/planck/mcmc/chain
