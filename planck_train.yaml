@@ -69,7 +69,7 @@ training_sample:
   # #   - columns_x: all
   # #   - columns_y: all
   # columns_x: [1, 2]
-  columns_y: [5]
+  columns_y: [4]
   # Remove data with non finite y (inf and nan)
   remove_non_finite: False
 
