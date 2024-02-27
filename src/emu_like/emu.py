@@ -24,7 +24,7 @@ class Emulator(object):
         return
 
     @staticmethod
-    def choose_one(type, verbose=False):
+    def choose_one(emu_type, verbose=False):
         """
         Main function to get the correct Emulator.
         Arguments:
@@ -34,7 +34,7 @@ class Emulator(object):
         - Emulator (object): based on params, get the correct
           emulator and initialize it.
         """
-        if type == 'ffnn_emu':
+        if emu_type == 'ffnn_emu':
             from .ffnn_emu import FFNNEmu
             return FFNNEmu(verbose=verbose)
         else:
@@ -54,7 +54,7 @@ class Emulator(object):
         if params['emulator']['type'] == 'ffnn_emu':
             from .ffnn_emu import FFNNEmu
             emu = FFNNEmu(verbose=verbose)
-            emu.load(path, model_to_load=model_to_load, verbose=verbose)
+            emu = emu.load(path, model_to_load=model_to_load, verbose=verbose)
             return emu
         else:
             raise ValueError('Emulator not recognized!')
