@@ -101,7 +101,7 @@ class MCMC(object):
         - bounds (list or array): list of [min, max] for each parameter.
         """
         log_lkl = self.emu.eval(x)
-        return -0.5*log_lkl + self.log_prior(x, bounds)
+        return + log_lkl + self.log_prior(x, bounds)
 
 
 class EmceeMCMC(MCMC):
