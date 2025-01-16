@@ -14,10 +14,11 @@ n_samples: 1000
 #   - input: array of x sample, list of varying parameters, params dict
 #   - output: corresponding y value(s)
 # Current options: linear_1d, quadratic_1d, gaussian_1d, linear_2d,
-# quadratic_2d, cobaya_loglike.
-# With cobaya_loglike one can choose any Cobaya likelihood, adding
+# quadratic_2d, cobaya_loglike, cosmo_spectra.
+# - With cobaya_loglike one can choose any Cobaya likelihood, adding
 # params, likelihood, prior (optional) and theory (optional)
 # blocks following the Cobaya scheme.
+# - With cosmo_spectra 
 sampled_function: linear_1d
 
 # Spacing method (str).
