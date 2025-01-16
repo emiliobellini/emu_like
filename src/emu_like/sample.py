@@ -335,7 +335,8 @@ class Sample(object):
         return
 
     def generate(self, params, sampled_function, n_samples, spacing,
-                 save_incrementally=False, output_path=None, verbose=False):
+                 save_incrementally=False, output_path=None, seed=None,
+                 verbose=False):
         """
         Generate a sample.
         Arguments:
@@ -350,6 +351,8 @@ class Sample(object):
         - save_incrementally (bool, default: False): save output incrementally;
         - output_path (str, default: None): if save_incrementally the output
           path should be passed;
+        - seed (int): seed to be used to ensure deterministic results for the
+          LatinHypercubeSampler;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -367,6 +370,8 @@ class Sample(object):
         # Create settings dictionary
         if sampled_function == 'cobaya_loglike':
             params_name = 'cobaya'
+        elif sampled_function == 'class_spectra':
+            params_name = 'class'
         else:
             params_name = 'params'
         self.settings = {
@@ -385,6 +390,8 @@ class Sample(object):
         # Get correct parameters to be passed to fun
         if sampled_function == 'cobaya_loglike':
             sampled_params = params['params']
+        elif sampled_function == 'class_spectra':
+            sampled_params = params['params']
         else:
             sampled_params = params
 
@@ -394,7 +401,8 @@ class Sample(object):
 
         # Get x array
         x_sampler = smp.Sampler().choose_one(spacing, verbose=verbose)
-        self.x = x_sampler.get_x(sampled_params, self.x_names, n_samples)
+        self.x = x_sampler.get_x(
+            sampled_params, self.x_names, n_samples, seed=seed)
         self.n_x = self.x.shape[1]
         # Save x array
         if save_incrementally:

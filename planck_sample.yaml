@@ -16,10 +16,11 @@ n_samples: 100
 #   - input: array of x sample, list of varying parameters, params dict
 #   - output: corresponding y value(s)
 # Current options: linear_1d, quadratic_1d, gaussian_1d, linear_2d,
-# quadratic_2d, cobaya_loglike, cosmo_spectra.
-# With cobaya_loglike one can choose any Cobaya likelihood, adding
+# quadratic_2d, cobaya_loglike, class_spectra.
+# - With cobaya_loglike one can choose any Cobaya likelihood, adding
 # params, likelihood, prior (optional) and theory (optional)
 # blocks following the Cobaya scheme.
+# - TODO: Comment class_spectra 
 sampled_function: cobaya_loglike
 
 # Spacing method (str).
@@ -28,10 +29,14 @@ sampled_function: cobaya_loglike
 # single point specified by the value of ref for each parameter
 # (otherwise ref is ignored).
 spacing: latin_hypercube
+# If the spacicing is latin_hypercube, you can choose a seed to ensure
+# deterministic results.
+seed: 12
 
 # List of params.
 # If the function to sample is cobaya_loglike all this, plus the additional
 # blocks needed by cobaya should be encapsulated by a "cobaya" block.
+# - TODO: Comment class_spectra 
 cobaya:
 
   theory:
