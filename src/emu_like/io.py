@@ -1,10 +1,14 @@
+"""
+.. module:: emu
+
+:Synopsis: Input/output related functions and classes.
+:Author: Emilio Bellini
+
+"""
+
 import argparse
-import numpy as np
 import os
 import re
-import yaml
-from . import defaults as de
-from . import printing_scripts as scp
 
 
 # ------------------- Parser -------------------------------------------------#
@@ -57,10 +61,6 @@ def argument_parser():
         help='Verbose (default: False)',
         action='store_true')
     train_parser.add_argument(
-        '--get_plots', '-p',
-        help='Generate diagnostic plots and save them (default: False)',
-        action='store_true')
-    train_parser.add_argument(
         '--resume', '-r',
         help='Resume from a previous run.',
         action='store_true')
@@ -93,11 +93,19 @@ def argument_parser():
 class Folder(object):
     """
     Generic class for folders.
+    Here we implemented some ad-hoc method
+    to ease some common task with folders.
 
     Arguments:
         - path (str): path to the folder
         - should_exist (bool, optional): check that the folder exists
     """
+
+    def __repr__(self):
+        return self.path
+
+    def __str__(self):
+        return str(self.path)
 
     def __init__(self, path, should_exist=False):
         self.path = os.path.abspath(path)
@@ -126,7 +134,7 @@ class Folder(object):
             os.makedirs(self.path)
             self.exists = os.path.isdir(self.path)
             if verbose:
-                scp.print_level(1, 'Created folder {}'.format(self.path))
+                print_level(1, 'Created folder {}'.format(self.path))
         self._exists_or_error()
         return self
 
@@ -202,191 +210,35 @@ class Folder(object):
         return path
 
 
-# ------------------- Files --------------------------------------------------#
+# ------------------- Scripts ------------------------------------------------#
 
-class File(object):
-    """
-    Generic class for files.
-
-    Arguments:
-        - path (str): path to the file
-        - should_exist (bool, optional): check that the file exists
-    """
-
-    def __init__(self, path, root=None, should_exist=False):
-        if root:
-            if isinstance(root, Folder):
-                root = root.path
-            path = os.path.join(root, path)
-        self.path = os.path.abspath(path)
-        self.parent_folder, self.fname = os.path.split(self.path)
-        _, self.ext = os.path.splitext(self.fname)
-        # Check existence
-        self.exists = os.path.isfile(self.path)
-        if should_exist:
-            self._exists_or_error()
-        # Placeholder for content of the file
-        self.content = None
-        return
-
-    def _exists_or_error(self):
-        """
-        Check if a file exists and it is a proper file,
-        otherwise raise an error.
-        """
-        if not os.path.isfile(self.path):
-            raise IOError('File {} does not exist!'.format(self.path))
-        return
-
-    def create(self, header='', verbose=False):
-        """
-        Check if a file exists, otherwise create an empty file.
-        """
-        if not self.exists:
-            parent = Folder(path=self.parent_folder)
-            parent.create(verbose=verbose)
-            f = open(self.path, 'w')
-            if header:
-                f.write(header)
-            f.close()
-            self.exists = os.path.isfile(self.path)
-            if verbose:
-                scp.print_level(1, 'Created file {}'.format(self.path))
-        self._exists_or_error()
-        return self
-
-    def save_array(self, header='', verbose=False):
-        np.savetxt(self.path, self.content, header=header)
-        if verbose:
-            scp.print_level(1, 'Created file {}'.format(self.path))
-        return
-
-    def append_array(self, line, header=''):
-        with open(self.path, 'a') as fn:
-            np.savetxt(fn, [line])
-        return
-
-    def load_array(self, verbose=False, **kwargs):
-        self.content = np.genfromtxt(self.path, **kwargs)
-        if verbose:
-            scp.print_level(1, 'Loading file {}'.format(self.path))
-        return
+def write_red(msg):
+    return '\033[1;31m{}\033[00m'.format(msg)
 
 
-class YamlFile(File):
-    """
-    Class for yaml files.
+def write_green(msg):
+    return '\033[1;32m{}\033[00m'.format(msg)
 
-    Arguments:
-        - path (str): path to the file
-        - should_exist (bool, optional): check that the file exists
-    """
 
-    def __init__(self, path, root=None, should_exist=False):
-        File.__init__(self, path, root, should_exist)
-        if self.ext not in ['.yaml', '.yml']:
-            raise IOError('{} does not seem to be an YAML file'
-                          ''.format(self.path))
-        self.content = {}
-        return
+def warning(msg):
+    prepend = write_red('[WARNING]')
+    print('{} {}'.format(prepend, msg))
+    return
 
-    def __setitem__(self, item, value):
-        self.content[item] = value
 
-    def __getitem__(self, item):
-        return self.content[item]
+def info(msg):
+    prepend = write_green('[info]')
+    print('{} {}'.format(prepend, msg))
+    return
 
-    def __repr__(self):
-        return self.content
 
-    def __str__(self):
-        kv = ['{}: {}'.format(k, v) for k, v in self.content.items()]
-        return '\n'.join(kv)
-
-    def keys(self):
-        return self.content.keys()
-
-    def read(self):
-        """
-        Read .yaml file and store its content.
-        """
-        with open(self.path) as file:
-            self.content = yaml.safe_load(file)
-        return
-
-    def read_param_or_default(self, param, verbose=False):
-        """
-        Read param and return its value.
-        If not present try to get the default value.
-        """
-        if not self.content:
-            self.read()
-        try:
-            return self[param]
-        except KeyError:
-            value = de.default_parameters[param]
-            self[param] = value
-            if verbose:
-                scp.print_level(
-                    1, 'Using default value ({}) for {}'.format(value, param))
-            return value
-
-    def copy_to(self, name, root=None, header=None, verbose=False):
-        """
-        Copy YAML file to dest, with the
-        header if specified.
-
-        Arguments:
-            - dest (str): destination path (relative to root if specified)
-            - root (str, optional): root for destination file
-            - header (str, optional): strin to be prepended to destination file
-        """
-        if root:
-            dest = os.path.join(root, name)
+def print_level(num, msg, arrow=True):
+    if num > 0:
+        if arrow:
+            prepend = write_green(num*'----' + '> ')
         else:
-            dest = name
-        params_dest = YamlFile(dest)
-        parent = Folder(path=params_dest.parent_folder)
-        parent.create(verbose=verbose)
-        if header:
-            with open(params_dest.path, 'w') as file:
-                file.write(header)
-        with open(params_dest.path, 'a') as file:
-            yaml.safe_dump(self.content, file, sort_keys=False)
-        if verbose:
-            scp.print_level(1, 'Created file {}'.format(params_dest.path))
-        return
-
-    def check_with(self, ref, to_check, verbose=False):
-
-        # Exception message
-        msg = 'Incompatible parameter files! {} is different'
-
-        # Check keys
-        for key in to_check.keys():
-            if to_check[key]:
-                for subk in to_check[key]:
-                    if self[key][subk] != ref[key][subk]:
-                        raise Exception(msg.format('/'.join([key, subk])))
-            else:
-                if self[key] != ref[key]:
-                    raise Exception(msg.format(key, subk))
-
-        if verbose:
-            scp.info('Old parameter file is consistent with the new one')
-        return
-
-    def update_params(self, ref_params, add_epochs, learning_rate):
-        epochs = ref_params['ffnn_model']['n_epochs']
-        lr = ref_params['ffnn_model']['learning_rate']
-        # TODO: think how to make it more general for other emulators
-        if not isinstance(epochs, list):
-            epochs = [epochs]
-        if not isinstance(lr, list):
-            lr = [lr]
-        epochs.append(epochs[-1] + add_epochs)
-        lr.append(learning_rate)
-        self['ffnn_model']['n_epochs'] = epochs
-        self['ffnn_model']['learning_rate'] = lr
-        print(self.content)
-        return
+            prepend = (4*num+2)*' '
+    else:
+        prepend = ''
+    print('{}{}'.format(prepend, msg))
+    return

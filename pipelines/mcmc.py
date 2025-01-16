@@ -1,6 +1,14 @@
-import src.emu_like.io as io
-import src.emu_like.printing_scripts as scp
-from src.emu_like.mcmc import MCMC
+"""
+.. module:: mcmc
+
+:Synopsis: Pipeline used to run MCMC with an emulator.
+:Author: Emilio Bellini
+
+"""
+
+import emu_like.io as io
+from emu_like.mcmc import MCMC
+from emu_like.params import Params
 
 
 def mcmc_emu(args):
@@ -13,11 +21,10 @@ def mcmc_emu(args):
     """
 
     if args.verbose:
-        scp.print_level(0, "\nStarted mcmc\n")
+        io.print_level(0, "\nStarted mcmc\n")
 
-    # Load input file
-    params = io.YamlFile(args.params_file, should_exist=True)
-    params.read()
+    # Read params
+    params = Params().load(args.params_file)
 
     # Call mcmc sampler
     sampler = MCMC.choose_one(params, args.verbose)

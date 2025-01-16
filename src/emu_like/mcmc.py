@@ -1,147 +1,172 @@
 """
-List of mcmc samplers.
+.. module:: mcmc
+
+:Synopsis: Module containing list of mcmc samplers.
+:Author: Emilio Bellini
 """
-import cobaya
-# from cobaya.run import run as run_cob
+
 import emcee
 import numpy as np
+import os
 import sys
 from . import defaults as de
 from . import io as io
-from . import printing_scripts as scp
 from .emu import Emulator
-from .scalers import Scaler
 
 
 class MCMC(object):
 
     def __init__(self, params, verbose=False):
-        self.params = params[self.name]
+        """
+        Generic initialisation for every MCMC sampler.
+        Stored attributes:
+        - give the correct name to the sampler;
+        - load the emulator;
+        - fix output path;
+        - parameters to be varied;
+        - create output folder.
+        """
+
+        # Output path
         self.output = params['output']
 
-        # Load params emulator
-        emu_params = io.YamlFile(
-            de.file_names['params']['name'],
-            root=params['emulator']['path'],
-            should_exist=True)
-        emu_params.read()
+        if io.Folder(self.output).is_empty():
+            if verbose:
+                io.info("Writing output in {}".format(self.output))
+        else:
+            raise Exception(
+                'Output folder not empty! Exiting to avoid corruption of '
+                'precious data!')
 
-        # Define emulator folder
-        emu_folder = io.Folder(path=params['emulator']['path'])
+        # Create chains folder
+        io.Folder(self.output).create(verbose=verbose)
 
-        # Load scalers
-        scalers = emu_folder.subfolder(de.file_names['x_scaler']['folder'])
-        scaler_x_path = io.File(de.file_names['x_scaler']['name'],
-                                root=scalers)
-        scaler_y_path = io.File(de.file_names['y_scaler']['name'],
-                                root=scalers)
-        self.scaler_x = Scaler.load(scaler_x_path, verbose=verbose)
-        self.scaler_y = Scaler.load(scaler_y_path, verbose=verbose)
-
-        # Call the right emulator
-        self.emu = Emulator.choose_one(
-            emu_params, emu_folder, verbose=verbose)
+        self.name = list(params['sampler'].keys())[0]
 
         # Load emulator
-        self.emu.load(
+        self.emu = Emulator().load(
+            params['emulator']['path'],
             model_to_load=params['emulator']['epoch'],
             verbose=verbose)
 
-        # Load sample details
-        sample_path = emu_folder.subfolder(
-            de.file_names['sample_details']['folder'])
-        self.sample_details = io.YamlFile(
-            de.file_names['sample_details']['name'],
-            root=sample_path)
-        self.sample_details.read()
+        # Varied parameters
+        self.params = params['params']
 
         return
 
     @staticmethod
     def choose_one(params, verbose=False):
-        # Get right sampler
-        if 'cobaya' in params.keys():
-            return CobayaMCMC(params, verbose)
-        elif 'emcee' in params.keys():
-            return EmceeMCMC(params, verbose)
+        """
+        Main function to get the correct MCMC sampler.
+        Arguments:
+        - params (dict): dictionary where the only key
+          is the type of sampler and the corresponding
+          value is a nested dictionary with the parameters
+          needed by the sampler;
+        - verbose (bool, default: False): verbosity.
+        Return:
+        - MCMC (object): based on params, get the correct
+          sampler and initialise it.
+        """
+        if len(params['sampler'].keys()) > 1:
+            raise Exception('Multiple samplers! Choose one!')
+        elif len(params['sampler'].keys()) == 0:
+            raise Exception('No sampler specified! Choose one!')
         else:
-            raise ValueError('MCMC Sampler not recognized!')
+            if 'emcee' in params['sampler'].keys():
+                return EmceeMCMC(params, verbose)
+            else:
+                raise ValueError('MCMC Sampler not recognized!')
 
-    def evaluate_emulator(self, x, model, scaler_x, scaler_y):
-        x_reshaped = np.array([x])
-        if scaler_x:
-            x_scaled = scaler_x.transform(x_reshaped)
-        else:
-            x_scaled = x_reshaped
-        y_scaled = model(x_scaled, training=False)
-        y = scaler_y.inverse_transform(y_scaled)
-        return y
-
-    def log_prior(self, x, x_names, bounds):
-        for pos, name in enumerate(x_names):
-            if (x[pos] < bounds[name][0]) or (x[pos] > bounds[name][1]):
+    def log_prior(self, x, bounds):
+        """
+        Deal with priors.
+        For now we implemented only flat priors.
+        Arguments:
+        - x (list or array): array of values for input parameters;
+        - bounds (list or array): list of [min, max] for each parameter.
+        """
+        for pos, _ in enumerate(x):
+            if (x[pos] < bounds[pos][0]) or (x[pos] > bounds[pos][1]):
                 return -np.inf
         return 0.0
 
-    def log_prob(self, x, model, x_names, bounds, scaler_x, scaler_y):
-        log_lkl = self.evaluate_emulator(x, model, scaler_x, scaler_y)[0, 0]
-        return -0.5*log_lkl + self.log_prior(x, x_names, bounds)
-
-    def run(self):
-        return
+    def log_prob(self, x, bounds):
+        """
+        Evaluate the log likelihood from the emulator
+        and combine this with log_prior to get the
+        log posterior.
+        Arguments:
+        - x (list or array): array of values for input parameters;
+        - bounds (list or array): list of [min, max] for each parameter.
+        """
+        log_lkl = self.emu.eval(x)
+        return + log_lkl + self.log_prior(x, bounds)
 
 
 class EmceeMCMC(MCMC):
 
-    def __init__(self, params, verbose):
+    def __init__(self, params, verbose=False):
+        """
+        Initialise Emcee.
+        The main tasks are:
+        - initialise the sampler with the parameters specified;
+        - get initial positions for each walker;
+        - create chains file.
+        """
         if verbose:
-            scp.info('Initializing EmceeMCMC sampler.')
-        self.name = 'emcee'
-        MCMC.__init__(self, params, verbose)
+            io.info('Initializing EmceeMCMC sampler.')
+
+        MCMC.__init__(self, params, verbose=verbose)
+
+        # Get bounds
+        bounds = [[self.params[x]['prior']['min'],
+                   self.params[x]['prior']['max']] for x in self.emu.x_names]
 
         # Define emcee parameters
-        n_walkers = self.params['n_walkers']
-        n_dim = len(self.sample_details['x_names'])
-        n_threads = self.params['n_threads']
-        squeeze_factor = self.params['squeeze_factor']
+        n_walkers = params['sampler'][self.name]['n_walkers']
+        n_threads = params['sampler'][self.name]['n_threads']
+        squeeze_factor = params['sampler'][self.name]['squeeze_factor']
+        self.n_steps = params['sampler'][self.name]['n_steps']
+        n_dim = len(self.emu.x_names)
 
+        # Init sampler
         self.sampler = emcee.EnsembleSampler(
             n_walkers,
             n_dim,
             self.log_prob,
-            args=[
-                self.emu.model,
-                self.sample_details['x_names'],
-                self.sample_details['bounds'],
-                self.scaler_x,
-                self.scaler_y],
+            args=[bounds],
             threads=n_threads)
 
         # Initial positions
-        bounds = np.array([self.sample_details['bounds'][x]
-                           for x in self.sample_details['x_names']])
         center = np.mean(bounds, axis=1)
         width = np.array([x[1]-x[0] for x in bounds])
         self.pos = center + width*squeeze_factor*np.random.randn(
             n_walkers, n_dim)
 
-        # Header
-        header = '# weight\t-logprob\t'+'\t'.join(
-            self.sample_details['x_names'])+'\n'
+        # Header chains file
+        header = '# weight\t-logprob\t'+'\t'.join(self.emu.x_names)+'\n'
 
-        self.chains = io.File(
-            de.file_names['chains']['name'],
-            root=params['output']).create(header=header, verbose=verbose)
+        # Create chains file
+        self.chains_path = os.path.join(
+            self.output, de.file_names['chains']['name'])
+        with open(self.chains_path, 'w') as fn:
+            fn.write(header)
+            if verbose:
+                io.info('Writing chains at {}'.format(self.chains_path))
+
         return
 
     def run(self):
-
-        n_steps = self.params['n_steps']
+        """
+        Run the sampler starting from self.pos
+        with the specified settings.
+        """
         for count, result in enumerate(self.sampler.sample(
-                self.pos, iterations=n_steps)):
+                self.pos, iterations=self.n_steps)):
             x_vars = result[0]
             prob = result[1]
-            f = open(self.chains.path, 'a')
+            f = open(self.chains_path, 'a')
             for k in range(self.pos.shape[0]):
                 out = np.append(np.array([1., -prob[k]]), x_vars[k])
                 f.write('    '.join(
@@ -149,40 +174,7 @@ class EmceeMCMC(MCMC):
             f.close()
             if np.mod(count, 10) == 0:
                 print('----> Computed {0:5.1%} of the steps'
-                      ''.format(float(count+1) / n_steps))
+                      ''.format(float(count+1) / self.n_steps))
             sys.stdout.flush()
 
-        return
-
-
-class CobayaMCMC(MCMC):
-
-    def __init__(self, params, verbose):
-        if verbose:
-            scp.info('Initializing CobayaMCMC sampler.')
-        self.name = 'cobaya'
-        MCMC.__init__(self, params, verbose)
-
-        # Build info dict
-        self.info = {
-            'output': self.output,
-            'sampler': {'mcmc': self.params},
-            'params': params['params'],
-            'likelihood': {
-                'like': self.log_like
-            },
-        }
-
-        return
-
-    def log_like(self, *params):
-        # TODO: this is not working, it does not accept unnamed parameters
-        # Probably implement a likelihood class
-        log_lkl = self.evaluate_emulator(
-            params, self.emu.model, self.scaler_x, self.scaler_y)[0, 0]
-        print(log_lkl)
-        return log_lkl, {}
-
-    def run(self):
-        updated_info, sampler = cobaya.run(self.info)
         return

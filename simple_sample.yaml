@@ -1,6 +1,6 @@
 # Explanatory file.
 # Usage:
-#   python emu_like.py sample simple_sample.yaml -v
+#   python main.py sample simple_sample.yaml -v
 
 # Output folder (str)
 output: output/simple/sample
@@ -8,8 +8,8 @@ output: output/simple/sample
 # Number of samples to generate (int)
 n_samples: 1000
 
-# Name of the function to be used. It has to be one of the functions
-# defined in tools/sampling_functions.py. All of them should have
+# Name of the function to be sampled. It has to be one of the functions
+# defined in src/emu_like/sampling_functions.py. All of them should have
 # the same structure:
 #   - input: array of x sample, list of varying parameters, params dict
 #   - output: corresponding y value(s)
@@ -18,7 +18,7 @@ n_samples: 1000
 # With cobaya_loglike one can choose any Cobaya likelihood, adding
 # params, likelihood, prior (optional) and theory (optional)
 # blocks following the Cobaya scheme.
-function: linear_1d
+sampled_function: linear_1d
 
 # Spacing method (str).
 # Options: evaluate, grid, log_grid, random_uniform, random_normal,

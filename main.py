@@ -1,5 +1,18 @@
+"""
+.. module:: emu_like
+
+:Synopsis: Main pipeline
+:Author: Emilio Bellini
+
+This just redirects to the requested pipeline:
+- pipelines.sample.sample_emu: generate a sample
+- pipelines.train.train_emu: train an emulator
+- pipelines.mcmc.mcmc_emu: run mcmc with an emulator
+"""
+
 import sys
-from src.emu_like.io import argument_parser
+from emu_like.io import argument_parser
+
 
 # -----------------MAIN-CALL-----------------------------------------
 if __name__ == '__main__':

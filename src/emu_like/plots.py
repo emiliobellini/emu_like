@@ -1,7 +1,15 @@
+"""
+.. module:: plots
+
+:Synopsis: Module managing plots.
+:Author: Emilio Bellini
+TODO: improve it
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from . import io as io
-from . import printing_scripts as scp
 
 
 class SinglePlot(object):
@@ -48,11 +56,11 @@ class SinglePlot(object):
             name = self.fname
         else:
             name = '{}_vs_{}.pdf'.format(self.x_label, self.y_label)
-        fpath = io.File(name, root=self.root).path
+        fpath = os.path.join(self.root, name)
         plt.savefig(fpath)
         plt.close()
         if self.verbose:
-            scp.print_level(1, 'Saved plot at {}'.format(fpath))
+            io.print_level(1, 'Saved plot at {}'.format(fpath))
         return
 
 

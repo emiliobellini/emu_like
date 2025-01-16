@@ -1,12 +1,15 @@
 """
+.. module:: sample
 
-Main module with the pipeline used to train the emulator.
+:Synopsis: Pipeline used to generate samples.
+:Author: Emilio Bellini
 
 """
-import src.emu_like.defaults as de
-import src.emu_like.io as io
-import src.emu_like.printing_scripts as scp
-from src.emu_like.sample import Sample
+
+import emu_like.defaults as de
+import emu_like.io as io
+from emu_like.params import Params
+from emu_like.sample import Sample
 
 
 def sample_emu(args):
@@ -19,55 +22,59 @@ def sample_emu(args):
     """
 
     if args.verbose:
-        scp.print_level(0, '\nGetting sample for Emulator\n')
+        io.print_level(0, '\nGetting sample for Emulator\n')
 
-    # Load input file
-    params = io.YamlFile(args.params_file, should_exist=True)
-    params.read()
+    # Read params
+    params = Params().load(args.params_file)
 
-    # Define output path
-    output = io.Folder(path=params['output'])
+    # Init Sample object
+    sample = Sample()
+
+    # If resume
     if args.resume:
         if args.verbose:
-            scp.info('Resuming from {}.'.format(output.path))
-        ref_params = io.YamlFile(
-            de.file_names['params']['name'],
-            root=output,
-            should_exist=True)
-        ref_params.read()
-        # TODO: maybe here add check that param files are consistent
+            io.info('Resuming from {}.'.format(params['output']))
+            io.print_level(1, 'Ignoring {}'.format(args.params_file))
+        # Read params from output folder
+        params = Params().load(de.file_names['params']['name'],
+                               root=params['output'])
+        sample.load(params['output'], verbose=args.verbose)
+        sample.resume(save_incrementally=True, verbose=args.verbose)
+    # Otherwise
     else:
-        if args.verbose:
-            scp.info("Writing output in {}".format(output.path))
-        # Check if empty, and copy param file to output folder
-        if output.is_empty():
-            params.copy_to(
-                name=de.file_names['params']['name'],
-                root=params['output'],
-                header=de.file_names['params']['header'],
-                verbose=args.verbose)
-        # Else exit, to avoid overwriting
+        # Check if output folder is empty, otherwise stop
+        if io.Folder(params['output']).is_empty():
+            if args.verbose:
+                io.info("Writing output in {}".format(params['output']))
         else:
             raise Exception(
                 'Output folder not empty! Exiting to avoid corruption of '
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
 
-    # Load or generate sample
-    sample = Sample()
-    sample.generate(
-        params=params,
-        root=output,
-        resume=args.resume,
-        verbose=args.verbose)
+        # Create output folder
+        io.Folder(params['output']).create(args.verbose)
+        # Save params
+        params.save(
+            de.file_names['params']['name'],
+            root=params['output'],
+            header=de.file_names['params']['header'],
+            verbose=args.verbose)
 
-    # Save details in output folder
-    details_path = io.YamlFile(
-        de.file_names['sample_details']['name'],
-        root=output.subfolder(
-            de.file_names['sample_details']['folder']).create(
-                verbose=args.verbose)
-    )
-    sample.save_details(details_path, verbose=args.verbose)
+        # Pass correct params dict
+        if params['sampled_function'] == 'cobaya_loglike':
+            params_dict = params['cobaya']
+        else:
+            params_dict = params['params']
+
+        # Generate sample
+        sample.generate(
+            params=params_dict,
+            sampled_function=params['sampled_function'],
+            n_samples=params['n_samples'],
+            spacing=params['spacing'],
+            save_incrementally=True,
+            output_path=params['output'],
+            verbose=args.verbose)
 
     return

@@ -1,6 +1,14 @@
+"""
+.. module:: samplers
+
+:Synopsis: Various sampler classes, dealing with different sampling spacing.
+:Author: Emilio Bellini
+
+"""
+
 import numpy as np
 import scipy
-from . import printing_scripts as scp
+from . import io as io
 
 
 class Sampler(object):
@@ -46,7 +54,7 @@ class EvaluateSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing Evaluate sampler.')
+            io.info('Initializing Evaluate sampler.')
         Sampler.__init__(self)
         return
 
@@ -59,14 +67,20 @@ class GridSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing Grid sampler.')
+            io.info('Initializing Grid sampler.')
         Sampler.__init__(self)
         return
 
     def get_x(self, params, varying, n_samples):
         mins = [params[x]['prior']['min'] for x in varying]
         maxs = [params[x]['prior']['max'] for x in varying]
-        x = np.linspace(mins, maxs, num=n_samples)
+        # Get points per size
+        size = int(np.power(n_samples, 1./len(varying)))
+        # Get coordinates
+        coords = [np.linspace(m, M, num=size) for m, M in zip(mins, maxs)]
+        coords = np.meshgrid(*coords)
+        coords = tuple([x.ravel() for x in coords])
+        x = np.vstack(coords).T
         return x
 
 
@@ -74,14 +88,20 @@ class LogGridSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing LogGrid sampler.')
+            io.info('Initializing LogGrid sampler.')
         Sampler.__init__(self)
         return
 
     def get_x(self, params, varying, n_samples):
         mins = [np.log10(params[x]['prior']['min']) for x in varying]
         maxs = [np.log10(params[x]['prior']['max']) for x in varying]
-        x = np.logspace(mins, maxs, num=n_samples)
+        # Get points per size
+        size = int(np.power(n_samples, 1./len(varying)))
+        # Get coordinates
+        coords = [np.logspace(m, M, num=size) for m, M in zip(mins, maxs)]
+        coords = np.meshgrid(*coords)
+        coords = tuple([x.ravel() for x in coords])
+        x = np.vstack(coords).T
         return x
 
 
@@ -89,7 +109,7 @@ class RandomUniformSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing RandomUniform sampler.')
+            io.info('Initializing RandomUniform sampler.')
         Sampler.__init__(self)
         return
 
@@ -104,7 +124,7 @@ class RandomNormalSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing RandomNormal sampler.')
+            io.info('Initializing RandomNormal sampler.')
         Sampler.__init__(self)
         return
 
@@ -119,7 +139,7 @@ class LatinHypercubeSampler(Sampler):
 
     def __init__(self, verbose=False):
         if verbose:
-            scp.info('Initializing LatinHypercube sampler.')
+            io.info('Initializing LatinHypercube sampler.')
         Sampler.__init__(self)
         return
 
