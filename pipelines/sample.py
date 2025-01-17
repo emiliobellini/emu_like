@@ -61,15 +61,13 @@ def sample_emu(args):
             header=de.file_names['params']['header'],
             verbose=args.verbose)
 
-        # Pass correct params dict
-        if params['sampled_function'] == 'cobaya_loglike':
-            params_dict = params['cobaya']
-        elif params['sampled_function'] == 'class_spectra':
-            params_dict = params['class']
-        else:
-            params_dict = params['params']
+        # Try to get extra_args
+        try:
+            extra_args = params['extra_args']
+        except KeyError:
+            extra_args = None
 
-        # Try to read a seed for the LatinHypercubeSampler
+        # Try to read seed (only used by LatinHypercubeSampler)
         try:
             seed = params['seed']
         except KeyError:
@@ -77,12 +75,13 @@ def sample_emu(args):
 
         # Generate sample
         sample.generate(
-            params=params_dict,
+            params=params['params'],
             sampled_function=params['sampled_function'],
             n_samples=params['n_samples'],
             spacing=params['spacing'],
             save_incrementally=True,
             output_path=params['output'],
+            extra_args=extra_args,
             seed=seed,
             verbose=args.verbose)
 

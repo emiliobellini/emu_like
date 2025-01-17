@@ -16,7 +16,7 @@ import numpy as np
 
 # 1D functions
 
-def linear_1d(x, x_var, params, model=None):
+def linear_1d(x, x_var, params, **kwargs):
     """
     Arguments:
         x: array with dimensions (n_params=1)
@@ -37,7 +37,7 @@ def linear_1d(x, x_var, params, model=None):
     return y, None, None
 
 
-def quadratic_1d(x, x_var, params, model=None):
+def quadratic_1d(x, x_var, params, **kwargs):
     """
     Arguments:
         x: array with dimensions (n_params=1)
@@ -59,7 +59,7 @@ def quadratic_1d(x, x_var, params, model=None):
     return y, None, None
 
 
-def gaussian_1d(x, x_var, params, model=None):
+def gaussian_1d(x, x_var, params, **kwargs):
     """
     Arguments:
         x: array with dimensions (n_params=1)
@@ -82,7 +82,7 @@ def gaussian_1d(x, x_var, params, model=None):
 
 # 2D functions
 
-def linear_2d(x, x_var, params, model=None):
+def linear_2d(x, x_var, params, **kwargs):
     """
     Arguments:
         x: array with dimensions (n_params=2)
@@ -105,7 +105,7 @@ def linear_2d(x, x_var, params, model=None):
     return y, None, None
 
 
-def quadratic_2d(x, x_var, params, model=None):
+def quadratic_2d(x, x_var, params, **kwargs):
     """
     Arguments:
         x: array with dimensions (n_params=2)
@@ -133,13 +133,12 @@ def quadratic_2d(x, x_var, params, model=None):
 
 # Cobaya loglikelihoods
 
-def cobaya_loglike(x, x_var, params, model=None):
+def cobaya_loglike(x, x_var, params, model=None, extra_args=None, **kwargs):
     """
     Arguments:
         x: array with dimensions (n_params=len(x_var))
         x_var: list of varying parameters names
         params: dictionary of all parameters
-        model: cobaya model (to avoid duplicating calculations)
     Output:
         y: array with dimensions (n_likelihoods+3)
         y_names: list of names for each of the y column
@@ -147,11 +146,16 @@ def cobaya_loglike(x, x_var, params, model=None):
 
     """
     import cobaya
+    # Merge dictionaries of params for cobaya
+    if extra_args:
+        cobaya_params = {'params': params} | extra_args
+    else:
+        cobaya_params = params
     # Get y_names
-    y_names = list(params['likelihood'].keys())
+    y_names = list(cobaya_params['likelihood'].keys())
     # Define model
     if model is None:
-        model = cobaya.model.get_model(params)
+        model = cobaya.model.get_model(cobaya_params)
     # Each sample should be a dictionary
     sampled_params = dict(zip(x_var, x))
     # Get loglike
@@ -174,7 +178,7 @@ def cobaya_loglike(x, x_var, params, model=None):
 
 # Class spectra
 
-def class_spectra(x, x_var, params, model=None):
+def class_spectra(x, x_var, params, extra_args=None, **kwargs):
     """
     Arguments:
         x: array with dimensions (n_params=len(x_var))

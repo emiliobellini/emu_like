@@ -335,8 +335,8 @@ class Sample(object):
         return
 
     def generate(self, params, sampled_function, n_samples, spacing,
-                 save_incrementally=False, output_path=None, seed=None,
-                 verbose=False):
+                 extra_args=None, save_incrementally=False, output_path=None,
+                 seed=None, verbose=False):
         """
         Generate a sample.
         Arguments:
@@ -348,6 +348,9 @@ class Sample(object):
         - n_samples (int): number of samples to compute;
         - spacing (str): spacing of the sample. Options are those defined in
           src/emu_like/samplers.py;
+        - extra_args (dict, default: None): dictionary containing extra
+          arguments needed by the sampled_function. See planck_sample.yaml
+          and spectra_sample.yaml for details;
         - save_incrementally (bool, default: False): save output incrementally;
         - output_path (str, default: None): if save_incrementally the output
           path should be passed;
@@ -368,17 +371,13 @@ class Sample(object):
             io.Folder(output_path).create(verbose=verbose)
 
         # Create settings dictionary
-        if sampled_function == 'cobaya_loglike':
-            params_name = 'cobaya'
-        elif sampled_function == 'class_spectra':
-            params_name = 'class'
-        else:
-            params_name = 'params'
         self.settings = {
-            params_name: params,
+            'params': params,
             'sampled_function': sampled_function,
             'n_samples': n_samples,
             'spacing': spacing,
+            'seed': seed,
+            'extra_args': extra_args,
         }
         # Save settings
         if save_incrementally:
@@ -387,29 +386,20 @@ class Sample(object):
         # Function to be sampled
         fun = eval('fng.' + sampled_function)
 
-        # Get correct parameters to be passed to fun
-        if sampled_function == 'cobaya_loglike':
-            sampled_params = params['params']
-        elif sampled_function == 'class_spectra':
-            sampled_params = params['params']
-        else:
-            sampled_params = params
-
         # Get x names
-        self.x_names = [x for x in sampled_params
-                        if self._is_varying(sampled_params, x)]
+        self.x_names = [x for x in params if self._is_varying(params, x)]
 
         # Get x array
         x_sampler = smp.Sampler().choose_one(spacing, verbose=verbose)
-        self.x = x_sampler.get_x(
-            sampled_params, self.x_names, n_samples, seed=seed)
+        self.x = x_sampler.get_x(params, self.x_names, n_samples, seed=seed)
         self.n_x = self.x.shape[1]
         # Save x array
         if save_incrementally:
             self._save_x(output_path, verbose=verbose)
 
         # Get first sampled y (to retrieve y_names and model)
-        y_val, self.y_names, model = fun(self.x[0], self.x_names, params)
+        y_val, self.y_names, model = fun(
+            self.x[0], self.x_names, params, extra_args=extra_args)
         self.y = [y_val]
         # Save y array (first row, then we update it)
         if save_incrementally:
@@ -417,7 +407,8 @@ class Sample(object):
 
         # Sample y
         for x in tqdm.tqdm(self.x[1:]):
-            y_val, _, _ = fun(x, self.x_names, params, model=model)
+            y_val, _, _ = fun(
+                x, self.x_names, params, model=model, extra_args=extra_args)
             self.y.append(y_val)
             if save_incrementally:
                 self._append_y(output_path, y_val)

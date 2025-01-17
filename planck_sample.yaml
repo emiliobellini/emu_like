@@ -8,7 +8,7 @@
 output: output/planck/sample
 
 # Number of samples to generate (int)
-n_samples: 100
+n_samples: 10
 
 # Name of the function to be sampled. It has to be one of the functions
 # defined in src/emu_like/sampling_functions.py. All of them should have
@@ -34,10 +34,67 @@ spacing: latin_hypercube
 seed: 12
 
 # List of params.
-# If the function to sample is cobaya_loglike all this, plus the additional
-# blocks needed by cobaya should be encapsulated by a "cobaya" block.
-# - TODO: Comment class_spectra 
-cobaya:
+params:
+  # If spacing grid, log_grid, random_normal or latin_hypercube use (min, max)
+  # If spacing random_uniform use (loc, scale), with loc=mean and scale=sigma.
+  logA: # sampled parameter
+    prior:
+      min: 2.988
+      max: 3.1
+    ref: 3.0297862
+    latex: \log(10^{10} A_\mathrm{s})
+    drop: true
+  A_s: # internal Class parameter
+    value: 'lambda logA: 1e-10*np.exp(logA)'
+    latex: A_\mathrm{s}
+    derived: false
+  n_s:
+    prior:
+      min: 0.9481
+      max: 0.9817
+    ref: 0.97084247
+    latex: n_\mathrm{s}
+  theta_s_1e2:
+    prior:
+      min: 1.03968
+      max: 1.04216
+    ref: 1.0410781
+    latex: 100\theta_\mathrm{MC}
+    drop: true
+  100*theta_s:
+    value: 'lambda theta_s_1e2: theta_s_1e2'
+    derived: false
+  omega_b:
+    prior:
+      min: 0.02177
+      max: 0.02297
+    ref: 0.022438922
+    latex: \Omega_\mathrm{b} h^2
+  omega_cdm:
+    prior:
+      min: 0.1152
+      max: 0.1248
+    ref: 0.11825479
+    latex: \Omega_\mathrm{c} h^2
+  tau_reio:
+    prior:
+      min: 0.0252
+      max: 0.0836
+    ref: 0.053234614
+    latex: \tau_\mathrm{reio}
+  A_planck:
+    prior:
+      min: 0.990839
+      max: 1.0104
+    ref: 1.0020416
+
+
+# Extra arguments needed by the sampled function.
+# The cases where this is necessary are:
+#   - cobaya_loglike: you should put here all the other blocks to be passed
+#       to cobaya together with params, i.e. theory, likelihood, ...
+
+extra_args:
 
   theory:
     classy:
@@ -50,59 +107,4 @@ cobaya:
   likelihood:
     planck_2018_lowl.TT: null
     planck_2018_lowl.EE: null
-    planck_2018_highl_plik.TTTEEE_lite: null
-    planck_2018_lensing.clik: null
 
-  params:
-    # If spacing grid, log_grid, random_normal or latin_hypercube use (min, max)
-    # If spacing random_uniform use (loc, scale), with loc=mean and scale=sigma.
-    logA: # sampled parameter
-      prior:
-        min: 2.988
-        max: 3.1
-      ref: 3.0297862
-      latex: \log(10^{10} A_\mathrm{s})
-      drop: true
-    A_s: # internal Class parameter
-      value: 'lambda logA: 1e-10*np.exp(logA)'
-      latex: A_\mathrm{s}
-      derived: false
-    n_s:
-      prior:
-        min: 0.9481
-        max: 0.9817
-      ref: 0.97084247
-      latex: n_\mathrm{s}
-    theta_s_1e2:
-      prior:
-        min: 1.03968
-        max: 1.04216
-      ref: 1.0410781
-      latex: 100\theta_\mathrm{MC}
-      drop: true
-    100*theta_s:
-      value: 'lambda theta_s_1e2: theta_s_1e2'
-      derived: false
-    omega_b:
-      prior:
-        min: 0.02177
-        max: 0.02297
-      ref: 0.022438922
-      latex: \Omega_\mathrm{b} h^2
-    omega_cdm:
-      prior:
-        min: 0.1152
-        max: 0.1248
-      ref: 0.11825479
-      latex: \Omega_\mathrm{c} h^2
-    tau_reio:
-      prior:
-        min: 0.0252
-        max: 0.0836
-      ref: 0.053234614
-      latex: \tau_\mathrm{reio}
-    A_planck:
-      prior:
-        min: 0.990839
-        max: 1.0104
-      ref: 1.0020416
