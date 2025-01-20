@@ -38,8 +38,17 @@ def sample_emu(args):
         # Read params from output folder
         params = Params().load(de.file_names['params']['name'],
                                root=params['output'])
+        # Try to get extra_arguments
+        try:
+            sampled_function_args = params['sampled_function_args']
+        except KeyError:
+            sampled_function_args = None
         sample.load(params['output'], verbose=args.verbose)
-        sample.resume(save_incrementally=True, verbose=args.verbose)
+        sample.resume(
+            params['params'],
+            sampled_function_args=sampled_function_args,
+            save_incrementally=True,
+            verbose=args.verbose)
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
@@ -61,17 +70,15 @@ def sample_emu(args):
             header=de.file_names['params']['header'],
             verbose=args.verbose)
 
-        # Try to get extra_args
+        # Try to get extra_arguments
         try:
-            extra_args = params['extra_args']
+            sampled_function_args = params['sampled_function_args']
         except KeyError:
-            extra_args = None
-
-        # Try to read seed (only used by LatinHypercubeSampler)
+            sampled_function_args = None
         try:
-            seed = params['seed']
+            spacing_args = params['spacing_args']
         except KeyError:
-            seed = None
+            spacing_args = None
 
         # Generate sample
         sample.generate(
@@ -81,8 +88,8 @@ def sample_emu(args):
             spacing=params['spacing'],
             save_incrementally=True,
             output_path=params['output'],
-            extra_args=extra_args,
-            seed=seed,
+            sampled_function_args=sampled_function_args,
+            spacing_args=spacing_args,
             verbose=args.verbose)
 
     return

@@ -143,9 +143,13 @@ class LatinHypercubeSampler(Sampler):
         Sampler.__init__(self)
         return
 
-    def get_x(self, params, varying, n_samples, seed=None):
+    def get_x(self, params, varying, n_samples, extra_args=None):
         mins = [params[x]['prior']['min'] for x in varying]
         maxs = [params[x]['prior']['max'] for x in varying]
+        try:
+            seed = extra_args['seed']
+        except KeyError:
+            seed = None
         sampler = scipy.stats.qmc.LatinHypercube(
             d=len(mins),
             rng=np.random.default_rng(seed=seed))

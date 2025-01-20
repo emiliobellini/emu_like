@@ -8,33 +8,41 @@ output: output/simple/sample
 # Number of samples to generate (int)
 n_samples: 1000
 
-# Name of the function to be sampled. It has to be one of the functions
-# defined in src/emu_like/sampling_functions.py. All of them should have
-# the same structure:
-#   - input: array of x sample, list of varying parameters, params dict
-#   - output: corresponding y value(s)
-# Current options: linear_1d, quadratic_1d, gaussian_1d, linear_2d,
-# quadratic_2d, cobaya_loglike, class_spectra.
-# - With cobaya_loglike one can choose any Cobaya likelihood, adding
-# params, likelihood, prior (optional) and theory (optional)
-# blocks following the Cobaya scheme.
-# - TODO: Comment class_spectra 
-sampled_function: linear_1d
-
 # Spacing method (str).
 # Options: evaluate, grid, log_grid, random_uniform, random_normal,
 # latin_hypercube. In evaluate mode, it will evaluate the pipeline at a
 # single point specified by the value of ref for each parameter
 # (otherwise ref is ignored).
 spacing: grid
-# If the spacicing is latin_hypercube, you can choose a seed to ensure
-# deterministic results.
-# seed: 12
+# Extra arguments for the spacing method. For now only latin_hypercube
+# accepts a seed to ensure deterministic results.
+spacing_args:
+#   seed: 12
 
-# List of params.
-# If the function to sample is cobaya_loglike all this, plus the additional
-# blocks needed by cobaya should be encapsulated by a "cobaya" block.
-# - TODO: Comment class_spectra 
+# Name of the function to be sampled. It has to be one of the functions
+# defined in src/emu_like/sampling_functions.py. All of them should have
+# the same structure:
+#   - input:
+#     - x: array of input data (one sample)
+#     - x_names: list of names for each x element
+#     - params: dictionary of the arguments needed
+#     - model (optional): used in some function to store the
+#         evaluation and avoid duplicating the calculations
+#     - extra_args (optional): if the function called needs
+#         other arguments put them here
+#   - output:
+#     - y: list of arrays of output data (one for each element of y_fnames)
+#     - y_names: list of list of names for yeach y and y_names
+#     - y_fnames: list of file names to divide the output
+#     - model: if necessary to propagate model to the following steps
+# Current options: linear_1d, quadratic_1d, gaussian_1d, linear_2d,
+# quadratic_2d, cobaya_loglike, class_spectra.
+sampled_function: linear_1d
+
+# Extra arguments needed by the sampled function.
+sampled_function_args:
+
+# List of parameters.
 params:
   # If spacing grid, log_grid, random_normal or latin_hypercube use (min, max)
   # If spacing random_uniform use (loc, scale), with loc=mean and scale=sigma.

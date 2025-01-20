@@ -16,105 +16,130 @@ import numpy as np
 
 # 1D functions
 
-def linear_1d(x, x_var, params, **kwargs):
+def linear_1d(x, x_names, params, **kwargs):
     """
     Arguments:
-        x: array with dimensions (n_params=1)
-        x_var: list of varying parameters names
-        params: dictionary of all parameters
+    - x: array of input data (one sample)
+    - x_names: list of names for each x element
+    - params: dictionary of the arguments needed
+    - model (optional): used in some function to store the
+      evaluation and avoid duplicating the calculations
+    - extra_args (optional): if the function called needs
+      other arguments put them here
     Output:
-        y: array with dimensions (1)
-        y_names: list of names for each of the y column
-        (it is possible to leave it None)
+    - y: list of arrays of output data (one for each element of y_fnames)
+    - y_names: list of list of names for yeach y and y_names
+    - y_fnames: list of file names to divide the output
+    - model: if necessary to propagate model to the following steps
 
     y = a*x + b
     """
     a = params['a']
     b = params['b']
-    x = x[x_var.index('x')]
+    x = x[x_names.index('x')]
     y = a*x + b
-    y = y[np.newaxis]
-    return y, None, None
+    y = y[np.newaxis, np.newaxis]
+    return y, None, None, None
 
 
-def quadratic_1d(x, x_var, params, **kwargs):
+def quadratic_1d(x, x_names, params, **kwargs):
     """
     Arguments:
-        x: array with dimensions (n_params=1)
-        x_var: list of varying parameters names
-        params: dictionary of all parameters
+    - x: array of input data (one sample)
+    - x_names: list of names for each x element
+    - params: dictionary of the arguments needed
+    - model (optional): used in some function to store the
+      evaluation and avoid duplicating the calculations
+    - extra_args (optional): if the function called needs
+      other arguments put them here
     Output:
-        y: array with dimensions (1)
-        y_names: list of names for each of the y column
-        (it is possible to leave it None)
+    - y: list of arrays of output data (one for each element of y_fnames)
+    - y_names: list of list of names for yeach y and y_names
+    - y_fnames: list of file names to divide the output
+    - model: if necessary to propagate model to the following steps
 
     y = a*x^2 + b*x + c
     """
     a = params['a']
     b = params['b']
     c = params['c']
-    x = x[x_var.index('x')]
+    x = x[x_names.index('x')]
     y = a*x**2 + b*x + c
-    y = y[np.newaxis]
-    return y, None, None
+    y = y[np.newaxis, np.newaxis]
+    return y, None, None, None
 
 
-def gaussian_1d(x, x_var, params, **kwargs):
+def gaussian_1d(x, x_names, params, **kwargs):
     """
     Arguments:
-        x: array with dimensions (n_params=1)
-        x_var: list of varying parameters names
-        params: dictionary of all parameters
+    - x: array of input data (one sample)
+    - x_names: list of names for each x element
+    - params: dictionary of the arguments needed
+    - model (optional): used in some function to store the
+      evaluation and avoid duplicating the calculations
+    - extra_args (optional): if the function called needs
+      other arguments put them here
     Output:
-        y: array with dimensions (1)
-        y_names: list of names for each of the y column
-        (it is possible to leave it None)
+    - y: list of arrays of output data (one for each element of y_fnames)
+    - y_names: list of list of names for yeach y and y_names
+    - y_fnames: list of file names to divide the output
+    - model: if necessary to propagate model to the following steps
 
     y = exp(-(x-mean^2)/std/2)
     """
     mean = params['mean']
     std = params['std']
-    x = x[x_var.index('x')]
+    x = x[x_names.index('x')]
     y = np.exp(-(x-mean)**2./std**2./2.)
-    y = y[np.newaxis]
-    return y, None, None
+    y = y[np.newaxis, np.newaxis]
+    return y, None, None, None
 
 
 # 2D functions
 
-def linear_2d(x, x_var, params, **kwargs):
+def linear_2d(x, x_names, params, **kwargs):
     """
     Arguments:
-        x: array with dimensions (n_params=2)
-        x_var: list of varying parameters names
-        params: dictionary of all parameters
+    - x: array of input data (one sample)
+    - x_names: list of names for each x element
+    - params: dictionary of the arguments needed
+    - model (optional): used in some function to store the
+      evaluation and avoid duplicating the calculations
+    - extra_args (optional): if the function called needs
+      other arguments put them here
     Output:
-        y: array with dimensions (1)
-        y_names: list of names for each of the y column
-        (it is possible to leave it None)
+    - y: list of arrays of output data (one for each element of y_fnames)
+    - y_names: list of list of names for yeach y and y_names
+    - y_fnames: list of file names to divide the output
+    - model: if necessary to propagate model to the following steps
 
     y = a*x1 + b*x2 + c
     """
     a = params['a']
     b = params['b']
     c = params['c']
-    x1 = x[x_var.index('x1')]
-    x2 = x[x_var.index('x2')]
+    x1 = x[x_names.index('x1')]
+    x2 = x[x_names.index('x2')]
     y = a*x1 + b*x2 + c
-    y = y[np.newaxis]
-    return y, None, None
+    y = y[np.newaxis, np.newaxis]
+    return y, None, None, None
 
 
-def quadratic_2d(x, x_var, params, **kwargs):
+def quadratic_2d(x, x_names, params, **kwargs):
     """
     Arguments:
-        x: array with dimensions (n_params=2)
-        x_var: list of varying parameters names
-        params: dictionary of all parameters
+    - x: array of input data (one sample)
+    - x_names: list of names for each x element
+    - params: dictionary of the arguments needed
+    - model (optional): used in some function to store the
+      evaluation and avoid duplicating the calculations
+    - extra_args (optional): if the function called needs
+      other arguments put them here
     Output:
-        y: array with dimensions (1)
-        y_names: list of names for each of the y column
-        (it is possible to leave it None)
+    - y: list of arrays of output data (one for each element of y_fnames)
+    - y_names: list of list of names for yeach y and y_names
+    - y_fnames: list of file names to divide the output
+    - model: if necessary to propagate model to the following steps
 
     y = a*x1^2 + b*x2^2 + c*x1*x2 + d*x1 + e*x2 + f
     """
@@ -124,25 +149,30 @@ def quadratic_2d(x, x_var, params, **kwargs):
     d = params['d']
     e = params['e']
     f = params['f']
-    x1 = x[x_var.index('x1')]
-    x2 = x[x_var.index('x2')]
+    x1 = x[x_names.index('x1')]
+    x2 = x[x_names.index('x2')]
     y = a*x1**2. + b*x2**2. + c*x1*x2 + d*x1 + e*x2 + f
-    y = y[np.newaxis]
-    return y, None, None
+    y = y[np.newaxis, np.newaxis]
+    return y, None, None, None
 
 
 # Cobaya loglikelihoods
 
-def cobaya_loglike(x, x_var, params, model=None, extra_args=None, **kwargs):
+def cobaya_loglike(x, x_names, params, model=None, extra_args=None, **kwargs):
     """
     Arguments:
-        x: array with dimensions (n_params=len(x_var))
-        x_var: list of varying parameters names
-        params: dictionary of all parameters
+    - x: array of input data (one sample)
+    - x_names: list of names for each x element
+    - params: dictionary of the arguments needed
+    - model (optional): used in some function to store the
+      evaluation and avoid duplicating the calculations
+    - extra_args (optional): if the function called needs
+      other arguments put them here
     Output:
-        y: array with dimensions (n_likelihoods+3)
-        y_names: list of names for each of the y column
-        (it is possible to leave it None)
+    - y: list of arrays of output data (one for each element of y_fnames)
+    - y_names: list of list of names for yeach y and y_names
+    - y_fnames: list of file names to divide the output
+    - model: if necessary to propagate model to the following steps
 
     """
     import cobaya
@@ -157,7 +187,7 @@ def cobaya_loglike(x, x_var, params, model=None, extra_args=None, **kwargs):
     if model is None:
         model = cobaya.model.get_model(cobaya_params)
     # Each sample should be a dictionary
-    sampled_params = dict(zip(x_var, x))
+    sampled_params = dict(zip(x_names, x))
     # Get loglike
     loglikes = model.loglikes(sampled_params, as_dict=True)[0]
     # Get y array
@@ -173,31 +203,47 @@ def cobaya_loglike(x, x_var, params, model=None, extra_args=None, **kwargs):
     y_names.append('logpost')
     # Replace nans with infinities
     y = np.nan_to_num(y, nan=-np.inf)
-    return y, y_names, model
+    y = y[np.newaxis]
+    return y, y_names, None, model
 
 
 # Class spectra
 
-def class_spectra(x, x_var, params, extra_args=None, **kwargs):
+def class_spectra(x, x_names, params, extra_args=None, **kwargs):
     """
     Arguments:
-        x: array with dimensions (n_params=len(x_var))
-        x_var: list of varying parameters names
-        params: dictionary of all parameters
+    - x: array of input data (one sample)
+    - x_names: list of names for each x element
+    - params: dictionary of the arguments needed
+    - model (optional): used in some function to store the
+      evaluation and avoid duplicating the calculations
+    - extra_args (optional): if the function called needs
+      other arguments put them here
     Output:
-        y: array with dimensions (n_likelihoods+3)
-        y_names: list of names for each of the y column
-        (it is possible to leave it None)
+    - y: list of arrays of output data (one for each element of y_fnames)
+    - y_names: list of list of names for yeach y and y_names
+    - y_fnames: list of file names to divide the output
+    - model: if necessary to propagate model to the following steps
 
     """
     # TODO: this is now working only for mPk (both total and cb)
+    y = [
+        np.array([[1, 2]]),
+        np.array([[2, 3, 4]]),
+    ]
+    y_names = [
+        ['x1', 'x2'],
+        ['x2', 'x3', 'x4'],
+    ]
+    y_fnames = ['f1', 'f2']
+    return y, y_names, y_fnames, None
 
     # Init classy
     import classy
     cosmo = classy.Class()
 
     # Build parameter dictionary to be computed
-    model_params = dict(zip(x_var, x))
+    model_params = dict(zip(x_names, x))
     try:
         model_params = model_params | params['extra_args']
     except KeyError:
@@ -238,4 +284,4 @@ def class_spectra(x, x_var, params, extra_args=None, **kwargs):
         # TODO: this has to be improved
         y = -1.*np.ones_like(k_range)
 
-    return y, y_names, None
+    return y, y_names, None, None

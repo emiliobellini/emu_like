@@ -58,6 +58,7 @@ class Sample(object):
         self.y = None  # Array with y data
         self.x_names = None  # List of names of x data
         self.y_names = None  # List of names of y data
+        self.y_fnames = None  # List of names of y data
         self.n_samples = None  # Number of samples
         self.n_x = None  # Number of x variables
         self.n_y = None  # Number of y variables
@@ -86,7 +87,7 @@ class Sample(object):
         names = self._try_to_load_names_array(path, n_names=array.shape[1])
         array = array[:, columns]
         try:
-            names = names[columns]
+            names = list(names[columns])
         except TypeError:
             pass
         return array, names
@@ -168,37 +169,59 @@ class Sample(object):
         np.savetxt(fpath, self.x, header='\t'.join(self.x_names))
         return
 
-    def _save_y(self, path, verbose=False):
+    def _save_y(self, path, y=None, names=None, fname=None, verbose=False):
         """
         Quick way to save y array in path.
         Arguments:
         - path (str): folder where to store y array;
+        - y (array): 2D array of y
+        - names (list of str): list of names for each y
+        - fname (str): suffix to be appended to the standard fname
         - verbose (bool, default: False): verbosity.
-
-        NOTE: this assumes that y is already an attribute
-        of the class, and saves it with the default
-        name and header.
         """
-        fpath = os.path.join(path, de.file_names['y_sample']['name'])
+        # Get optional arguments, otherwise default
+        if y is None:
+            save_y = self.y
+        else:
+            save_y = y
+        if names is None:
+            save_names = self.y_names
+        else:
+            save_names = names
+        if fname is None:
+            save_fname = ''
+        else:
+            save_fname = '_' + fname
+        # Get output file name
+        fpath = os.path.join(
+            path, de.file_names['y_sample']['name'].format(save_fname))
         try:
-            header = '\t'.join(self.y_names)
+            header = '\t'.join(save_names)
         except TypeError:
             header = ''
         if verbose:
             io.print_level(1, 'Saved y array at: {}'.format(fpath))
-        np.savetxt(fpath, self.y, header=header)
+        np.savetxt(fpath, save_y, header=header)
         return
 
-    def _append_y(self, path, y_val):
+    def _append_y(self, path, y_val, fname=None):
         """
         Quick way to append rows to the y array in path.
         Arguments:
         - path (str): folder where the y array is stored;
-        - verbose (bool, default: False): verbosity.
+        - y (array): 2D array of y
+        - fname (str): suffix to be appended to the standard fname
         """
-        fpath = os.path.join(path, de.file_names['y_sample']['name'])
+        # Get optional arguments, otherwise default
+        if fname is None:
+            save_fname = ''
+        else:
+            save_fname = '_' + fname
+        # Get output file name
+        fpath = os.path.join(
+            path, de.file_names['y_sample']['name'].format(save_fname))
         with open(fpath, 'a') as fn:
-            np.savetxt(fn, [y_val])
+            np.savetxt(fn, y_val)
         return
 
     def _is_varying(self, params, param):
@@ -252,7 +275,11 @@ class Sample(object):
         try:
             self.settings = Params().load(path_settings)
         except NotADirectoryError:
+            self.settings = None
             io.warning('Unable to load parameter file!')
+        
+        if self.settings is not None:
+            self.y_fnames = self.settings['y_fnames']
 
         # Assign paths to x and y. There are two cases:
         # 1) Two files for x and y
@@ -262,7 +289,13 @@ class Sample(object):
         # 2) One directory with two files for x and y
         elif os.path.isdir(path):
             path_x = os.path.join(path, de.file_names['x_sample']['name'])
-            path_y = os.path.join(path, de.file_names['y_sample']['name'])
+            if self.y_fnames is None:
+                path_y = os.path.join(
+                    path, de.file_names['y_sample']['name'].format(''))
+            else:
+                path_y = [os.path.join(
+                    path, de.file_names['y_sample']['name'].format('_'+fn))
+                    for fn in self.y_fnames]
             # Save folder path attribute. We need it to resume sample.
             # This case is the standard output of 'generate' and it is
             # the only one for which resume works.
@@ -276,12 +309,18 @@ class Sample(object):
             path_y = path
         else:
             raise FileNotFoundError(
-                'Something is wrong with your sample path. I could not '
+                'Something is wrong with your sample path. I can not '
                 'identify the x and y paths')
 
         # Load data
         self.x, self.x_names = self._load_array(path_x, columns_x)
-        self.y, self.y_names = self._load_array(path_y, columns_y)
+        if self.y_fnames is None:
+            self.y, self.y_names = self._load_array(path_y, columns_y)
+        else:
+            tmp = [self._load_array(p, columns_y) for p in path_y]
+            self.y, self.y_names = zip(*tmp)
+            self.y = list(self.y)
+            self.y_names = list(self.y_names)
         self.x_ranges = list(zip(np.min(self.x, axis=0),
                                  np.max(self.x, axis=0)))
 
@@ -289,14 +328,20 @@ class Sample(object):
         if remove_non_finite:
             if verbose:
                 io.info('Removing non finite data from sample.')
-            only_finites = np.any(np.isfinite(self.y), axis=1)
+            if self.y_fnames is None:
+                only_finites = np.all(np.isfinite(self.y), axis=1)
+            else:
+                only_finites = np.all(np.isfinite(np.hstack(self.y)), axis=1)
             self.x = self.x[only_finites]
-            self.y = self.y[only_finites]
+            self.y = [y[only_finites] for y in self.y]
 
         # Get sample attributes
         self.n_samples = self.x.shape[0]
         self.n_x = self.x.shape[1]
-        self.n_y = self.y.shape[1]
+        if self.y_fnames is None:
+            self.n_y = self.y.shape[1]
+        else:
+            self.n_y = [y.shape[1] for y in self.y]
 
         # Print info
         if verbose:
@@ -324,19 +369,28 @@ class Sample(object):
         io.Folder(path).create(verbose=verbose)
 
         # Save settings
-        self._save_settings(path, verbose=False)
+        self._save_settings(path, verbose=verbose)
 
         # Save x
-        self._save_x(path, verbose=False)
+        self._save_x(path, verbose=verbose)
 
         # Save y
-        self._save_y(path, verbose=False)
+        if self.y_fnames is None:
+            self._save_y(path, verbose=verbose)
+        else:
+            for nf in range(len(self.y_fnames)):
+                self._save_y(
+                    path,
+                    y=self.y[nf],
+                    names=self.y_names[nf],
+                    fname=self.y_fnames[nf],
+                    verbose=verbose)
 
         return
 
     def generate(self, params, sampled_function, n_samples, spacing,
-                 extra_args=None, save_incrementally=False, output_path=None,
-                 seed=None, verbose=False):
+                 sampled_function_args=None, spacing_args=None,
+                 save_incrementally=False, output_path=None, verbose=False):
         """
         Generate a sample.
         Arguments:
@@ -348,14 +402,13 @@ class Sample(object):
         - n_samples (int): number of samples to compute;
         - spacing (str): spacing of the sample. Options are those defined in
           src/emu_like/samplers.py;
-        - extra_args (dict, default: None): dictionary containing extra
-          arguments needed by the sampled_function. See planck_sample.yaml
-          and spectra_sample.yaml for details;
+        - sampled_function_args (dict, default: None): dictionary containing
+          extra arguments needed by the sampled function;
+        - spacing_args (dict, default: None): dictionary containing extra
+          arguments needed by the spacinf function;
         - save_incrementally (bool, default: False): save output incrementally;
         - output_path (str, default: None): if save_incrementally the output
           path should be passed;
-        - seed (int): seed to be used to ensure deterministic results for the
-          LatinHypercubeSampler;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -372,16 +425,14 @@ class Sample(object):
 
         # Create settings dictionary
         self.settings = {
+            'output': output_path,
             'params': params,
             'sampled_function': sampled_function,
             'n_samples': n_samples,
             'spacing': spacing,
-            'seed': seed,
-            'extra_args': extra_args,
+            'sampled_function_args': sampled_function_args,
+            'spacing_args': spacing_args,
         }
-        # Save settings
-        if save_incrementally:
-            self._save_settings(output_path, verbose=verbose)
 
         # Function to be sampled
         fun = eval('fng.' + sampled_function)
@@ -391,46 +442,80 @@ class Sample(object):
 
         # Get x array
         x_sampler = smp.Sampler().choose_one(spacing, verbose=verbose)
-        self.x = x_sampler.get_x(params, self.x_names, n_samples, seed=seed)
+        self.x = x_sampler.get_x(
+            params, self.x_names, n_samples, extra_args=spacing_args)
         self.n_x = self.x.shape[1]
-        # Save x array
-        if save_incrementally:
-            self._save_x(output_path, verbose=verbose)
 
-        # Get first sampled y (to retrieve y_names and model)
-        y_val, self.y_names, model = fun(
-            self.x[0], self.x_names, params, extra_args=extra_args)
-        self.y = [y_val]
+        # Get first sampled y (to retrieve y_names, y_fnames and model)
+        self.y, self.y_names, self.y_fnames, model = fun(
+            self.x[0], self.x_names, params, extra_args=sampled_function_args)
+
         # Save y array (first row, then we update it)
         if save_incrementally:
-            self._save_y(output_path, verbose=verbose)
+            self.settings['y_fnames'] = self.y_fnames
+            self._save_settings(output_path, verbose=verbose)
+            self._save_x(output_path, verbose=verbose)
+            if self.y_fnames is None:
+                self._save_y(output_path, verbose=verbose)
+            else:
+                for nf in range(len(self.y_fnames)):
+                    self._save_y(
+                        output_path,
+                        y=self.y[nf],
+                        names=self.y_names[nf],
+                        fname=self.y_fnames[nf],
+                        verbose=verbose)
 
         # Sample y
         for x in tqdm.tqdm(self.x[1:]):
-            y_val, _, _ = fun(
-                x, self.x_names, params, model=model, extra_args=extra_args)
-            self.y.append(y_val)
+            y_val, _, _, _ = fun(
+                x, self.x_names, params, model=model,
+                extra_args=sampled_function_args)
+            if self.y_fnames is None:
+                self.y = np.vstack((self.y, y_val))
+            else:
+                for nf in range(len(self.y_fnames)):
+                    self.y[nf] = np.vstack((self.y[nf], y_val[nf]))
+            # Save array
             if save_incrementally:
-                self._append_y(output_path, y_val)
+                if self.y_fnames is None:
+                    self._append_y(output_path, y_val)
+                else:
+                    for nf in range(len(self.y_fnames)):
+                        self._append_y(output_path, y_val[nf],
+                                       fname=self.y_fnames[nf])
 
-        self.y = np.array(self.y)
-        self.n_y = self.y.shape[1]
+        if self.y_fnames is None:
+            self.n_y = self.y.shape[1]
+        else:
+            self.n_y = [y.shape[1] for y in self.y]
         return
 
-    def resume(self, save_incrementally=False, verbose=False):
+    def resume(self, params, sampled_function_args=None,
+               save_incrementally=False, verbose=False):
         """
         Resume a sample previously loaded (use load method
         before resuming). Many settings are already loaded.
         Arguments:
+        - params (dict): dictionary containing the parameters to be passed
+          to the sampled_function. See simple_sample.yaml and
+          planck_sample.yaml for details;
+        - sampled_function_args (dict, default: None): dictionary containing
+          extra arguments needed by the sampled function;
         - save_incrementally (bool, default: False): save output incrementally;
         - verbose (bool, default: False): verbosity.
 
-        NOTE: this method assumes that both settings and the fulle x array
+        NOTE: this method assumes that both settings and the full x array
         are already saved into the folder. The x array is then used to
         calculate the missing row of the y array.
         """
 
-        remaining_steps = self.settings['n_samples']-self.y.shape[0]
+        if self.y_fnames is None:
+            y_done = self.y.shape[0]
+        else:
+            y_done = self.y[0].shape[0]
+        remaining_steps = self.settings['n_samples'] - y_done
+
         if verbose:
             io.info('Resuming sample.')
             io.print_level(1, 'Sampled function: {}'
@@ -447,21 +532,27 @@ class Sample(object):
         # Function to be sampled
         fun = eval('fng.' + self.settings['sampled_function'])
 
-        #
-        if self.settings['sampled_function'] == 'cobaya_loglike':
-            params = self.settings['cobaya']
-        else:
-            params = self.settings['params']
-
         # Get first sampled y (to retrieve model)
-        _, _, model = fun(self.x[0], self.x_names, params)
+        _, _, _, model = fun(
+            self.x[0], self.x_names, params, extra_args=sampled_function_args)
 
         # Sample y
-        for x in tqdm.tqdm(self.x[self.y.shape[0]:]):
-            y_val, _, _ = fun(x, self.x_names, params, model=model)
-            self.y = np.vstack((self.y, y_val))
+        for x in tqdm.tqdm(self.x[y_done:]):
+            y_val, _, _, _ = fun(
+                x, self.x_names, params, model=model,
+                extra_args=sampled_function_args)
+            if self.y_fnames is None:
+                self.y = np.vstack((self.y, y_val))
+            else:
+                for nf in range(len(self.y_fnames)):
+                    self.y[nf] = np.vstack((self.y[nf], y_val[nf]))
             if save_incrementally:
-                self._append_y(self.path, y_val)
+                if self.y_fnames is None:
+                    self._append_y(self.path, y_val)
+                else:
+                    for nf in range(len(self.y_fnames)):
+                        self._append_y(self.path, y_val[nf],
+                                       fname=self.y_fnames[nf])
         return
 
     @staticmethod

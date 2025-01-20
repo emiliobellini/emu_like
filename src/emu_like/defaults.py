@@ -15,7 +15,7 @@ file_names = {
         'name': 'x_sample.txt',
     },
     'y_sample': {
-        'name': 'y_sample.txt',
+        'name': 'y_sample{}.txt',
     },
     'log': {
         'name': 'history_log.cvs',
