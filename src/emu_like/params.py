@@ -34,15 +34,40 @@ class Params(object):
     def __str__(self):
         return str(self.content)
 
+    def _fill_missing(self):
+        default_dict = {
+            'output': None,
+            'sampler': {
+                'name': None,
+                'args': None,
+            },
+            'train_generator': {
+                'name': None,
+                'args': None,
+                'outputs': None,
+            },
+            'params': None,
+        }
+        for key1 in default_dict:
+            if key1 not in self.content:
+                self.content[key1] = default_dict[key1]
+            if isinstance(default_dict[key1], dict):
+                for key2 in default_dict[key1]:
+                    if key2 not in self.content[key1]:
+                        self.content[key1][key2] = default_dict[key1][key2]
+        return
+
     def keys(self):
         return self.content.keys()
 
-    def load(self, path, root=None):
+    def load(self, path, root=None, fill_missing=False):
         """
         Load .yaml file and store it into a dictionary.
         Arguments:
-        - path (str): path to the parameters file.
+        - path (str): path to the parameters file;
         - root (str, default: None): root of the file;
+        - fill_missing (bool, default: False): fill missing
+          blocks with default structure.
         """
 
         # Join root
@@ -51,6 +76,9 @@ class Params(object):
 
         with open(path) as file:
             self.content = yaml.safe_load(file)
+        
+        if fill_missing:
+            self._fill_missing()
         return self
 
     def save(self, path, root=None, header=None, verbose=False):

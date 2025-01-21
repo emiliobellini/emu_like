@@ -25,7 +25,7 @@ def sample_emu(args):
         io.print_level(0, '\nGetting sample for Emulator\n')
 
     # Read params
-    params = Params().load(args.params_file)
+    params = Params().load(args.params_file, fill_missing=True)
 
     # Init Sample object
     sample = Sample()
@@ -63,33 +63,17 @@ def sample_emu(args):
 
         # Create output folder
         io.Folder(params['output']).create(args.verbose)
-        # Save params
-        params.save(
-            de.file_names['params']['name'],
-            root=params['output'],
-            header=de.file_names['params']['header'],
-            verbose=args.verbose)
-
-        # Try to get extra_arguments
-        try:
-            sampled_function_args = params['sampled_function_args']
-        except KeyError:
-            sampled_function_args = None
-        try:
-            spacing_args = params['spacing_args']
-        except KeyError:
-            spacing_args = None
 
         # Generate sample
         sample.generate(
             params=params['params'],
-            sampled_function=params['sampled_function'],
-            n_samples=params['n_samples'],
-            spacing=params['spacing'],
+            sampler_name=params['sampler']['name'],
+            sampler_args=params['sampler']['args'],
+            generator_name=params['train_generator']['name'],
+            generator_args=params['train_generator']['args'],
+            generator_outputs=params['train_generator']['output'],
+            output=params['output'],
             save_incrementally=True,
-            output_path=params['output'],
-            sampled_function_args=sampled_function_args,
-            spacing_args=spacing_args,
             verbose=args.verbose)
 
     return

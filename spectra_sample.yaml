@@ -50,7 +50,7 @@ train_generator:
     N_ncdm: 1
     m_ncdm: 0.06
   # List of output files (only for class_spectra)
-  output:
+  outputs:
     # Each spectrum is saved in a different file
     pk_m:
       k_min: 1.e-5

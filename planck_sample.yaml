@@ -59,7 +59,7 @@ train_generator:
       planck_2018_lowl.TT: null
       planck_2018_lowl.EE: null
   # List of output files (only for class_spectra)
-  output:
+  outputs:
 
 
 # List of parameters.

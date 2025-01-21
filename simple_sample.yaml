@@ -49,7 +49,7 @@ train_generator:
     a: 2. # fixed parameter
     b: -1. # fixed parameter
   # List of output files (only for class_spectra)
-  output:
+  outputs:
 
 
 # List of parameters.
