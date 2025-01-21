@@ -12,6 +12,7 @@ variable.
 """
 
 import numpy as np
+from .spectra import Spectra
 
 
 # 1D functions
@@ -226,40 +227,29 @@ def class_spectra(x, x_names, params, extra_args=None, **kwargs):
     - model: if necessary to propagate model to the following steps
 
     """
-    # TODO: this is now working only for mPk (both total and cb)
-    y = [
-        np.array([[1, 2]]),
-        np.array([[2, 3, 4]]),
-    ]
-    y_names = [
-        ['x1', 'x2'],
-        ['x2', 'x3', 'x4'],
-    ]
-    y_fnames = ['f1', 'f2']
-    return y, y_names, y_fnames, None
 
     # Init classy
     import classy
     cosmo = classy.Class()
 
+    # Initialise spectra
+    spectra = Spectra(extra_args['output'], params)
+
     # Build parameter dictionary to be computed
-    model_params = dict(zip(x_names, x))
+    class_params = dict(zip(x_names, x))
     try:
-        model_params = model_params | params['extra_args']
+        class_params = class_params | extra_args['extra_args']
     except KeyError:
         pass
     except TypeError:
         pass
-    # Add the spectra wanted
-    model_params['output'] = params['spectra']['names']
-    model_params['P_k_max_h/Mpc'] = params['spectra']['k_max']
+    # Add the necessary output to compute all the spectra
+    class_params = class_params | spectra.get_class_output()
+    print(class_params)
 
-    # Get k_range
-    k_range = np.logspace(
-        np.log10(params['spectra']['k_min']),
-        np.log10(params['spectra']['k_max']),
-        num=params['spectra']['k_num']
-    )
+    exit()
+
+
     y_names = ["k_h_Mpc_{}".format(k) for k in k_range]
 
     try:
@@ -284,4 +274,14 @@ def class_spectra(x, x_names, params, extra_args=None, **kwargs):
         # TODO: this has to be improved
         y = -1.*np.ones_like(k_range)
 
-    return y, y_names, None, None
+    # TODO: fake output
+    y = [
+        np.array([[1, 2]]),
+        np.array([[2, 3, 4]]),
+    ]
+    y_names = [
+        ['x1', 'x2'],
+        ['x2', 'x3', 'x4'],
+    ]
+    y_fnames = ['f1', 'f2']
+    return y, y_names, y_fnames, None

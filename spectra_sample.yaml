@@ -44,44 +44,44 @@ sampled_function_args:
   # List of outputs (each ones requires specific settings: k_min, k_max, ...)
   output:
     pk_m:
-      k_min: 1.e-4
+      k_min: 1.e-5
       k_max: 1.
       k_space: 'log'
       k_num: 600
     pk_cb:
       k_min: 1.e-4
-      k_max: 1.
+      k_max: 2.
       k_space: 'log'
       k_num: 600
-    pk_weyl:
-      k_min: 1.e-4
-      k_max: 1.
-      k_space: 'log'
-      k_num: 600
-    cl_TT:
-      ell_max: 2500
-    cl_EE:
-      ell_max: 2500
-    cl_TE:
-      ell_max: 2500
-    cl_pp:
-      ell_max: 2500
-    cl_Tp:
-      ell_max: 2500
-    cl_Ep:
-      ell_max: 2500
-    cl_TT_lensed:
-      ell_max: 2500
-    cl_EE_lensed:
-      ell_max: 2500
-    cl_TE_lensed:
-      ell_max: 2500
-    cl_pp_lensed:
-      ell_max: 2500
-    cl_Tp_lensed:
-      ell_max: 2500
-    cl_Ep_lensed:
-      ell_max: 2500
+    # pk_weyl:
+    #   k_min: 1.e-4
+    #   k_max: 1.
+    #   k_space: 'log'
+    #   k_num: 600
+    # cl_TT:
+    #   ell_max: 2500
+    # cl_EE:
+    #   ell_max: 2500
+    # cl_TE:
+    #   ell_max: 2500
+    # cl_pp:
+    #   ell_max: 2500
+    # cl_Tp:
+    #   ell_max: 2500
+    # cl_Ep:
+    #   ell_max: 2500
+    # cl_TT_lensed:
+    #   ell_max: 2500
+    # cl_EE_lensed:
+    #   ell_max: 2500
+    # cl_TE_lensed:
+    #   ell_max: 2500
+    # cl_pp_lensed:
+    #   ell_max: 2500
+    # cl_Tp_lensed:
+    #   ell_max: 2500
+    # cl_Ep_lensed:
+    #   ell_max: 2500
 
   extra_args:
     # Extra arguments passed to class

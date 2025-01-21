@@ -12,7 +12,7 @@ file_names = {
             '# It is used to resume training instead of the input one.\n\n'),
     },
     'x_sample': {
-        'name': 'x_sample.txt',
+        'name': 'x_sample{}.txt',
     },
     'y_sample': {
         'name': 'y_sample{}.txt',
