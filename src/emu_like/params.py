@@ -39,11 +39,11 @@ class Params(object):
             'output': None,
             'sampler': {
                 'name': None,
-                'args': None,
+                'args': {},
             },
             'train_generator': {
                 'name': None,
-                'args': None,
+                'args': {},
                 'outputs': None,
             },
             'params': None,

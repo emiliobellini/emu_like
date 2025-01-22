@@ -61,9 +61,6 @@ def sample_emu(args):
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
 
-        # Create output folder
-        io.Folder(params['output']).create(args.verbose)
-
         # Generate sample
         sample.generate(
             params=params['params'],
@@ -71,7 +68,7 @@ def sample_emu(args):
             sampler_args=params['sampler']['args'],
             generator_name=params['train_generator']['name'],
             generator_args=params['train_generator']['args'],
-            generator_outputs=params['train_generator']['output'],
+            generator_outputs=params['train_generator']['outputs'],
             output=params['output'],
             save_incrementally=True,
             verbose=args.verbose)
