@@ -7,6 +7,7 @@
 """
 
 import numpy as np
+from . import defaults as de
 
 
 class Spectra(object):
@@ -105,6 +106,22 @@ class Spectra(object):
 
         return class_dict
 
+    def get_n_vecs(self):
+        n_vecs = [sp.get_n_vec() for sp in self.list]
+        return n_vecs
+
+    def get_names(self):
+        names = [sp.get_names() for sp in self.list]
+        return names
+
+    def get_headers(self):
+        headers = [sp.get_header() for sp in self.list]
+        return headers
+
+    def get_fnames(self):
+        fnames = [sp.get_fname() for sp in self.list]
+        return fnames
+
 
 class Spectrum(object):
     """
@@ -147,6 +164,10 @@ class Spectrum(object):
         else:
             raise ValueError('Spectrum not recognized!')
 
+    def get_fname(self):
+        fname = de.file_names['y_sample']['name'].format('_' + self.name)
+        return fname
+
 
 class Pk(Spectrum):
     """
@@ -162,9 +183,6 @@ class Pk(Spectrum):
         self.is_cl = False
         if settings:
             self._init_pk_settings(settings, params)
-        return
-
-    def _get_header_file(self):
         return
 
     def _init_pk_settings(self, settings, params):
@@ -193,6 +211,20 @@ class Pk(Spectrum):
             raise Exception('Spacing not recognized!')
         self.k_range = fun(start, stop, num=self.k_num)
         return self.k_range
+    
+    def get_n_vec(self):
+        return self.k_num
+
+    def get_names(self):
+        names = ['k_{}'.format(y) for y in range(self.get_n_vec())]
+        return names
+
+    def get_header(self):
+        hd = '{} power spectrum P(k) in units (Mpc/h)^3 as a function of '
+        hd += 'k (h/Mpc).\nk_min (h/Mpc) = {}, k_max (h/Mpc) = {}, '
+        hd += '{}-sampled, for a total number of k_modes of {}.\n\n'
+        hd += '\t'.join(self.get_names())
+        return hd
 
 class Cl(Spectrum):
     """
@@ -212,8 +244,23 @@ class Cl(Spectrum):
     def _init_cl_settings(self, settings):
         """TODO
         """
+        self.ell_min = settings['ell_min']
         self.ell_max = settings['ell_max']
+        self.ell_num = self.ell_max - self.ell_max + 1
         return
+
+    def get_n_vec(self):
+        return self.ell_num
+
+    def get_names(self):
+        names = ['ell_{}'.format(y) for y in range(self.get_n_vec())]
+        return names
+
+    def get_header(self):
+        # format example (TT, lensed, 0, 2500)
+        hd ='dimensionless {} {} [l(l+1)/2pi] C_l for ell={} to {}.\n\n'
+        hd += '\t'.join(self.get_names())
+        return hd
 
 
 class MatterPk(Pk):
@@ -229,10 +276,28 @@ class MatterPk(Pk):
         self.class_spectrum = ['mPk']
         return
 
-    def _get_header_file(self):
-        header = 'Total matter Power Spectrum'
-        Pk._get_header_file()
-        return
+    def get_header(self):
+        hd = Pk.get_header(self)
+        hd = hd.format(
+            'Total matter',
+            self.k_min,
+            self.k_max,
+            self.k_space,
+            self.k_num
+        )
+        return hd
+    
+    def get(self, cosmo):
+
+        # convert k in units of 1/Mpc
+        self.k_range *= cosmo.h()
+
+        # Get pk
+        pk = np.array([cosmo.pk(k, cosmo.pars['z_pk'])
+                       for k in self.k_range])
+        # The output is in units Mpc**3 and I want (Mpc/h)**3.
+        pk *= cosmo.h()**3.
+        return pk
 
 class ColdBaryonPk(Pk):
     """
@@ -246,3 +311,26 @@ class ColdBaryonPk(Pk):
         Pk.__init__(self, name, settings, params)
         self.class_spectrum = ['mPk']
         return
+
+    def get_header(self):
+        hd = Pk.get_header(self)
+        hd = hd.format(
+            'CDM + baryons',
+            self.k_min,
+            self.k_max,
+            self.k_space,
+            self.k_num
+        )
+        return hd
+
+    def get(self, cosmo):
+
+        # convert k in units of 1/Mpc
+        self.k_range *= cosmo.h()
+
+        # Get pk
+        pk = np.array([cosmo.pk_cb(k, cosmo.pars['z_pk'])
+                       for k in self.k_range])
+        # The output is in units Mpc**3 and I want (Mpc/h)**3.
+        pk *= cosmo.h()**3.
+        return pk

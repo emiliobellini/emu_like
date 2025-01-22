@@ -4,6 +4,14 @@
 :Synopsis: Various sampler classes, dealing with different sampling spacing.
 :Author: Emilio Bellini
 
+Collection of functions that can be used to sample the x
+parameter space. Each one is stored as a Class inheriting
+from the base Class Sampler.
+If you want to implement a new function, create
+a new Class inheriting from Sampler.
+Add its name in the choose_one static method,
+create the get_x method and adapt the other methods
+and attributes to your needs.
 """
 
 import numpy as np
@@ -13,21 +21,9 @@ from . import io as io
 
 
 class Sampler(object):
-
-    def __init__(self, params):
-        self.params = params
-        # Default n_samples if not passed.
-        self.n_samples_default = 10
-
-        # Placeholders
-        self.x = None  # x
-        self.x_ranges = None  # x_ranges
-        self.n_x = None  # Number of x variables
-        self.n_samples = None  # Number of samples
-        self.x_names = None  # List of names of x data
-        self.x_header = None  # Header for x file
-        self.x_fname = None  # File name of x data
-        return
+    """
+    Base class Sampler.
+    """
 
     @staticmethod
     def choose_one(sampler_name, params, verbose=False, **kwargs):
@@ -36,8 +32,9 @@ class Sampler(object):
 
         Arguments:
         - sampler_name (str): type of sampler;
+        - params (dict): dictionary of parameters;
         - verbose (bool, default: False): verbosity;
-        - kwargs: specific arguments needed by each.
+        - kwargs: specific arguments needed by each sampler.
 
         Return:
         - Sampler (object): based on sampler_name, get
@@ -57,6 +54,32 @@ class Sampler(object):
             return LatinHypercubeSampler(params, verbose=verbose, **kwargs)
         else:
             raise ValueError('Sampler not recognized!')
+
+    def __init__(self, params):
+        self.params = params
+        # Default n_samples if not passed.
+        self.n_samples_default = 10
+
+        # Placeholders
+        self.x = None  # x
+        self.x_ranges = None  # x_ranges
+        self.n_x = None  # Number of x variables
+        self.n_samples = None  # Number of samples
+        self.x_names = None  # List of names of x data
+        self.x_header = None  # Header for x file
+        self.x_fname = None  # File name of x data
+        return
+
+    @staticmethod
+    def _is_varying(params, param):
+        """
+        Return True if param has key 'prior',
+        False otherwise.
+        """
+        if isinstance(params[param], dict):
+            if 'prior' in params[param].keys():
+                return True
+        return False
 
     def _get_n_samples(self, args):
         """
@@ -83,16 +106,6 @@ class Sampler(object):
         else:
             seed = None
         return seed
-
-    def _is_varying(self, params, param):
-        """
-        Return True if param has key 'prior',
-        False otherwise.
-        """
-        if isinstance(params[param], dict):
-            if 'prior' in params[param].keys():
-                return True
-        return False
 
     def get_x_ranges(self):
         """
@@ -134,7 +147,7 @@ class Sampler(object):
         """
         if self.x_names is None:
             self.x_names = [x for x in self.params
-                            if self._is_varying(self.params, x)]
+                            if Sampler._is_varying(self.params, x)]
         return self.x_names
 
     def get_x_header(self):
