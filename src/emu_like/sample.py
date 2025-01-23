@@ -87,6 +87,9 @@ class Sample(object):
         # Container for all the settings
         self.settings = None
 
+        # Useful to keep track of how many samples have been computed
+        self.counter_samples = 0
+
         return
 
     def _load_array(self, path, columns):
@@ -310,29 +313,201 @@ class Sample(object):
                         params.content[key1][key2] = default_dict[key1][key2]
         return params
 
+    def _full_load(
+            self,
+            path,
+            settings,
+            columns_x,
+            columns_y,
+            remove_non_finite,
+            verbose):
+
+        # Change default columns_x
+        if columns_x is None:
+            columns_x = slice(None)
+
+        # Main path
+        self.path = path
+
+        # Init x sampler
+        x_sampler = Sampler.choose_one(
+            sampler_name=settings['sampler']['name'],
+            params=settings['params'],
+            sampler_args=settings['sampler']['args'],
+            verbose=False)
+
+        # Get x file name
+        self.x_fname = x_sampler.get_x_fname()
+
+        # Load x data.
+        # Since we are selecting the columns, we want to synchronize
+        # the .x attribute for both self and x_sampler.
+        x_sampler.x, _ = self._load_array(
+            os.path.join(self.path, self.x_fname), columns_x)
+        self.x = x_sampler.x
+
+        # Get remaining x attributes
+        self.x_ranges = x_sampler.get_x_ranges()
+        self.n_x = x_sampler.get_n_x()
+        self.n_samples = x_sampler.get_n_samples()
+        self.x_names = x_sampler.get_x_names(columns=columns_x)
+        self.x_header = x_sampler.get_x_header()
+
+        # Init y generator
+        y_generator = TrainGenerator.choose_one(
+            generator_name=settings['train_generator']['name'],
+            generator_outputs=settings['train_generator']['outputs'],
+            params=settings['params'],
+            n_samples=self.n_samples,
+            generator_args=settings['train_generator']['args'],
+            verbose=False)
+
+        # Get y file names
+        self.y_fnames = y_generator.get_y_fnames()
+
+        # Change default columns_x
+        if columns_y is None:
+            columns_y = [slice(None)] * len(self.y_fnames)
+
+        # Load y data.
+        # 1) load the desired columns for each file.
+        y = [self._load_array(
+            os.path.join(self.path, self.y_fnames[nf]), columns_y[nf])
+            for nf in range(len(self.y_fnames))]
+        y, y_generator.y_names = zip(*y)
+        # 2) Infer dimensions
+        y_generator.n_y = [y_one.shape[1] for y_one in y]
+        self.counter_samples = y[0].shape[0]
+        # 3) initialize list of zeros arrays with full n_samples.
+        y_generator.y = [np.zeros((self.n_samples, n_y_one))
+                         for n_y_one in y_generator.n_y]
+        # 4) assign values.
+        for ny_gen, y_gen in enumerate(y_generator.y):
+            y_gen[:self.counter_samples] = y[ny_gen]
+        # 5) Synchronize with Sample.y.
+        self.y = y_generator.y
+
+        # Get remaining y attributes
+        self.n_y = y_generator.get_n_y()
+        self.y_ranges = y_generator.get_y_ranges()
+        self.y_names = y_generator.y_names
+        self.y_headers = y_generator.get_y_headers()
+
+        # Remove non finite if requested
+        if remove_non_finite:
+            if verbose:
+                io.info('Removing non finite data from sample.')
+            only_finites = np.all(np.isfinite(np.hstack(self.y)), axis=1)
+            self.x = self.x[only_finites]
+            self.y = [y[only_finites] for y in self.y]
+            # Adjust other parameters
+            infs = self.n_samples-self.x.shape[0]
+            self.counter_samples -= infs
+            self.n_samples -= infs
+            # Propagate
+            x_sampler.x = self.x
+            y_generator.y = self.y
+            self.x_ranges = x_sampler.get_x_ranges()
+            self.y_ranges = y_generator.get_y_ranges()
+
+        # Propagate x_sampler and y_generator
+        self.x_sampler = x_sampler
+        self.y_generator = y_generator
+
+        # Print info
+        if verbose:
+            io.print_level(1, 'Loaded sample from: {}'.format(self.path))
+        return
+
+    def _minimal_load(
+            self,
+            path,
+            path_y,
+            columns_x,
+            columns_y,
+            remove_non_finite,
+            verbose):
+
+        # Define paths. Cases:
+        # 1) One file
+        if os.path.isfile(path) and path_y is None:
+            path_x = path
+            path_y = path
+            # Change default columns
+            if columns_x is None:
+                columns_x = slice(None, -1)
+            if columns_y is None:
+                columns_y = slice(-1, None)
+        # 2) One file for x and one for y
+        elif os.path.isfile(path) and os.path.isfile(path_y):
+            path_x = path
+            path_y = path_y
+            # Change default columns
+            if columns_x is None:
+                columns_x = slice(None)
+            if columns_y is None:
+                columns_y = [slice(None)]
+        else:
+            raise Exception('Something is wrong with your paths. '
+                            'Sample could not be loaded!')
+
+        # Load data
+        self.x, self.x_names = self._load_array(path_x, columns_x)
+        self.y, self.y_names = self._load_array(path_y, columns_y[0])
+        self.y = [self.y]
+        self.y_names = [self.y_names]
+
+        self.n_samples, self.n_x = self.x.shape
+        self.n_y = [y.shape[1] for y in self.y]
+
+        # Remove non finite if requested
+        if remove_non_finite:
+            if verbose:
+                io.info('Removing non finite data from sample.')
+            only_finites = np.all(np.isfinite(np.hstack(self.y)), axis=1)
+            self.x = self.x[only_finites]
+            self.y = [y[only_finites] for y in self.y]
+            # Adjust other parameters
+            self.n_samples = self.x.shape[0]
+
+        self.x_ranges = list(zip(np.min(self.x, axis=0),
+                                 np.max(self.x, axis=0)))
+        self.y_ranges = [list(zip(
+            np.min(self.y[0], axis=0), np.max(self.y[0], axis=0)))]
+
+        # Print info
+        if verbose:
+            io.print_level(1, 'x from: {}'.format(path_x))
+            io.print_level(1, 'y from: {}'.format(path_y))
+            io.print_level(1, 'n_samples: {}'.format(self.n_samples))
+            io.print_level(1, 'n_x: {}'.format(self.n_x))
+            io.print_level(1, 'n_y: {}'.format(self.n_y))
+
+        return
+
     def load(self,
              path,
              path_y=None,
-             columns_x=slice(None),
-             columns_y=slice(None),
-             remove_non_finite=False,
+             columns_x=None,
+             columns_y=None,
+             remove_non_finite=True,
              verbose=False):
         """
         Load an existing sample.
         Arguments:
         - path (str): path pointing to the folder containing the sample,
-          or to a file containing the x data. If y data are in the same
-          this is sufficient, otherwise 'path_y' should be specified. See
-          discussion at the top of this Class for possible input samples;
-        - path_y (str, default: None): in case x and y data are stored
-          in different files and different folders, use this variable
-          to specify the file containing the y data;
+          or to a file containing both the x and y data or to a file
+          containing only the x data. In this last case, 'path_y' should
+          be specified. See discussion at the top of this class;
+        - path_y (str, default: None): in case x and y data are stored in
+          different files, use this variable to specify the file containing
+          the y data;
         - columns_x (list of indices or slice object). Default: if x and y
           data come from different files all columns. If x and y are in
           the same file, all columns except the last one;
-        - columns_y (list of indices or slice object). Default: if x and y
-          data come from different files all columns. If x and y are in
-          the same file, last column;
+        - columns_y (list of indices or slice object for each y file).
+          Default: if x and y data come from different files all columns.
+          If x and y are in the same file, last column;
         - remove_non_finite (bool, default: False). Remove all rows where
           any of the y's is non finite (infinite or nan);
         - verbose (bool, default: False): verbosity.
@@ -341,92 +516,59 @@ class Sample(object):
         names (see discussion at the top of this Class). One case where it
         is necessary to specify both 'path' and 'path_y' is when the input
         files do not have the defaults names.
+
+        NOTE: if the sample is not generated by this code, i.e. when it is
+        not possible to read a settings file, it is still possible to load
+        the sample but with limited functionality, e.g. it will not be
+        possible to resume a non finished run. However it will be possible
+        to do all operations related to training.
         """
 
         if verbose:
             io.info('Loading sample.')
 
+        if columns_x is not None or columns_y is not None:
+            io.warning('You are slicing your sample, do not resume it!')
+
         # Load settings, if any
-        path_settings = os.path.join(path, de.file_names['params']['name'])
         try:
-            self.settings = Params().load(path_settings)
+            self.settings = Params().load(os.path.join(
+                path, de.file_names['params']['name']))
+            # Fill missing entries
+            self.settings = self.fill_missing_params(self.settings)
+            has_settings = True
         except NotADirectoryError:
             self.settings = None
+            has_settings = False
             io.warning('Unable to load parameter file!')
-        
-        if self.settings is not None:
-            self.y_fnames = self.settings['y_fnames']
 
-        # Assign paths to x and y. There are two cases:
-        # 1) Two files for x and y
-        if path and path_y:
-            path_x = path
-            path_y = path_y
-        # 2) One directory with two files for x and y
-        elif os.path.isdir(path):
-            path_x = os.path.join(path, de.file_names['x_sample']['name'])
-            if self.y_fnames is None:
-                path_y = os.path.join(
-                    path, de.file_names['y_sample']['name'].format(''))
-            else:
-                path_y = [os.path.join(
-                    path, de.file_names['y_sample']['name'].format('_'+fn))
-                    for fn in self.y_fnames]
-            # Save folder path attribute. We need it to resume sample.
-            # This case is the standard output of 'generate' and it is
-            # the only one for which resume works.
-            self.path = path
-        # 3) One file for x and y
-        elif os.path.isfile(path):
-            # Change default columns
-            columns_x = slice(None, -1)
-            columns_y = slice(-1, None)
-            path_x = path
-            path_y = path
-        else:
-            raise FileNotFoundError(
-                'Something is wrong with your sample path. I can not '
-                'identify the x and y paths')
-
-        # Load data
-        self.x, self.x_names = self._load_array(path_x, columns_x)
-        if self.y_fnames is None:
-            self.y, self.y_names = self._load_array(path_y, columns_y)
-        else:
-            tmp = [self._load_array(p, columns_y) for p in path_y]
-            self.y, self.y_names = zip(*tmp)
-            self.y = list(self.y)
-            self.y_names = list(self.y_names)
-        self.x_ranges = list(zip(np.min(self.x, axis=0),
-                                 np.max(self.x, axis=0)))
-
-        # Remove non finite if requested
-        if remove_non_finite:
+        # Distribute to the correct loader. Cases:
+        # 1) has settings and everything contained in a single folder
+        if has_settings and os.path.isdir(path) and path_y is None:
+            self._full_load(
+                path=path,
+                settings=self.settings,
+                columns_x=columns_x,
+                columns_y=columns_y,
+                remove_non_finite=remove_non_finite,
+                verbose=verbose)
             if verbose:
-                io.info('Removing non finite data from sample.')
-            if self.y_fnames is None:
-                only_finites = np.all(np.isfinite(self.y), axis=1)
-            else:
-                only_finites = np.all(np.isfinite(np.hstack(self.y)), axis=1)
-            self.x = self.x[only_finites]
-            self.y = [y[only_finites] for y in self.y]
-
-        # Get sample attributes
-        self.n_samples = self.x.shape[0]
-        self.n_x = self.x.shape[1]
-        if self.y_fnames is None:
-            self.n_y = self.y.shape[1]
+                io.print_level(1, 'Sample fully loaded.')
+        # 2) no settings and everything contained in one or two files
+        elif not has_settings and os.path.isfile(path):
+            self._minimal_load(
+                path=path,
+                path_y=path_y,
+                columns_x=columns_x,
+                columns_y=columns_y,
+                remove_non_finite=remove_non_finite,
+                verbose=verbose)
+            if verbose:
+                io.print_level(1, 'Sample minimally loaded.')
+            io.warning('Do not resume this sample!')
         else:
-            self.n_y = [y.shape[1] for y in self.y]
-
-        # Print info
-        if verbose:
-            io.print_level(1, 'Parameters from: {}'.format(path_settings))
-            io.print_level(1, 'x from: {}'.format(path_x))
-            io.print_level(1, 'y from: {}'.format(path_y))
-            io.print_level(1, 'n_samples: {}'.format(self.n_samples))
-            io.print_level(1, 'n_x: {}'.format(self.n_x))
-            io.print_level(1, 'n_y: {}'.format(self.n_y))
+            raise Exception('Something is wrong with your paths. '
+                            'Sample could not be loaded!')
 
         return self
 
@@ -580,11 +722,15 @@ class Sample(object):
         
         for nx, x in enumerate(tqdm.tqdm(self.x)):
             y_one = y_generator.evaluate(x, nx)
+            self.counter_samples += 1
 
             # Save array
             if save_incrementally:
                 self._append_y(y_one)
 
+        # Propagate x_sampler and y_generator
+        self.x_sampler = x_sampler
+        self.y_generator = y_generator
         return
 
     def resume(self, params, sampled_function_args=None,

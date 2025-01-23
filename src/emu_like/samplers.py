@@ -111,62 +111,63 @@ class Sampler(object):
         """
         Get x_ranges.
         """
-        if self.x_ranges is None:
-            if self.x is None:
-                self.get_x()
+        if self.x is None:
+            self.get_x()
 
-            self.x_ranges = list(zip(
-                np.min(self.x, axis=0), np.max(self.x, axis=0)))
+        self.x_ranges = list(zip(
+            np.min(self.x, axis=0), np.max(self.x, axis=0)))
         return self.x_ranges
 
     def get_n_x(self):
         """
         Get n_x.
         """
-        if self.n_x is None:
-            if self.x is None:
-                self.get_x()
+        if self.x is None:
+            self.get_x()
 
-            self.n_x = self.x.shape[1]
+        self.n_x = self.x.shape[1]
         return self.n_x
 
     def get_n_samples(self):
         """
         Get n_samples.
         """
-        if self.n_samples is None:
-            if self.x is None:
-                self.get_x()
+        if self.x is None:
+            self.get_x()
 
-            self.n_samples = self.x.shape[0]
+        self.n_samples = self.x.shape[0]
         return self.n_samples
 
-    def get_x_names(self):
+    def get_x_names(self, columns=None):
         """
         Get x_names.
         """
-        if self.x_names is None:
-            self.x_names = [x for x in self.params
-                            if Sampler._is_varying(self.params, x)]
+        self.x_names = [x for x in self.params
+                        if Sampler._is_varying(self.params, x)]
+
+        # In case, select the columns
+        if columns is not None:
+            if isinstance(columns, list):
+                self.x_names = [self.x_names[idx] for idx in columns]
+            else:
+                self.x_names = self.x_names[columns]
         return self.x_names
 
     def get_x_header(self):
         """
         Get x_header.
         """
-        if self.x_header is None:
-            if self.x_names is None:
-                self.get_x_names()
-            
-            self.x_header = '\t'.join(self.x_names)
+        if self.x_names is None:
+            self.get_x_names()
+        
+        self.x_header = '\t'.join(self.x_names)
         return self.x_header
 
     def get_x_fname(self):
         """
         Get x_fname.
         """
-        if self.x_fname is None:
-            self.x_fname = de.file_names['x_sample']['name']
+        self.x_fname = de.file_names['x_sample']['name']
         return self.x_fname
 
     def get_x(self):

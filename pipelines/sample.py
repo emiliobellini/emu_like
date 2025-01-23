@@ -42,13 +42,8 @@ def sample_emu(args):
                                root=params['output'])
         # Fill missing entries
         params = sample.fill_missing_params(params)
-
-        # Try to get extra_arguments
-        try:
-            sampled_function_args = params['sampled_function_args']
-        except KeyError:
-            sampled_function_args = None
         sample.load(params['output'], verbose=args.verbose)
+        exit()
         sample.resume(
             params['params'],
             sampled_function_args=sampled_function_args,

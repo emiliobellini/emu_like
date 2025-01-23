@@ -76,13 +76,12 @@ class TrainGenerator(object):
         """
         Get y_ranges.
         """
-        if self.y_ranges == []:
-            if self.y == []:
-                raise Exception('Empty y arrays! Use get_y '
-                                'or evaluate to generate them first.')
+        if self.y == []:
+            raise Exception('Empty y arrays! Use get_y '
+                            'or evaluate to generate them first.')
 
-            self.y_ranges = [list(zip(np.min(y, axis=0), np.max(y, axis=0)))
-                             for y in self.y]
+        self.y_ranges = [list(zip(np.min(y, axis=0), np.max(y, axis=0)))
+                            for y in self.y]
         return self.y_ranges
 
     def get_n_y(self):
@@ -95,28 +94,26 @@ class TrainGenerator(object):
         """
         Get y_names.
         """
-        if self.y_names == []:
-            for n_y in self.n_y:
-                self.y_names.append(['y_{}'.format(y) for y in range(n_y)])
+        for n_y in self.n_y:
+            self.y_names.append(['y_{}'.format(y) for y in range(n_y)])
+
         return self.y_names
 
     def get_y_headers(self):
         """
         Get y_headers.
         """
-        if self.y_headers == []:
-            if self.y_names == []:
-                self.get_y_names()
-            
-            self.y_headers = ['\t'.join(y_names) for y_names in self.y_names]
+        if self.y_names == []:
+            self.get_y_names()
+        
+        self.y_headers = ['\t'.join(y_names) for y_names in self.y_names]
         return self.y_headers
 
     def get_y_fnames(self):
         """
         Get y_fnames.
         """
-        if self.y_fnames == []:
-            self.y_fnames = [de.file_names['y_sample']['name'].format('')]
+        self.y_fnames = [de.file_names['y_sample']['name'].format('')]
         return self.y_fnames
 
     def get_y(self, x, **kwargs):
@@ -164,7 +161,7 @@ class Linear1D(TrainGenerator):
         """
         Arguments:
         - x: 1D array of input data (one sample);
-        - idx (int): row of x in the sull sample;
+        - idx (int): row of x in the full sample;
         Output:
         - y: 1D array of output data (one sample).
 
@@ -215,32 +212,28 @@ class ClassSpectra(TrainGenerator):
         """
         Get n_y.
         """
-        if self.n_y == []:
-            self.n_y = self.spectra.get_n_vecs()
+        self.n_y = self.spectra.get_n_vecs()
         return self.n_y
 
     def get_y_names(self):
         """
         Get y_names.
         """
-        if self.y_names == []:
-            self.y_names = self.spectra.get_names()
+        self.y_names = self.spectra.get_names()
         return self.y_names
 
     def get_y_headers(self):
         """
         Get y_headers.
         """
-        if self.y_headers == []:
-            self.y_headers = self.spectra.get_headers()
+        self.y_headers = self.spectra.get_headers()
         return self.y_headers
 
     def get_y_fnames(self):
         """
         Get y_fnames.
         """
-        if self.y_fnames == []:
-            self.y_fnames = self.spectra.get_fnames()
+        self.y_fnames = self.spectra.get_fnames()
         return self.y_fnames
 
     def evaluate(self, x, idx, **kwargs):
