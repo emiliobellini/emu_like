@@ -331,9 +331,9 @@ class Sample(object):
 
         # Init x sampler
         x_sampler = Sampler.choose_one(
-            sampler_name=settings['sampler']['name'],
-            params=settings['params'],
-            sampler_args=settings['sampler']['args'],
+            settings['sampler']['name'],
+            settings['params'],
+            **settings['sampler']['args'],
             verbose=False)
 
         # Get x file name
@@ -355,11 +355,11 @@ class Sample(object):
 
         # Init y generator
         y_generator = TrainGenerator.choose_one(
-            generator_name=settings['train_generator']['name'],
-            generator_outputs=settings['train_generator']['outputs'],
-            params=settings['params'],
-            n_samples=self.n_samples,
-            generator_args=settings['train_generator']['args'],
+            settings['train_generator']['name'],
+            settings['train_generator']['outputs'],
+            settings['params'],
+            self.n_samples,
+            **settings['train_generator']['args'],
             verbose=False)
 
         # Get y file names
@@ -490,7 +490,7 @@ class Sample(object):
              path_y=None,
              columns_x=None,
              columns_y=None,
-             remove_non_finite=True,
+             remove_non_finite=False,
              verbose=False):
         """
         Load an existing sample.
@@ -733,17 +733,11 @@ class Sample(object):
         self.y_generator = y_generator
         return
 
-    def resume(self, params, sampled_function_args=None,
-               save_incrementally=False, verbose=False):
+    def resume(self, save_incrementally=False, verbose=False):
         """
         Resume a sample previously loaded (use load method
         before resuming). Many settings are already loaded.
         Arguments:
-        - params (dict): dictionary containing the parameters to be passed
-          to the sampled_function. See simple_sample.yaml and
-          planck_sample.yaml for details;
-        - sampled_function_args (dict, default: None): dictionary containing
-          extra arguments needed by the sampled function;
         - save_incrementally (bool, default: False): save output incrementally;
         - verbose (bool, default: False): verbosity.
 
@@ -751,50 +745,26 @@ class Sample(object):
         are already saved into the folder. The x array is then used to
         calculate the missing row of the y array.
         """
-
-        if self.y_fnames is None:
-            y_done = self.y.shape[0]
-        else:
-            y_done = self.y[0].shape[0]
-        remaining_steps = self.settings['n_samples'] - y_done
-
         if verbose:
             io.info('Resuming sample.')
-            io.print_level(1, 'Sampled function: {}'
-                           ''.format(self.settings['sampled_function']))
+            io.print_level(1, 'From: {}'.format(self.path))
             io.print_level(
-                1, 'Missing samples: {}'
-                ''.format(remaining_steps))
-            io.print_level(1, 'Spacing: {}'.format(self.settings['spacing']))
-        if remaining_steps == 0:
+                1, 'Remaining samples: {}'
+                ''.format(self.n_samples-self.counter_samples))
+        if self.counter_samples == self.n_samples:
             if verbose:
                 io.warning('Sample complete, nothing to resume!')
             return
 
-        # Function to be sampled
-        fun = eval('fng.' + self.settings['sampled_function'])
+        start = self.counter_samples
+        for nx, x in enumerate(tqdm.tqdm(self.x[start:])):
+            y_one = self.y_generator.evaluate(x, start + nx)
+            self.counter_samples += 1
 
-        # Get first sampled y (to retrieve model)
-        _, _, _, model = fun(
-            self.x[0], self.x_names, params, extra_args=sampled_function_args)
-
-        # Sample y
-        for x in tqdm.tqdm(self.x[y_done:]):
-            y_val, _, _, _ = fun(
-                x, self.x_names, params, model=model,
-                extra_args=sampled_function_args)
-            if self.y_fnames is None:
-                self.y = np.vstack((self.y, y_val))
-            else:
-                for nf in range(len(self.y_fnames)):
-                    self.y[nf] = np.vstack((self.y[nf], y_val[nf]))
+            # Save array
             if save_incrementally:
-                if self.y_fnames is None:
-                    self._append_y(self.path, y_val)
-                else:
-                    for nf in range(len(self.y_fnames)):
-                        self._append_y(self.path, y_val[nf],
-                                       fname=self.y_fnames[nf])
+                self._append_y(y_one)
+        
         return
 
     @staticmethod

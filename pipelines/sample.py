@@ -43,10 +43,7 @@ def sample_emu(args):
         # Fill missing entries
         params = sample.fill_missing_params(params)
         sample.load(params['output'], verbose=args.verbose)
-        exit()
         sample.resume(
-            params['params'],
-            sampled_function_args=sampled_function_args,
             save_incrementally=True,
             verbose=args.verbose)
     # Otherwise
