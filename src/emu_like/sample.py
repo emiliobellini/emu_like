@@ -434,16 +434,16 @@ class Sample(object):
             self,
             fname_setts=None,
             fname_x=None,
-            fname_y=None,
+            fnames_y=None,
             root_setts=None,
             root_x=None,
-            root_y=None,
+            roots_y=None,
             settings=None,
             x_array=None,
-            y_array=None,
+            y_arrays=None,
             header_setts=None,
             header_x=None,
-            header_y=None,
+            headers_y=None,
             verbose=False
             ):
         """
@@ -456,14 +456,6 @@ class Sample(object):
         - header_setts, header_x, header_y (str, default: None): headers;
         - verbose (bool, default: False): verbosity.
         """
-
-        if verbose:
-            if root_setts == root_x and root_x == root_y:
-                io.print_level(1, 'Saving output at: {}'.format(root_setts))
-            else:
-                io.print_level(1, 'Saving settings at: {}'.format(root_setts))
-                io.print_level(1, 'Saving x data at: {}'.format(root_x))
-                io.print_level(1, 'Saving y data at: {}'.format(root_y))
 
         # Save settings
         self._save_settings(
@@ -483,10 +475,10 @@ class Sample(object):
 
         # Save y
         self._save_y(
-            fname=fname_y,
-            root=root_y,
-            y_array=y_array,
-            header=header_y,
+            fname=fnames_y,
+            root=roots_y,
+            y_array=y_arrays,
+            header=headers_y,
             verbose=verbose)
 
         return
