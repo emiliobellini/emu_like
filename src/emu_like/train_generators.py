@@ -373,10 +373,6 @@ class CobayaLoglike(TrainGenerator):
 
         TrainGenerator.__init__(self, params, n_samples, **kwargs)
 
-        # Fix known properties of the function
-        self.n_y = [1]
-        self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
-
         # Init Cobaya
         import cobaya
         
@@ -385,6 +381,10 @@ class CobayaLoglike(TrainGenerator):
 
         # Define model
         self.model = cobaya.model.get_model(self.cobaya_params)
+
+        # Fix known properties of the function
+        self.n_y = [len(self.cobaya_params['likelihood'].keys()) + 3]
+        self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
         return
 
     def get_y_names(self):
@@ -429,8 +429,6 @@ class CobayaLoglike(TrainGenerator):
         # Replace nans with infinities
         y = np.nan_to_num(y, nan=-np.inf)
 
-        # Adjust dimensions
-        y = y[np.newaxis]
         # Store in self
         self.y[0][idx] = y
         return [y[np.newaxis]]
