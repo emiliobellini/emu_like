@@ -24,11 +24,13 @@ def sample_emu(args):
     if args.verbose:
         io.print_level(0, '\nGetting sample for Emulator\n')
 
-    # Read params
-    params = Params().load(args.params_file, fill_missing=True)
-
     # Init Sample object
     sample = Sample()
+
+    # Read params
+    params = Params().load(args.params_file)
+    # Fill missing entries
+    params = sample.fill_missing_params(params)
 
     # If resume
     if args.resume:
@@ -38,6 +40,9 @@ def sample_emu(args):
         # Read params from output folder
         params = Params().load(de.file_names['params']['name'],
                                root=params['output'])
+        # Fill missing entries
+        params = sample.fill_missing_params(params)
+
         # Try to get extra_arguments
         try:
             sampled_function_args = params['sampled_function_args']

@@ -282,6 +282,34 @@ class Sample(object):
                 np.savetxt(fn, y_vals[nf])
         return
 
+    def fill_missing_params(self, params):
+        """
+        Fill params object with missing entries
+        Arguments:
+        - params (Params): params object;
+        """
+        default_dict = {
+            'output': None,
+            'sampler': {
+                'name': None,
+                'args': {},
+            },
+            'train_generator': {
+                'name': None,
+                'args': {},
+                'outputs': None,
+            },
+            'params': None,
+        }
+        for key1 in default_dict:
+            if key1 not in params.content:
+                params.content[key1] = default_dict[key1]
+            if isinstance(default_dict[key1], dict):
+                for key2 in default_dict[key1]:
+                    if key2 not in params.content[key1]:
+                        params.content[key1][key2] = default_dict[key1][key2]
+        return params
+
     def load(self,
              path,
              path_y=None,
