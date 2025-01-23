@@ -51,9 +51,21 @@ class TrainGenerator(object):
         """
         if generator_name == 'linear_1d':
             return Linear1D(params, n_samples, verbose=verbose, **kwargs)
+        elif generator_name == 'quadratic_1d':
+            return Quadratic1D(params, n_samples, verbose=verbose, **kwargs)
+        elif generator_name == 'gaussian_1d':
+            return Gaussian1D(params, n_samples, verbose=verbose, **kwargs)
+        elif generator_name == 'linear_2d':
+            return Linear2D(params, n_samples, verbose=verbose, **kwargs)
+        elif generator_name == 'quadratic_2d':
+            return Quadratic2D(params, n_samples, verbose=verbose, **kwargs)
+        elif generator_name == 'cobaya_loglike':
+            return CobayaLoglike(params, n_samples, verbose=verbose, **kwargs)
         elif generator_name == 'class_spectra':
             return ClassSpectra(params, n_samples, generator_outputs,
                                 verbose=verbose, **kwargs)
+        else:
+            raise Exception('Generator not recognised!')
 
     def __init__(self, params, n_samples, **kwargs):
         self.params = params
@@ -170,8 +182,255 @@ class Linear1D(TrainGenerator):
         b = self.args['b']
         x = x[self.x_names.index('x')]
         y = a*x + b
-        y = y[np.newaxis]
 
+        # Adjust dimensions
+        y = y[np.newaxis]
+        # Store in self
+        self.y[0][idx] = y
+        return [y[np.newaxis]]
+
+
+class Quadratic1D(TrainGenerator):
+    """
+    Generate a 1D quadratic function
+
+    y = a*x^2 + b*x + c
+    """
+
+    def __init__(self, params, n_samples, verbose=False, **kwargs):
+        if verbose:
+            io.info('Initializing Quadratic1D generator.')
+
+        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+
+        # Fix known properties of the function
+        self.n_y = [1]
+        self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+
+        return
+
+    def evaluate(self, x, idx, **kwargs):
+        """
+        Arguments:
+        - x: 1D array of input data (one sample);
+        - idx (int): row of x in the full sample;
+        Output:
+        - y: 1D array of output data (one sample).
+
+        """
+        a = self.args['a']
+        b = self.args['b']
+        c = self.args['c']
+        x = x[self.x_names.index('x')]
+        y = a*x**2 + b*x + c
+
+        # Adjust dimensions
+        y = y[np.newaxis]
+        # Store in self
+        self.y[0][idx] = y
+        return [y[np.newaxis]]
+
+
+class Gaussian1D(TrainGenerator):
+    """
+    Generate a 1D gaussian function
+
+    y = exp(-(x-mean^2)/std/2)
+    """
+
+    def __init__(self, params, n_samples, verbose=False, **kwargs):
+        if verbose:
+            io.info('Initializing Gaussian1D generator.')
+
+        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+
+        # Fix known properties of the function
+        self.n_y = [1]
+        self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+
+        return
+
+    def evaluate(self, x, idx, **kwargs):
+        """
+        Arguments:
+        - x: 1D array of input data (one sample);
+        - idx (int): row of x in the full sample;
+        Output:
+        - y: 1D array of output data (one sample).
+
+        """
+        mean = self.args['mean']
+        std = self.args['std']
+        x = x[self.x_names.index('x')]
+        y = np.exp(-(x-mean)**2./std**2./2.)
+
+        # Adjust dimensions
+        y = y[np.newaxis]
+        # Store in self
+        self.y[0][idx] = y
+        return [y[np.newaxis]]
+
+
+# 2D functions
+
+class Linear2D(TrainGenerator):
+    """
+    Generate a 2D linear function
+
+    y = a*x1 + b*x2 + c
+    """
+
+    def __init__(self, params, n_samples, verbose=False, **kwargs):
+        if verbose:
+            io.info('Initializing Linear2D generator.')
+
+        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+
+        # Fix known properties of the function
+        self.n_y = [1]
+        self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+
+        return
+
+    def evaluate(self, x, idx, **kwargs):
+        """
+        Arguments:
+        - x: 2D array of input data (one sample);
+        - idx (int): row of x in the full sample;
+        Output:
+        - y: 1D array of output data (one sample).
+
+        """
+        a = self.args['a']
+        b = self.args['b']
+        c = self.args['c']
+        x1 = x[self.x_names.index('x1')]
+        x2 = x[self.x_names.index('x2')]
+        y = a*x1 + b*x2 + c
+
+        # Adjust dimensions
+        y = y[np.newaxis]
+        # Store in self
+        self.y[0][idx] = y
+        return [y[np.newaxis]]
+
+
+class Quadratic2D(TrainGenerator):
+    """
+    Generate a 2D quadratic function
+
+    y = a*x1^2 + b*x2^2 + c*x1*x2 + d*x1 + e*x2 + f
+    """
+
+    def __init__(self, params, n_samples, verbose=False, **kwargs):
+        if verbose:
+            io.info('Initializing Quadratic2D generator.')
+
+        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+
+        # Fix known properties of the function
+        self.n_y = [1]
+        self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+
+        return
+
+    def evaluate(self, x, idx, **kwargs):
+        """
+        Arguments:
+        - x: 2D array of input data (one sample);
+        - idx (int): row of x in the full sample;
+        Output:
+        - y: 1D array of output data (one sample).
+
+        """
+        a = self.args['a']
+        b = self.args['b']
+        c = self.args['c']
+        d = self.args['d']
+        e = self.args['e']
+        f = self.args['f']
+        x1 = x[self.x_names.index('x1')]
+        x2 = x[self.x_names.index('x2')]
+        y = a*x1**2. + b*x2**2. + c*x1*x2 + d*x1 + e*x2 + f
+
+        # Adjust dimensions
+        y = y[np.newaxis]
+        # Store in self
+        self.y[0][idx] = y
+        return [y[np.newaxis]]
+
+
+# Cobaya loglikelihoods
+
+class CobayaLoglike(TrainGenerator):
+    """
+    Generates a sample of Log-likelihoods from Cobaya.
+    """
+
+    def __init__(self, params, n_samples, verbose=False, **kwargs):
+        if verbose:
+            io.info('Initializing CobayaLoglike generator.')
+
+        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+
+        # Fix known properties of the function
+        self.n_y = [1]
+        self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+
+        # Init Cobaya
+        import cobaya
+        
+        # Cobaya parameters
+        self.cobaya_params = {'params': params} | kwargs
+
+        # Define model
+        self.model = cobaya.model.get_model(self.cobaya_params)
+        return
+
+    def get_y_names(self):
+        """
+        Get y_names.
+        """
+        y_names = list(self.cobaya_params['likelihood'].keys())
+        y_names.append('tot_loglike')
+        y_names.append('logprior')
+        y_names.append('logpost')
+
+        self.y_names = [y_names]
+
+        return self.y_names
+
+    def evaluate(self, x, idx, **kwargs):
+        """
+        Arguments:
+        - x: 1D array of input data (one sample);
+        - idx (int): row of x in the full sample;
+        Output:
+        - y: 1D array of output data (one sample).
+
+        """
+
+        # Each sample should be a dictionary
+        sampled_params = dict(zip(self.x_names, x))
+
+        # Get loglike
+        y_dict = self.model.loglikes(sampled_params, as_dict=True)[0]
+        # Add total loglike
+        y_dict['tot_loglike'] = self.model.loglike(
+            sampled_params, return_derived=False)
+        # Add total logprior
+        y_dict['logprior'] = self.model.logprior(sampled_params)
+        # Add total logposterior
+        y_dict['logpost'] = self.model.logpost(sampled_params)
+
+        # Get y array
+        y = np.array([y_dict[b] for b in self.y_names[0]])
+
+        # Replace nans with infinities
+        y = np.nan_to_num(y, nan=-np.inf)
+
+        # Adjust dimensions
+        y = y[np.newaxis]
         # Store in self
         self.y[0][idx] = y
         return [y[np.newaxis]]
@@ -265,195 +524,3 @@ class ClassSpectra(TrainGenerator):
         for ny in range(len(self.n_y)):
             self.y[ny][idx] = y[ny]
         return y
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#         - model (optional): used in some function to store the
-        # evaluation and avoid duplicating the calculations
-
-
-
-
-
-
-
-
-
-
-
-def quadratic_1d(x, x_names, params, **kwargs):
-    """
-    Arguments:
-    - x: array of input data (one sample)
-    - x_names: list of names for each x element
-    - params: dictionary of the arguments needed
-    - model (optional): used in some function to store the
-      evaluation and avoid duplicating the calculations
-    - extra_args (optional): if the function called needs
-      other arguments put them here
-    Output:
-    - y: list of arrays of output data (one for each element of y_fnames)
-    - y_names: list of list of names for yeach y and y_names
-    - y_fnames: list of file names to divide the output
-    - model: if necessary to propagate model to the following steps
-
-    y = a*x^2 + b*x + c
-    """
-    a = params['a']
-    b = params['b']
-    c = params['c']
-    x = x[x_names.index('x')]
-    y = a*x**2 + b*x + c
-    y = y[np.newaxis, np.newaxis]
-    return y, None, None, None
-
-
-def gaussian_1d(x, x_names, params, **kwargs):
-    """
-    Arguments:
-    - x: array of input data (one sample)
-    - x_names: list of names for each x element
-    - params: dictionary of the arguments needed
-    - model (optional): used in some function to store the
-      evaluation and avoid duplicating the calculations
-    - extra_args (optional): if the function called needs
-      other arguments put them here
-    Output:
-    - y: list of arrays of output data (one for each element of y_fnames)
-    - y_names: list of list of names for yeach y and y_names
-    - y_fnames: list of file names to divide the output
-    - model: if necessary to propagate model to the following steps
-
-    y = exp(-(x-mean^2)/std/2)
-    """
-    mean = params['mean']
-    std = params['std']
-    x = x[x_names.index('x')]
-    y = np.exp(-(x-mean)**2./std**2./2.)
-    y = y[np.newaxis, np.newaxis]
-    return y, None, None, None
-
-
-# 2D functions
-
-def linear_2d(x, x_names, params, **kwargs):
-    """
-    Arguments:
-    - x: array of input data (one sample)
-    - x_names: list of names for each x element
-    - params: dictionary of the arguments needed
-    - model (optional): used in some function to store the
-      evaluation and avoid duplicating the calculations
-    - extra_args (optional): if the function called needs
-      other arguments put them here
-    Output:
-    - y: list of arrays of output data (one for each element of y_fnames)
-    - y_names: list of list of names for yeach y and y_names
-    - y_fnames: list of file names to divide the output
-    - model: if necessary to propagate model to the following steps
-
-    y = a*x1 + b*x2 + c
-    """
-    a = params['a']
-    b = params['b']
-    c = params['c']
-    x1 = x[x_names.index('x1')]
-    x2 = x[x_names.index('x2')]
-    y = a*x1 + b*x2 + c
-    y = y[np.newaxis, np.newaxis]
-    return y, None, None, None
-
-
-def quadratic_2d(x, x_names, params, **kwargs):
-    """
-    Arguments:
-    - x: array of input data (one sample)
-    - x_names: list of names for each x element
-    - params: dictionary of the arguments needed
-    - model (optional): used in some function to store the
-      evaluation and avoid duplicating the calculations
-    - extra_args (optional): if the function called needs
-      other arguments put them here
-    Output:
-    - y: list of arrays of output data (one for each element of y_fnames)
-    - y_names: list of list of names for yeach y and y_names
-    - y_fnames: list of file names to divide the output
-    - model: if necessary to propagate model to the following steps
-
-    y = a*x1^2 + b*x2^2 + c*x1*x2 + d*x1 + e*x2 + f
-    """
-    a = params['a']
-    b = params['b']
-    c = params['c']
-    d = params['d']
-    e = params['e']
-    f = params['f']
-    x1 = x[x_names.index('x1')]
-    x2 = x[x_names.index('x2')]
-    y = a*x1**2. + b*x2**2. + c*x1*x2 + d*x1 + e*x2 + f
-    y = y[np.newaxis, np.newaxis]
-    return y, None, None, None
-
-
-# Cobaya loglikelihoods
-
-def cobaya_loglike(x, x_names, params, model=None, extra_args=None, **kwargs):
-    """
-    Arguments:
-    - x: array of input data (one sample)
-    - x_names: list of names for each x element
-    - params: dictionary of the arguments needed
-    - model (optional): used in some function to store the
-      evaluation and avoid duplicating the calculations
-    - extra_args (optional): if the function called needs
-      other arguments put them here
-    Output:
-    - y: list of arrays of output data (one for each element of y_fnames)
-    - y_names: list of list of names for yeach y and y_names
-    - y_fnames: list of file names to divide the output
-    - model: if necessary to propagate model to the following steps
-
-    """
-    import cobaya
-    # Merge dictionaries of params for cobaya
-    if extra_args:
-        cobaya_params = {'params': params} | extra_args
-    else:
-        cobaya_params = params
-    # Get y_names
-    y_names = list(cobaya_params['likelihood'].keys())
-    # Define model
-    if model is None:
-        model = cobaya.model.get_model(cobaya_params)
-    # Each sample should be a dictionary
-    sampled_params = dict(zip(x_names, x))
-    # Get loglike
-    loglikes = model.loglikes(sampled_params, as_dict=True)[0]
-    # Get y array
-    y = np.array([loglikes[b] for b in y_names])
-    # Add total loglike
-    y = np.hstack((y, np.sum(y, axis=0)))
-    y_names.append('tot_loglike')
-    # Add total logprior
-    y = np.hstack((y, model.logprior(sampled_params)))
-    y_names.append('logprior')
-    # Add total logposterior
-    y = np.hstack((y, model.logpost(sampled_params)))
-    y_names.append('logpost')
-    # Replace nans with infinities
-    y = np.nan_to_num(y, nan=-np.inf)
-    y = y[np.newaxis]
-    return y, y_names, None, model
-
-
