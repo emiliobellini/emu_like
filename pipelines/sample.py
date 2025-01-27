@@ -9,7 +9,7 @@
 import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.params import Params
-from emu_like.sample import Sample
+from emu_like.datasets import Sample
 
 
 def sample_emu(args):
