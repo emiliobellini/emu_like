@@ -11,12 +11,12 @@ import os
 import re
 import tqdm
 import sklearn.model_selection as skl_ms
-from .train_generators import TrainGenerator
-from .samplers import Sampler
 from . import defaults as de
 from . import io as io
 from . import scalers as sc
 from .params import Params
+from .x_samplers import XSampler
+from .y_models import YModel
 
 
 class Sample(object):
@@ -330,7 +330,7 @@ class Sample(object):
         self.path = path
 
         # Init x sampler
-        x_sampler = Sampler.choose_one(
+        x_sampler = XSampler.choose_one(
             settings['sampler']['name'],
             settings['params'],
             **settings['sampler']['args'],
@@ -354,10 +354,10 @@ class Sample(object):
         self.x_header = x_sampler.get_x_header()
 
         # Init y generator
-        y_generator = TrainGenerator.choose_one(
+        y_generator = YModel.choose_one(
             settings['train_generator']['name'],
-            settings['train_generator']['outputs'],
             settings['params'],
+            settings['train_generator']['outputs'],
             self.n_samples,
             **settings['train_generator']['args'],
             verbose=False)
@@ -628,11 +628,11 @@ class Sample(object):
     def generate(
             self,
             params,
-            sampler_name,
-            generator_name,
-            sampler_args=None,
-            generator_args=None,
-            generator_outputs=None,
+            x_name,
+            y_name,
+            x_args=None,
+            y_args=None,
+            y_outputs=None,
             output=None,
             save_incrementally=False,
             verbose=False):
@@ -641,15 +641,15 @@ class Sample(object):
         Arguments:
         - params (dict): dictionary containing the parameters to be passed
           to the sampled_function. See yaml files for details;
-        - sampler_name (str): name of the sampler. Options defined in
-          src/emu_like/samplers.py;
-        - generator_name (str): function generating the training set.
-          Options defined in src/emu_like/sampling_functions.py;
-        - sampler_args (dict, default: None): dictionary with extra
-          arguments needed by the sampler function;
-        - generator_args (dict, default: None): dictionary with extra
-          arguments needed by the generator function;
-        - generator_outputs (dict, default: None): dictionary dealing
+        - x_name (str): name of the x_sampler. Options defined in
+          src/emu_like/x_samplers.py;
+        - y_name (str): name of the y_model.
+          Options defined in src/emu_like/y_models.py;
+        - x_args (dict, default: None): dictionary with extra
+          arguments needed by the x_sampler function;
+        - y_args (dict, default: None): dictionary with extra
+          arguments needed by the y_model;
+        - y_outputs (dict, default: None): dictionary dealing
           with multiple y outputs for a single x_sample (see class_spectra);
         - output (str, default: None): if save_incrementally the output
           path should be passed;
@@ -669,13 +669,13 @@ class Sample(object):
         self.settings = {
             'output': output,
             'sampler': {
-                'name': sampler_name,
-                'args': sampler_args,
+                'name': x_name,
+                'args': x_args,
             },
             'train_generator': {
-                'name': generator_name,
-                'args': generator_args,
-                'outputs': generator_outputs,
+                'name': y_name,
+                'args': y_args,
+                'outputs': y_outputs,
             },
             'params': params,
         }
@@ -684,10 +684,10 @@ class Sample(object):
             self._save_settings(verbose=verbose)
 
         # Init x sampler
-        x_sampler = Sampler.choose_one(
-            sampler_name,
+        x_sampler = XSampler.choose_one(
+            x_name,
             params,
-            **sampler_args,
+            **x_args,
             verbose=verbose)
 
         # Get x data and attributes
@@ -704,12 +704,12 @@ class Sample(object):
             self._save_x(verbose=verbose)
 
         # Init y generator
-        y_generator = TrainGenerator.choose_one(
-            generator_name,
-            generator_outputs,
+        y_generator = YModel.choose_one(
+            y_name,
             params,
+            y_outputs,
             self.n_samples,
-            **generator_args,
+            **y_args,
             verbose=verbose)
 
         self.n_y = y_generator.get_n_y()

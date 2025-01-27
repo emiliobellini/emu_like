@@ -1,14 +1,14 @@
 """
-.. module:: train_generators
+.. module:: y_models
 
-:Synopsis: List of generator for traininf set.
+:Synopsis: List of models to get y from x.
 :Author: Emilio Bellini
 
-Collection of functions that can be used to generate
-a training set. Each one is stored as a Class inheriting
-from the base Class TrainGenerator.
+Collection of functions that can be used to sample y
+from x. Each one is stored as a Class inheriting
+from the base Class YModel.
 If you want to implement a new function, create
-a new Class inheriting from TrainGenerator.
+a new Class inheriting from YModel.
 Add its name in the choose_one static method,
 create the get_x method and adapt its other
 methods and attributes to your needs.
@@ -17,55 +17,15 @@ methods and attributes to your needs.
 import numpy as np
 from . import io as io
 from . import defaults as de
-from .samplers import Sampler
 from .spectra import Spectra
+from .x_samplers import XSampler
 
 
 # Base function
-class TrainGenerator(object):
+class YModel(object):
     """
-    Base class TrainGenerator.
+    Base class YModel.
     """
-
-    @staticmethod
-    def choose_one(
-        generator_name,
-        generator_outputs,
-        params,
-        n_samples,
-        verbose=False,
-        **kwargs):
-        """
-        Main function to get the correct generator function.
-
-        Arguments:
-        - generator_name (str): type of generator;
-        - params (dict): dictionary of parameters;
-        - n_samples (int): number of samples;
-        - verbose (bool, default: False): verbosity;
-        - kwargs: specific arguments needed by each generator.
-
-        Return:
-        - TrainGenerator (object): based on its name, get
-          the correct sampling function and initialize it.
-        """
-        if generator_name == 'linear_1d':
-            return Linear1D(params, n_samples, verbose=verbose, **kwargs)
-        elif generator_name == 'quadratic_1d':
-            return Quadratic1D(params, n_samples, verbose=verbose, **kwargs)
-        elif generator_name == 'gaussian_1d':
-            return Gaussian1D(params, n_samples, verbose=verbose, **kwargs)
-        elif generator_name == 'linear_2d':
-            return Linear2D(params, n_samples, verbose=verbose, **kwargs)
-        elif generator_name == 'quadratic_2d':
-            return Quadratic2D(params, n_samples, verbose=verbose, **kwargs)
-        elif generator_name == 'cobaya_loglike':
-            return CobayaLoglike(params, n_samples, verbose=verbose, **kwargs)
-        elif generator_name == 'class_spectra':
-            return ClassSpectra(params, n_samples, generator_outputs,
-                                verbose=verbose, **kwargs)
-        else:
-            raise Exception('Generator not recognised!')
 
     def __init__(self, params, n_samples, **kwargs):
         self.params = params
@@ -81,9 +41,51 @@ class TrainGenerator(object):
 
         # Derive varying parameters
         self.x_names = [x for x in self.params
-                        if Sampler._is_varying(self.params, x)]
+                        if XSampler._is_varying(self.params, x)]
         return
-    
+
+    @staticmethod
+    def choose_one(
+        name,
+        params,
+        outputs,
+        n_samples,
+        verbose=False,
+        **kwargs):
+        """
+        Main function to get the correct model for y.
+
+        Arguments:
+        - name (str): name of the model;
+        - params (dict): dictionary of parameters;
+        - outputs (dict): some of the models redirect the
+          output to multiple datasets;
+        - n_samples (int): number of samples;
+        - verbose (bool, default: False): verbosity;
+        - kwargs: specific arguments needed by each model.
+
+        Return:
+        - YModel (object): based on its name, get
+          the correct sampling function and initialize it.
+        """
+        if name == 'linear_1d':
+            return Linear1D(params, n_samples, verbose=verbose, **kwargs)
+        elif name == 'quadratic_1d':
+            return Quadratic1D(params, n_samples, verbose=verbose, **kwargs)
+        elif name == 'gaussian_1d':
+            return Gaussian1D(params, n_samples, verbose=verbose, **kwargs)
+        elif name == 'linear_2d':
+            return Linear2D(params, n_samples, verbose=verbose, **kwargs)
+        elif name == 'quadratic_2d':
+            return Quadratic2D(params, n_samples, verbose=verbose, **kwargs)
+        elif name == 'cobaya_loglike':
+            return CobayaLoglike(params, n_samples, verbose=verbose, **kwargs)
+        elif name == 'class_spectra':
+            return ClassSpectra(params, n_samples, outputs,
+                                verbose=verbose, **kwargs)
+        else:
+            raise Exception('YModel not recognised!')
+
     def get_y_ranges(self):
         """
         Get y_ranges.
@@ -150,18 +152,18 @@ class TrainGenerator(object):
 
 # 1D functions
 
-class Linear1D(TrainGenerator):
+class Linear1D(YModel):
     """
-    Generate a 1D linear function
+    1D linear function
 
     y = a*x + b
     """
 
     def __init__(self, params, n_samples, verbose=False, **kwargs):
         if verbose:
-            io.info('Initializing Linear1D generator.')
+            io.info('Initializing Linear1D model.')
 
-        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -190,18 +192,18 @@ class Linear1D(TrainGenerator):
         return [y[np.newaxis]]
 
 
-class Quadratic1D(TrainGenerator):
+class Quadratic1D(YModel):
     """
-    Generate a 1D quadratic function
+    1D quadratic function
 
     y = a*x^2 + b*x + c
     """
 
     def __init__(self, params, n_samples, verbose=False, **kwargs):
         if verbose:
-            io.info('Initializing Quadratic1D generator.')
+            io.info('Initializing Quadratic1D model.')
 
-        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -231,18 +233,18 @@ class Quadratic1D(TrainGenerator):
         return [y[np.newaxis]]
 
 
-class Gaussian1D(TrainGenerator):
+class Gaussian1D(YModel):
     """
-    Generate a 1D gaussian function
+    1D gaussian function
 
     y = exp(-(x-mean^2)/std/2)
     """
 
     def __init__(self, params, n_samples, verbose=False, **kwargs):
         if verbose:
-            io.info('Initializing Gaussian1D generator.')
+            io.info('Initializing Gaussian1D model.')
 
-        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -273,18 +275,18 @@ class Gaussian1D(TrainGenerator):
 
 # 2D functions
 
-class Linear2D(TrainGenerator):
+class Linear2D(YModel):
     """
-    Generate a 2D linear function
+    2D linear function
 
     y = a*x1 + b*x2 + c
     """
 
     def __init__(self, params, n_samples, verbose=False, **kwargs):
         if verbose:
-            io.info('Initializing Linear2D generator.')
+            io.info('Initializing Linear2D model.')
 
-        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -315,18 +317,18 @@ class Linear2D(TrainGenerator):
         return [y[np.newaxis]]
 
 
-class Quadratic2D(TrainGenerator):
+class Quadratic2D(YModel):
     """
-    Generate a 2D quadratic function
+    2D quadratic function
 
     y = a*x1^2 + b*x2^2 + c*x1*x2 + d*x1 + e*x2 + f
     """
 
     def __init__(self, params, n_samples, verbose=False, **kwargs):
         if verbose:
-            io.info('Initializing Quadratic2D generator.')
+            io.info('Initializing Quadratic2D model.')
 
-        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -362,16 +364,16 @@ class Quadratic2D(TrainGenerator):
 
 # Cobaya loglikelihoods
 
-class CobayaLoglike(TrainGenerator):
+class CobayaLoglike(YModel):
     """
-    Generates a sample of Log-likelihoods from Cobaya.
+    Log-likelihoods from Cobaya.
     """
 
     def __init__(self, params, n_samples, verbose=False, **kwargs):
         if verbose:
-            io.info('Initializing CobayaLoglike generator.')
+            io.info('Initializing CobayaLoglike model.')
 
-        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, params, n_samples, **kwargs)
 
         # Init Cobaya
         import cobaya
@@ -436,13 +438,16 @@ class CobayaLoglike(TrainGenerator):
 
 # ClassSpectra
 
-class ClassSpectra(TrainGenerator):
+class ClassSpectra(YModel):
+    """
+    Power spectra from Class.
+    """
 
     def __init__(self, params, n_samples, outputs, verbose=False, **kwargs):
         if verbose:
-            io.info('Initializing ClassSpectra generator.')
+            io.info('Initializing ClassSpectra model.')
 
-        TrainGenerator.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, params, n_samples, **kwargs)
         self.outputs = outputs
 
         # Init classy

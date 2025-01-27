@@ -61,11 +61,11 @@ def sample_emu(args):
         # Generate sample
         sample.generate(
             params=params['params'],
-            sampler_name=params['sampler']['name'],
-            sampler_args=params['sampler']['args'],
-            generator_name=params['train_generator']['name'],
-            generator_args=params['train_generator']['args'],
-            generator_outputs=params['train_generator']['outputs'],
+            x_name=params['x_sampler']['name'],
+            x_args=params['x_sampler']['args'],
+            y_name=params['y_model']['name'],
+            y_args=params['y_model']['args'],
+            y_outputs=params['y_model']['outputs'],
             output=params['output'],
             save_incrementally=True,
             verbose=args.verbose)

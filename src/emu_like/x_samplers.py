@@ -1,14 +1,14 @@
 """
-.. module:: samplers
+.. module:: x_samplers
 
 :Synopsis: Various sampler classes, dealing with different sampling spacing.
 :Author: Emilio Bellini
 
 Collection of functions that can be used to sample the x
 parameter space. Each one is stored as a Class inheriting
-from the base Class Sampler.
+from the base Class XSampler.
 If you want to implement a new function, create
-a new Class inheriting from Sampler.
+a new Class inheriting from XSampler.
 Add its name in the choose_one static method,
 create the get_x method and adapt the other methods
 and attributes to your needs.
@@ -20,40 +20,10 @@ from . import defaults as de
 from . import io as io
 
 
-class Sampler(object):
+class XSampler(object):
     """
-    Base class Sampler.
+    Base class XSampler.
     """
-
-    @staticmethod
-    def choose_one(sampler_name, params, verbose=False, **kwargs):
-        """
-        Main function to get the correct Sampler.
-
-        Arguments:
-        - sampler_name (str): type of sampler;
-        - params (dict): dictionary of parameters;
-        - verbose (bool, default: False): verbosity;
-        - kwargs: specific arguments needed by each sampler.
-
-        Return:
-        - Sampler (object): based on sampler_name, get
-          the correct sampler and initialize it.
-        """
-        if sampler_name == 'evaluate':
-            return EvaluateSampler(params, verbose=verbose)
-        elif sampler_name == 'grid':
-            return GridSampler(params, verbose=verbose, **kwargs)
-        elif sampler_name == 'log_grid':
-            return LogGridSampler(params, verbose=verbose, **kwargs)
-        elif sampler_name == 'random_uniform':
-            return RandomUniformSampler(params, verbose=verbose, **kwargs)
-        elif sampler_name == 'random_normal':
-            return RandomNormalSampler(params, verbose=verbose, **kwargs)
-        elif sampler_name == 'latin_hypercube':
-            return LatinHypercubeSampler(params, verbose=verbose, **kwargs)
-        else:
-            raise ValueError('Sampler not recognized!')
 
     def __init__(self, params):
         self.params = params
@@ -69,6 +39,36 @@ class Sampler(object):
         self.x_header = None  # Header for x file
         self.x_fname = None  # File name of x data
         return
+
+    @staticmethod
+    def choose_one(name, params, verbose=False, **kwargs):
+        """
+        Main function to get the correct XSampler.
+
+        Arguments:
+        - name (str): type of sampler;
+        - params (dict): dictionary of parameters;
+        - verbose (bool, default: False): verbosity;
+        - kwargs: specific arguments needed by each sampler.
+
+        Return:
+        - XSampler (object): based on name, get
+          the correct sampler and initialize it.
+        """
+        if name == 'evaluate':
+            return EvaluateSampler(params, verbose=verbose)
+        elif name == 'grid':
+            return GridSampler(params, verbose=verbose, **kwargs)
+        elif name == 'log_grid':
+            return LogGridSampler(params, verbose=verbose, **kwargs)
+        elif name == 'random_uniform':
+            return RandomUniformSampler(params, verbose=verbose, **kwargs)
+        elif name == 'random_normal':
+            return RandomNormalSampler(params, verbose=verbose, **kwargs)
+        elif name == 'latin_hypercube':
+            return LatinHypercubeSampler(params, verbose=verbose, **kwargs)
+        else:
+            raise ValueError('XSampler not recognized!')
 
     @staticmethod
     def _is_varying(params, param):
@@ -143,7 +143,7 @@ class Sampler(object):
         Get x_names.
         """
         self.x_names = [x for x in self.params
-                        if Sampler._is_varying(self.params, x)]
+                        if XSampler._is_varying(self.params, x)]
 
         # In case, select the columns
         if columns is not None:
@@ -180,13 +180,13 @@ class Sampler(object):
         return self.x
 
 
-class EvaluateSampler(Sampler):
+class EvaluateSampler(XSampler):
     """
     Sample at one point (defined by 'params:ref').
     """
 
     def __init__(self, params, verbose=False):
-        Sampler.__init__(self, params)
+        XSampler.__init__(self, params)
 
         if verbose:
             io.info('Initializing Evaluate sampler.')
@@ -204,13 +204,13 @@ class EvaluateSampler(Sampler):
         return self.x
 
 
-class GridSampler(Sampler):
+class GridSampler(XSampler):
 
     def __init__(self, params, verbose=False, **kwargs):
         """
-        Init Sampler specific arguments
+        Init XSampler specific arguments
         """
-        Sampler.__init__(self, params)
+        XSampler.__init__(self, params)
         self.n_samples = self._get_n_samples(kwargs)
 
         if verbose:
@@ -238,13 +238,13 @@ class GridSampler(Sampler):
         return self.x
 
 
-class LogGridSampler(Sampler):
+class LogGridSampler(XSampler):
 
     def __init__(self, params, verbose=False, **kwargs):
         """
-        Init Sampler specific arguments
+        Init XSampler specific arguments
         """
-        Sampler.__init__(self, params)
+        XSampler.__init__(self, params)
         self.n_samples = self._get_n_samples(kwargs)
 
         if verbose:
@@ -272,13 +272,13 @@ class LogGridSampler(Sampler):
         return self.x
 
 
-class RandomUniformSampler(Sampler):
+class RandomUniformSampler(XSampler):
 
     def __init__(self, params, verbose=False, **kwargs):
         """
-        Init Sampler specific arguments
+        Init XSampler specific arguments
         """
-        Sampler.__init__(self, params)
+        XSampler.__init__(self, params)
         self.n_samples = self._get_n_samples(kwargs)
 
         if verbose:
@@ -302,13 +302,13 @@ class RandomUniformSampler(Sampler):
         return self.x
 
 
-class RandomNormalSampler(Sampler):
+class RandomNormalSampler(XSampler):
 
     def __init__(self, params, verbose=False, **kwargs):
         """
-        Init Sampler specific arguments
+        Init XSampler specific arguments
         """
-        Sampler.__init__(self, params)
+        XSampler.__init__(self, params)
         self.n_samples = self._get_n_samples(kwargs)
 
         if verbose:
@@ -332,13 +332,13 @@ class RandomNormalSampler(Sampler):
         return self.x
 
 
-class LatinHypercubeSampler(Sampler):
+class LatinHypercubeSampler(XSampler):
 
     def __init__(self, params, verbose=False, **kwargs):
         """
-        Init Sampler specific arguments
+        Init XSampler specific arguments
         """
-        Sampler.__init__(self, params)
+        XSampler.__init__(self, params)
         self.n_samples = self._get_n_samples(kwargs)
         self.seed = self._get_seed(kwargs)
 
