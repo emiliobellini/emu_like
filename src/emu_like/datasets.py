@@ -351,17 +351,17 @@ class Dataset(object):
         self.x_names = x_sampler.get_x_names(columns=columns_x)
         self.x_header = x_sampler.get_x_header()
 
-        # Init y generator
-        y_generator = YModel.choose_one(
-            settings['train_generator']['name'],
+        # Init y_model
+        y_model = YModel.choose_one(
+            settings['y_model']['name'],
             settings['params'],
-            settings['train_generator']['outputs'],
+            settings['y_model']['outputs'],
             self.n_samples,
-            **settings['train_generator']['args'],
+            **settings['y_model']['args'],
             verbose=False)
 
         # Get y file names
-        self.y_fnames = y_generator.get_y_fnames()
+        self.y_fnames = y_model.get_y_fnames()
 
         # Change default columns_x
         if columns_y is None:
@@ -372,24 +372,24 @@ class Dataset(object):
         y = [self._load_array(
             os.path.join(self.path, self.y_fnames[nf]), columns_y[nf])
             for nf in range(len(self.y_fnames))]
-        y, y_generator.y_names = zip(*y)
+        y, y_model.y_names = zip(*y)
         # 2) Infer dimensions
-        y_generator.n_y = [y_one.shape[1] for y_one in y]
+        y_model.n_y = [y_one.shape[1] for y_one in y]
         self.counter_samples = y[0].shape[0]
         # 3) initialize list of zeros arrays with full n_samples.
-        y_generator.y = [np.zeros((self.n_samples, n_y_one))
-                         for n_y_one in y_generator.n_y]
+        y_model.y = [np.zeros((self.n_samples, n_y_one))
+                         for n_y_one in y_model.n_y]
         # 4) assign values.
-        for ny_gen, y_gen in enumerate(y_generator.y):
+        for ny_gen, y_gen in enumerate(y_model.y):
             y_gen[:self.counter_samples] = y[ny_gen]
         # 5) Synchronize with Sample.y.
-        self.y = y_generator.y
+        self.y = y_model.y
 
         # Get remaining y attributes
-        self.n_y = y_generator.get_n_y()
-        self.y_ranges = y_generator.get_y_ranges()
-        self.y_names = y_generator.y_names
-        self.y_headers = y_generator.get_y_headers()
+        self.n_y = y_model.get_n_y()
+        self.y_ranges = y_model.get_y_ranges()
+        self.y_names = y_model.y_names
+        self.y_headers = y_model.get_y_headers()
 
         # Remove non finite if requested
         if remove_non_finite:
@@ -404,13 +404,13 @@ class Dataset(object):
             self.n_samples -= infs
             # Propagate
             x_sampler.x = self.x
-            y_generator.y = self.y
+            y_model.y = self.y
             self.x_ranges = x_sampler.get_x_ranges()
-            self.y_ranges = y_generator.get_y_ranges()
+            self.y_ranges = y_model.get_y_ranges()
 
-        # Propagate x_sampler and y_generator
+        # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
-        self.y_generator = y_generator
+        self.y_model = y_model
 
         # Print info
         if verbose:
@@ -701,8 +701,8 @@ class Dataset(object):
         if save_incrementally:
             self._save_x(verbose=verbose)
 
-        # Init y generator
-        y_generator = YModel.choose_one(
+        # Init y_model
+        y_model = YModel.choose_one(
             y_name,
             params,
             y_outputs,
@@ -710,25 +710,25 @@ class Dataset(object):
             **y_args,
             verbose=verbose)
 
-        self.n_y = y_generator.get_n_y()
-        self.y_names = y_generator.get_y_names()
-        self.y_headers = y_generator.get_y_headers()
-        self.y_fnames = y_generator.get_y_fnames()
+        self.n_y = y_model.get_n_y()
+        self.y_names = y_model.get_y_names()
+        self.y_headers = y_model.get_y_headers()
+        self.y_fnames = y_model.get_y_fnames()
 
         if save_incrementally:
             self._save_y(verbose=verbose)
         
         for nx, x in enumerate(tqdm.tqdm(self.x)):
-            y_one = y_generator.evaluate(x, nx)
+            y_one = y_model.evaluate(x, nx)
             self.counter_samples += 1
 
             # Save array
             if save_incrementally:
                 self._append_y(y_one)
 
-        # Propagate x_sampler and y_generator
+        # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
-        self.y_generator = y_generator
+        self.y_model = y_model
         return
 
     def resume(self, save_incrementally=False, verbose=False):
@@ -756,7 +756,7 @@ class Dataset(object):
 
         start = self.counter_samples
         for nx, x in enumerate(tqdm.tqdm(self.x[start:])):
-            y_one = self.y_generator.evaluate(x, start + nx)
+            y_one = self.y_model.evaluate(x, start + nx)
             self.counter_samples += 1
 
             # Save array
