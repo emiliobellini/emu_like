@@ -16,7 +16,9 @@ from . import io as io
 from .emu import Emulator
 from .params import Params
 from .scalers import Scaler
+# TODO: something is not working here
 from . import loss_functions as lf  # noqa:F401
+# from tensorflow import keras
 
 
 class FFNNEmu(Emulator):
@@ -54,7 +56,7 @@ class FFNNEmu(Emulator):
         return
 
     @staticmethod
-    def _update_params(params, epochs=None, learning_rate=None):
+    def update_params(params, epochs=None, learning_rate=None):
         """
         Update the parameters of the emulator.
         In particular, it updates the learning rate
@@ -68,8 +70,8 @@ class FFNNEmu(Emulator):
           used.
         """
         # Local variables
-        old_epochs = params['emulator']['params']['epochs']
-        old_learning_rate = params['emulator']['params']['learning_rate']
+        old_epochs = params['emulator']['args']['epochs']
+        old_learning_rate = params['emulator']['args']['learning_rate']
         change_epochs = False
         change_learning_rate = False
 
@@ -89,9 +91,38 @@ class FFNNEmu(Emulator):
         if change_epochs or change_learning_rate:
             old_epochs.append(epochs)
             old_learning_rate.append(learning_rate)
-        params['emulator']['params']['epochs'] = old_epochs
-        params['emulator']['params']['learning_rate'] = old_learning_rate
+        params['emulator']['args']['epochs'] = old_epochs
+        params['emulator']['args']['learning_rate'] = old_learning_rate
 
+        return params
+
+    def fill_missing_params(self, params):
+        """
+        Fill params object with missing entries
+        Arguments:
+        - params (Params): params object;
+        """
+        default_dict = {
+            'output': None,
+            'emulator': {
+                'name': None,
+                'args': {},
+            },
+            'datasets': {
+                'name': None,
+                'paths': [],
+                'paths_x': [],
+                'paths_y': [],
+                'args': {},
+            },
+        }
+        for key1 in default_dict:
+            if key1 not in params.content:
+                params.content[key1] = default_dict[key1]
+            if isinstance(default_dict[key1], dict):
+                for key2 in default_dict[key1]:
+                    if key2 not in params.content[key1]:
+                        params.content[key1][key2] = default_dict[key1][key2]
         return params
 
     def _get_best_model_epoch(self, path=None):
@@ -357,8 +388,8 @@ class FFNNEmu(Emulator):
             io.print_level(1, 'Optimizer: {}'.format(params['optimizer']))
             io.print_level(1, 'Loss function: {}'.format(params['loss']))
 
-        # Get loss function
-        loss = eval('lf.'+params['loss'])
+        # Get loss function TODO
+        # loss = eval('lf.'+params['loss'])
 
         model = tf.keras.Sequential()
         # Input layer
@@ -383,7 +414,7 @@ class FFNNEmu(Emulator):
             model.add(keras.layers.Dense(params['sample_n_y'],
                                          activation=None))
 
-        model.compile(optimizer=params['optimizer'], loss=loss)
+        model.compile(optimizer=params['optimizer'], loss=params['loss'])
 
         self.model = model
 
@@ -458,7 +489,7 @@ class FFNNEmu(Emulator):
             plt.semilogy(self.epochs, self.loss, label='training sample')
             plt.semilogy(self.epochs, self.val_loss, label='validation sample')
             plt.xlabel('epoch')
-            plt.ylabel(self.model.loss.__name__)
+            plt.ylabel(self.model.loss)
             plt.legend()
             if path:
                 plt.savefig(os.path.join(path, 'loss_function.pdf'))

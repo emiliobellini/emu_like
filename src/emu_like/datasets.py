@@ -18,6 +18,8 @@ from .params import Params
 from .x_samplers import XSampler
 from .y_models import YModel
 
+# TODO: define a SingleYDataset class where y is not a list
+
 
 class Dataset(object):
     """
@@ -314,6 +316,7 @@ class Dataset(object):
     def _full_load(
             self,
             path,
+            name,
             settings,
             columns_x,
             columns_y,
@@ -412,6 +415,17 @@ class Dataset(object):
         self.x_sampler = x_sampler
         self.y_model = y_model
 
+        # If name choose only one file
+        if name:
+            idx = self.y_fnames.index(
+                de.file_names['y_sample']['name'].format('_'+name))
+            self.y_fnames = [self.y_fnames[idx]]
+            self.y = [self.y[idx]]
+            self.n_y = [self.n_y[idx]]
+            self.y_ranges = [self.y_ranges[idx]]
+            self.y_names = [self.y_names[idx]]
+            self.y_headers = [self.y_headers[idx]]
+
         # Print info
         if verbose:
             io.print_level(1, 'Loaded dataset from: {}'.format(self.path))
@@ -485,6 +499,7 @@ class Dataset(object):
 
     def load(self,
              path,
+             name=None,
              path_y=None,
              columns_x=None,
              columns_y=None,
@@ -497,6 +512,7 @@ class Dataset(object):
           or to a file containing both the x and y data or to a file
           containing only the x data. In this last case, 'path_y' should
           be specified. See discussion at the top of this class;
+        - name (str, defualt: None): if multiple y files load only one;
         - path_y (str, default: None): in case x and y data are stored in
           different files, use this variable to specify the file containing
           the y data;
@@ -545,6 +561,7 @@ class Dataset(object):
         if has_settings and os.path.isdir(path) and path_y is None:
             self._full_load(
                 path=path,
+                name=name,
                 settings=self.settings,
                 columns_x=columns_x,
                 columns_y=columns_y,
@@ -552,6 +569,7 @@ class Dataset(object):
                 verbose=verbose)
             if verbose:
                 io.print_level(1, 'Dataset fully loaded.')
+
         # 2) no settings and everything contained in one or two files
         elif not has_settings and os.path.isfile(path):
             self._minimal_load(
@@ -792,10 +810,10 @@ class Dataset(object):
         else:
             raise ValueError('Datasets can not be joined as they have '
                              'different number of x variables')
-
+        
         # n_y
-        if all(s.n_y == datasets[0].n_y for s in data):
-            data.n_y = datasets[0].n_y
+        if all(s.n_y == datasets[0].n_y for s in datasets):
+            data.n_y = datasets[0].n_y[0]
         else:
             raise ValueError('Datasets can not be joined as they have '
                              'different number of x variables')
@@ -808,15 +826,19 @@ class Dataset(object):
             np.max(data.x, axis=0))).T
 
         # y array
-        total = tuple([s.y for s in datasets])
+        total = tuple([s.y[0] for s in datasets])
         data.y = np.vstack(total)
+        data.y_ranges = np.stack((
+            np.min(data.y, axis=0),
+            np.max(data.y, axis=0))).T
 
         # x and y names
         data.x_names = datasets[0].x_names
-        data.y_names = datasets[0].y_names
+        data.y_names = datasets[0].y_names[0]
 
         # n_samples
         data.n_samples = sum([s.n_samples for s in datasets])
+
         return data
 
     def train_test_split(self, frac_train, seed, verbose=False):

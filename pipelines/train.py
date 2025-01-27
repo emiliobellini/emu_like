@@ -10,7 +10,7 @@ import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.emu import Emulator
 from emu_like.params import Params
-from emu_like.datasets import Sample
+from emu_like.datasets import Dataset
 
 
 def train_emu(args):
@@ -52,11 +52,14 @@ def train_emu(args):
 
     # Call the right emulator
     emu = Emulator.choose_one(
-        params['emulator']['type'],
+        params['emulator']['name'],
         verbose=args.verbose)
 
+    # Fill missing entries
+    params = emu.fill_missing_params(params)
+
     # Update parameters with input
-    params = emu._update_params(
+    params = emu.update_params(
         params,
         epochs=args.additional_epochs,
         learning_rate=args.learning_rate)
@@ -68,56 +71,61 @@ def train_emu(args):
         header=de.file_names['params']['header'],
         verbose=args.verbose)
 
-    # Get default values
+    # Load all Samples in a single list
+    if params['datasets']['paths']:
+        paths_x = params['datasets']['paths']
+        paths_y = [None for x in params['datasets']['paths']]
+    else:
+        paths_x = params['datasets']['paths_x']
+        paths_y = params['datasets']['paths_y']
+
+    # Read or default
     try:
-        columns_x = params['training_sample']['columns_x']
+        columns_x = params['datasets']['args']['columns_x']
     except KeyError:
-        columns_x = slice(None)
+        columns_x = None
     try:
-        columns_y = params['training_sample']['columns_y']
+        columns_y = params['datasets']['args']['columns_y']
     except KeyError:
-        columns_y = slice(None)
+        columns_y = None
     try:
-        remove_non_finite = params['training_sample']['remove_non_finite']
+        remove_non_finite = params['datasets']['args']['remove_non_finite']
     except KeyError:
         remove_non_finite = False
 
-    # Load all Samples in a single list
-    try:
-        sample_paths = params['training_sample']['paths_x']
-        sample_paths_y = params['training_sample']['paths_y']
-    except KeyError:
-        sample_paths = params['training_sample']['paths']
-        sample_paths_y = [None for x in params['training_sample']['paths']]
-    samples = [Sample().load(
-                    path=path,
-                    path_y=path_y,
-                    columns_x=columns_x,
-                    columns_y=columns_y,
-                    remove_non_finite=remove_non_finite,
-                    verbose=False)
-               for path, path_y in zip(sample_paths, sample_paths_y)]
+    data = [Dataset().load(
+        path=path_x,
+        name=params['datasets']['name'],
+        path_y=path_y,
+        columns_x=columns_x,
+        columns_y=columns_y,
+        remove_non_finite=remove_non_finite,
+        verbose=True)
+        for path_x, path_y in zip(paths_x, paths_y)]
+
     # Join all samples
-    sample = Sample.join(samples, verbose=args.verbose)
+    data = Dataset.join(data, verbose=args.verbose)
 
     # Split training and testing samples
-    sample.train_test_split(
-        params['training_sample']['frac_train'],
-        params['training_sample']['train_test_random_seed'],
+    data.train_test_split(
+        params['datasets']['args']['frac_train'],
+        params['datasets']['args']['train_test_random_seed'],
         verbose=args.verbose)
 
     # If requested, rescale training and testing samples
-    sample.rescale(
-        params['training_sample']['rescale_x'],
-        params['training_sample']['rescale_y'],
+    data.rescale(
+        params['datasets']['args']['rescale_x'],
+        params['datasets']['args']['rescale_y'],
         verbose=args.verbose)
     # Save scalers
-    sample.x_scaler.save(de.file_names['x_scaler']['name'],
-                         root=params['output'],
-                         verbose=args.verbose)
-    sample.y_scaler.save(de.file_names['y_scaler']['name'],
-                         root=params['output'],
-                         verbose=args.verbose)
+    data.x_scaler.save(
+        de.file_names['x_scaler']['name'],
+        root=params['output'],
+        verbose=args.verbose)
+    data.y_scaler.save(
+        de.file_names['y_scaler']['name'],
+        root=params['output'],
+        verbose=args.verbose)
 
     # If resume
     if args.resume:
@@ -125,16 +133,16 @@ def train_emu(args):
         emu.load(params['output'], model_to_load='best', verbose=args.verbose)
     # Otherwise
     else:
-        params['emulator']['params']['sample_n_x'] = sample.n_x
-        params['emulator']['params']['sample_n_y'] = sample.n_y
+        params['emulator']['args']['sample_n_x'] = data.n_x
+        params['emulator']['args']['sample_n_y'] = data.n_y
         # Build architecture
-        emu.build(params['emulator']['params'], verbose=args.verbose)
+        emu.build(params['emulator']['args'], verbose=args.verbose)
 
     # Train the emulator
     emu.train(
-        sample,
-        params['emulator']['params']['epochs'],
-        params['emulator']['params']['learning_rate'],
+        data,
+        params['emulator']['args']['epochs'],
+        params['emulator']['args']['learning_rate'],
         path=params['output'],
         get_plot=True,
         verbose=args.verbose)

@@ -21,7 +21,7 @@ file_names = {
         'name': 'history_log.cvs',
     },
     'checkpoint': {
-        'name': 'checkpoint_epoch{epoch:04d}.hdf5',
+        'name': 'checkpoint_epoch{epoch:04d}.weights.h5',
         'folder': 'checkpoints',
     },
     'model_last': {
