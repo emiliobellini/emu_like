@@ -7,6 +7,7 @@
 """
 
 import numpy as np
+import scipy.interpolate as interp
 from . import defaults as de
 
 
@@ -161,6 +162,10 @@ class Spectrum(object):
             return MatterPk(spectrum_type, settings, params)
         elif spectrum_type == 'pk_cb':
             return ColdBaryonPk(spectrum_type, settings, params)
+        elif spectrum_type == 'pk_weyl':
+            return WeylPk(spectrum_type, settings, params)
+        elif spectrum_type == 'cl_TT':
+            return CellTT(spectrum_type, settings, params)
         else:
             raise ValueError('Spectrum not recognized!')
 
@@ -288,7 +293,6 @@ class Cl(Spectrum):
         Default header for the Cell.
         Format example: {TT, lensed, 2, 2500}
         """
-        # format example (TT, lensed, 0, 2500)
         hd ='dimensionless {} {} [l(l+1)/2pi] C_l for ell={} to {}.\n\n'
         hd += '\t'.join(self.get_names())
         return hd
@@ -336,14 +340,15 @@ class MatterPk(Pk):
             z_pk = 0.
 
         # convert k in units of 1/Mpc
-        self.k_range *= cosmo.h()
+        k_range = self.k_range * cosmo.h()
 
         # Get pk
-        pk = np.array([cosmo.pk(k, z_pk) for k in self.k_range])
+        pk = np.array([cosmo.pk(k, z_pk) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
         return pk
+
 
 class ColdBaryonPk(Pk):
     """
@@ -385,16 +390,124 @@ class ColdBaryonPk(Pk):
             z_pk = 0.
 
         # convert k in units of 1/Mpc
-        self.k_range *= cosmo.h()
+        k_range = self.k_range * cosmo.h()
 
         # Get pk
-        pk = np.array([cosmo.pk_cb(k, z_pk)
-                       for k in self.k_range])
+        pk = np.array([cosmo.pk_cb(k, z_pk) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
         return pk
 
 
+class WeylPk(Pk):
+    """
+    Weyl power spectrum.
+    As in Class, we use the convention:
+    
+    Weyl_pk = matter_pk * ((phi+psi)/2./d_m)**2 * k**4
+
+    The k**4 factor is just a convention. Since there is a factor
+    k**2 in the Poisson equation this rescaled Weyl spectrum has
+    a shape similar to the matter power spectrum.
+
+    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
+
+    TODO: this is ok at linear order. Beyond that I should check it.
+    """
+
+    def __init__(self, name, settings, params):
+        Pk.__init__(self, name, settings, params)
+        # Put here the list of spectra that Class should
+        # compute. They should go to the 'output' argument.
+        self.class_spectrum = ['mPk', 'dTk']
+        return
+
+    def get_header(self):
+        """
+        Fill the default header.
+        """
+        hd = Pk.get_header(self)
+        hd = hd.format(
+            'Weyl',
+            self.k_min,
+            self.k_max,
+            self.k_space,
+            self.k_num
+        )
+        return hd
+    
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled at k_range bins.
+        """
+
+        # Get redshift
+        if 'z_pk' in cosmo.pars:
+            z_pk = cosmo.pars['z_pk']
+        else:
+            z_pk = 0.
+
+        # convert k in units of 1/Mpc
+        k_range = self.k_range * cosmo.h()
+
+        # Get pk
+        pk = np.array([cosmo.pk(k, z_pk) for k in k_range])
+
+        # The output is in units Mpc**3 and I want (Mpc/h)**3.
+        pk *= cosmo.h()**3.
+
+        # Get transfer functions to rescale the matter Pk
+        tk = cosmo.get_transfer(z=z_pk)
+        fac = ((tk['phi'] + tk['psi'])/2./tk['d_m'])**2. * tk['k (h/Mpc)']**4.
+        fac = interp.interp1d(tk['k (h/Mpc)'], fac)(self.k_range)
+
+        pk *= fac
+        return pk
+
+
 # ----------------- Cell -----------------------------------------------------
 
+class CellTT(Cl):
+    """
+    TT power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, settings, params):
+        Cl.__init__(self, name, settings, params)
+        # Put here the list of spectra that Class should
+        # compute. They should go to the 'output' argument.
+        self.class_spectrum = ['tCl']
+        return
+
+    def get_header(self):
+        """
+        Fill the default header.
+        """
+        hd = Cl.get_header(self)
+        hd = hd.format(
+            'TT',
+            '',
+            self.ell_min,
+            self.ell_max,
+        )
+        return hd
+    
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+
+        # Get cell
+        sp = cosmo.raw_cl(lmax=self.ell_max)
+
+        ell = sp['ell'][self.ell_min:]
+        cl = sp['tt'][self.ell_min:]
+
+        cl *= ell*(ell+1.)/2./np.pi
+
+        return cl

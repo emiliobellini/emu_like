@@ -53,23 +53,23 @@ y_model:
   outputs:
     # Each spectrum is saved in a different file
     pk_m:
-      k_min: 1.e-5
+      k_min: 1.e-4
       k_max: 1.
       k_space: 'log'
-      k_num: 6
+      k_num: 600
     pk_cb:
       k_min: 1.e-4
-      k_max: 2.
+      k_max: 1.
       k_space: 'log'
-      k_num: 6
-    # pk_weyl:
-    #   k_min: 1.e-4
-    #   k_max: 1.
-    #   k_space: 'log'
-    #   k_num: 600
-    # cl_TT:
-    #   ell_min: 2
-    #   ell_max: 2500
+      k_num: 600
+    pk_weyl:
+      k_min: 1.e-4
+      k_max: 1.
+      k_space: 'log'
+      k_num: 600
+    cl_TT:
+      ell_min: 2
+      ell_max: 2500
     # cl_EE:
     #   ell_min: 2
     #   ell_max: 2500
