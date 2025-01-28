@@ -96,12 +96,14 @@ class FFNNEmu(Emulator):
 
         return params
 
-    def fill_missing_params(self, params):
+    @staticmethod
+    def fill_missing_params(params):
         """
         Fill params object with missing entries
         Arguments:
         - params (Params): params object;
         """
+
         default_dict = {
             'output': None,
             'emulator': {
@@ -109,11 +111,17 @@ class FFNNEmu(Emulator):
                 'args': {},
             },
             'datasets': {
-                'name': None,
                 'paths': [],
-                'paths_x': [],
-                'paths_y': [],
-                'args': {},
+                'paths_x': None,
+                'paths_y': None,
+                'columns_x': None,
+                'columns_y': None,
+                'name': None,
+                'remove_non_finite': False,
+                'frac_train': None,
+                'train_test_random_seed': None,
+                'rescale_x': None,
+                'rescale_y': None,
             },
         }
         for key1 in default_dict:

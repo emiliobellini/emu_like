@@ -6,11 +6,12 @@
 
 """
 
+import os
 import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.emu import Emulator
 from emu_like.params import Params
-from emu_like.datasets import Dataset
+from emu_like.datasets import DataCollection, Dataset
 
 
 def train_emu(args):
@@ -71,51 +72,92 @@ def train_emu(args):
         header=de.file_names['params']['header'],
         verbose=args.verbose)
 
-    # Load all Samples in a single list
-    if params['datasets']['paths']:
-        paths_x = params['datasets']['paths']
-        paths_y = [None for x in params['datasets']['paths']]
+    # Test datasets input paths
+    has_paths = params['datasets']['paths'] is not None
+    has_paths_x = params['datasets']['paths_x'] is not None
+    has_paths_y = params['datasets']['paths_y'] is not None
+    if has_paths:
+        paths_is_dir = all([
+            os.path.isdir(p) for p in params['datasets']['paths']])
+        paths_is_file = all([
+            os.path.isfile(p) for p in params['datasets']['paths']])
     else:
-        paths_x = params['datasets']['paths_x']
-        paths_y = params['datasets']['paths_y']
+        paths_is_dir = False
+        paths_is_file = False
+    if has_paths_x:
+        paths_x_is_file = all([
+            os.path.isfile(p) for p in params['datasets']['paths_x']])
+    else:
+        paths_x_is_file = False
+    if has_paths_y:
+        paths_y_is_file = all([
+            os.path.isfile(p) for p in params['datasets']['paths_y']])
+    else:
+        paths_y_is_file = False
 
-    # Read or default
-    try:
-        columns_x = params['datasets']['args']['columns_x']
-    except KeyError:
-        columns_x = None
-    try:
-        columns_y = params['datasets']['args']['columns_y']
-    except KeyError:
-        columns_y = None
-    try:
-        remove_non_finite = params['datasets']['args']['remove_non_finite']
-    except KeyError:
-        remove_non_finite = False
+    # Load datasets
+    # 1) folders created by this code
+    if paths_is_dir:
+        data = [DataCollection().load(
+            path=path,
+            one_y_name=params['datasets']['name'],
+            verbose=False)
+            for path in params['datasets']['paths']]
+        # Get Dataset from DataCollection
+        data = [d.one_y_dataset for d in data]
+        # Slice data
+        data = [d.slice(params['datasets']['columns_x'],
+                        params['datasets']['columns_y'],
+                        verbose=False) for d in data]
+    # 2) unique files for both x and y
+    elif paths_is_file:
+        data = [Dataset().load(
+            path=path,
+            columns_x=params['datasets']['columns_x'],
+            columns_y=params['datasets']['columns_y'],
+            verbose=False)
+            for path in params['datasets']['paths']]
+    # 3) separate files for both x and y
+    elif paths_x_is_file and paths_y_is_file:
+        data = [Dataset().load(
+            path=path_x,
+            path_y=path_y,
+            columns_x=params['datasets']['columns_x'],
+            columns_y=params['datasets']['columns_y'],
+            verbose=False)
+            for path_x, path_y in zip(
+                params['datasets']['paths_x'], params['datasets']['paths_y'])]
+    else:
+        raise Exception('Something is wrong with the paths you specified!')
 
-    data = [Dataset().load(
-        path=path_x,
-        name=params['datasets']['name'],
-        path_y=path_y,
-        columns_x=columns_x,
-        columns_y=columns_y,
-        remove_non_finite=remove_non_finite,
-        verbose=True)
-        for path_x, path_y in zip(paths_x, paths_y)]
+    # Remove non finite "y"
+    if params['datasets']['remove_non_finite']:
+        data = [d.remove_non_finite(verbose=False) for d in data]
 
-    # Join all samples
+    # Print info
+    if args.verbose:
+        io.info('Datasets arguments')
+        io.print_level(1, 'Name: {}.'.format(params['datasets']['name']))
+        io.print_level(1, 'Sliced x data with columns: {}.'.format(
+            params['datasets']['columns_x']))
+        io.print_level(1, 'Sliced y data with columns: {}.'.format(
+            params['datasets']['columns_y']))
+        if params['datasets']['remove_non_finite']:
+            io.print_level(1, 'Removing non finite y from dataset.')
+
+    # Join all datasets
     data = Dataset.join(data, verbose=args.verbose)
 
     # Split training and testing samples
     data.train_test_split(
-        params['datasets']['args']['frac_train'],
-        params['datasets']['args']['train_test_random_seed'],
+        params['datasets']['frac_train'],
+        params['datasets']['train_test_random_seed'],
         verbose=args.verbose)
 
     # If requested, rescale training and testing samples
     data.rescale(
-        params['datasets']['args']['rescale_x'],
-        params['datasets']['args']['rescale_y'],
+        params['datasets']['rescale_x'],
+        params['datasets']['rescale_y'],
         verbose=args.verbose)
     # Save scalers
     data.x_scaler.save(
