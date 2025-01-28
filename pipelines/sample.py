@@ -9,7 +9,7 @@
 import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.params import Params
-from emu_like.datasets import Dataset
+from emu_like.datasets import DataCollection
 
 
 def sample_emu(args):
@@ -24,8 +24,8 @@ def sample_emu(args):
     if args.verbose:
         io.print_level(0, '\nGetting dataset for Emulator\n')
 
-    # Init Dataset object
-    data = Dataset()
+    # Init DataCollection object
+    data = DataCollection()
 
     # Read params
     params = Params().load(args.params_file)

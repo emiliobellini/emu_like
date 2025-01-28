@@ -138,19 +138,13 @@ class XSampler(object):
         self.n_samples = self.x.shape[0]
         return self.n_samples
 
-    def get_x_names(self, columns=None):
+    def get_x_names(self):
         """
         Get x_names.
         """
         self.x_names = [x for x in self.params
                         if XSampler._is_varying(self.params, x)]
 
-        # In case, select the columns
-        if columns is not None:
-            if isinstance(columns, list):
-                self.x_names = [self.x_names[idx] for idx in columns]
-            else:
-                self.x_names = self.x_names[columns]
         return self.x_names
 
     def get_x_header(self):

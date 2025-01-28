@@ -102,6 +102,11 @@ class YModel(object):
         """
         Get n_y.
         """
+        if self.y == []:
+            raise Exception('Empty y arrays! Use get_y '
+                            'or evaluate to generate them first.')
+
+        self.n_y = [y.shape[1] for y in self.y]
         return self.n_y
 
     def get_y_names(self):
