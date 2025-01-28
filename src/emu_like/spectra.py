@@ -27,16 +27,6 @@ class Spectra(object):
     def __getitem__(self, item):
         return self.list[item]
 
-    def get_z_max(self):
-        """TODO
-        """
-        z_max = [x.z_max for x in self.list if x.is_pk]
-        try:
-            self.z_max = max(z_max)
-        except ValueError:
-            self.z_max = None
-        return self.z_max
-
     def get_k_min(self):
         """TODO
         """
@@ -143,6 +133,8 @@ class Spectrum(object):
 
     def __init__(self, name, settings, params):
         self.name = name
+        self.settings = settings
+        self.params = params
         return
 
     @staticmethod
@@ -188,7 +180,6 @@ class Pk(Spectrum):
     def _init_pk_settings(self, settings, params):
         """TODO
         """
-        self.z_max = params['z_pk']['prior']['max']
         self.k_min = settings['k_min']
         self.k_max = settings['k_max']
         self.k_space = settings['k_space']
@@ -289,12 +280,18 @@ class MatterPk(Pk):
     
     def get(self, cosmo):
 
+        # Get redshift
+        if 'z_pk' in cosmo.pars:
+            z_pk = cosmo.pars['z_pk']
+        else:
+            z_pk = 0.
+
         # convert k in units of 1/Mpc
         self.k_range *= cosmo.h()
 
         # Get pk
-        pk = np.array([cosmo.pk(k, cosmo.pars['z_pk'])
-                       for k in self.k_range])
+        pk = np.array([cosmo.pk(k, z_pk) for k in self.k_range])
+
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
         return pk
@@ -325,11 +322,17 @@ class ColdBaryonPk(Pk):
 
     def get(self, cosmo):
 
+        # Get redshift
+        if 'z_pk' in cosmo.pars:
+            z_pk = cosmo.pars['z_pk']
+        else:
+            z_pk = 0.
+
         # convert k in units of 1/Mpc
         self.k_range *= cosmo.h()
 
         # Get pk
-        pk = np.array([cosmo.pk_cb(k, cosmo.pars['z_pk'])
+        pk = np.array([cosmo.pk_cb(k, z_pk)
                        for k in self.k_range])
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
