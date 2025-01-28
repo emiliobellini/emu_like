@@ -10,6 +10,8 @@ import numpy as np
 from . import defaults as de
 
 
+# ----------------- Generic Spectra -----------------------------------------
+
 class Spectra(object):
     """
     This class acts as a container for all the spectra.
@@ -19,7 +21,7 @@ class Spectra(object):
     def __init__(self, settings, params):
         self.list = [Spectrum.choose_one(sp, settings[sp], params)
                      for sp in settings]
-        pass
+        return
 
     def __setitem__(self, item, value):
         self.list[item] = value
@@ -28,7 +30,8 @@ class Spectra(object):
         return self.list[item]
 
     def get_k_min(self):
-        """TODO
+        """
+        Get the global k_min.
         """
         k_min = [x.k_min for x in self.list if x.is_pk]
         try:
@@ -38,7 +41,8 @@ class Spectra(object):
         return self.k_min
 
     def get_k_max(self):
-        """TODO
+        """
+        Get the global k_max.
         """
         k_max = [x.k_max for x in self.list if x.is_pk]
         try:
@@ -48,7 +52,8 @@ class Spectra(object):
         return self.k_max
 
     def get_ell_max(self):
-        """TODO
+        """
+        Get the global ell_max.
         """
         ell_max = [x.ell_max for x in self.list if x.is_cl]
         try:
@@ -58,7 +63,8 @@ class Spectra(object):
         return self.ell_max
 
     def get_want_lensing(self):
-        """TODO
+        """
+        If any of the spectra wants lensing return True.
         """
         want_lensing = [x.want_lensing for x in self.list if x.is_cl]
         try:
@@ -97,18 +103,31 @@ class Spectra(object):
         return class_dict
 
     def get_n_vecs(self):
+        """
+        Get a list of the size of the data
+        vector of each spectrum computed.
+        """
         n_vecs = [sp.get_n_vec() for sp in self.list]
         return n_vecs
 
     def get_names(self):
+        """
+        Get a list of the y names of each spectrum computed.
+        """
         names = [sp.get_names() for sp in self.list]
         return names
 
     def get_headers(self):
+        """
+        Get a list of the y headers of each spectrum computed.
+        """
         headers = [sp.get_header() for sp in self.list]
         return headers
 
     def get_fnames(self):
+        """
+        Get a list of the y file names of each spectrum computed.
+        """
         fnames = [sp.get_fname() for sp in self.list]
         return fnames
 
@@ -116,19 +135,8 @@ class Spectra(object):
 class Spectrum(object):
     """
     Base Spectrum class.
-    TODO
-    It is use to rescale data (useful for training to
-    have order 1 ranges). This main class has three
-    main methods:
-    - choose_one: redirects to the correct subclass
-    - load: load a scaler from a file
-    - save: save scaler to a file.
-
-    Each one of the other scalers (see below), should
-    inherit from this and define three other methods:
-    - fit: fit scaler
-    - transform: transform data using fitted scaler
-    - inverse_transform: transform back data.
+    Return the correct spectrum with the choose_one method,
+    and initialise common attributes.
     """
 
     def __init__(self, name, settings, params):
@@ -157,16 +165,22 @@ class Spectrum(object):
             raise ValueError('Spectrum not recognized!')
 
     def get_fname(self):
+        """
+        Get the default file name for each spectrum.
+        It appends the name of the spectrum
+        to the default name.
+        """
         fname = de.file_names['y_sample']['name'].format('_' + self.name)
         return fname
 
 
+# ----------------- Generic Pk and Cell ---------------------------------------
+
 class Pk(Spectrum):
     """
-    TODO
     Generic class for k-dependent power spectra.
 
-    NOTE: all the units are in powers of h/Mpc.
+    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
     """
 
     def __init__(self, name, settings, params):
@@ -174,11 +188,12 @@ class Pk(Spectrum):
         self.is_pk = True
         self.is_cl = False
         if settings:
-            self._init_pk_settings(settings, params)
+            self._init_pk_settings(settings)
         return
 
-    def _init_pk_settings(self, settings, params):
-        """TODO
+    def _init_pk_settings(self, settings):
+        """
+        Get attributes common to all the k dependent spectra.
         """
         self.k_min = settings['k_min']
         self.k_max = settings['k_max']
@@ -188,7 +203,9 @@ class Pk(Spectrum):
         return
 
     def _get_k_range(self):
-        """TODO
+        """
+        Return the k range.
+        It is possible linear or log spacing.
         """
         if self.k_space == 'linear':
             fun = np.linspace
@@ -204,22 +221,32 @@ class Pk(Spectrum):
         return self.k_range
     
     def get_n_vec(self):
+        """
+        Return the size of the data vector.
+        """
         return self.k_num
 
     def get_names(self):
+        """
+        Default names for the P(k_i) at bin i.
+        """
         names = ['k_{}'.format(y) for y in range(self.get_n_vec())]
         return names
 
     def get_header(self):
+        """
+        Default header for the Pk.
+        Format example: {Matter, 1.e-3, 1., log, 600}
+        """
         hd = '{} power spectrum P(k) in units (Mpc/h)^3 as a function of '
         hd += 'k (h/Mpc).\nk_min (h/Mpc) = {}, k_max (h/Mpc) = {}, '
         hd += '{}-sampled, for a total number of k_modes of {}.\n\n'
         hd += '\t'.join(self.get_names())
         return hd
 
+
 class Cl(Spectrum):
     """
-    TODO
     Generic class for ell-dependent power spectra.
     """
 
@@ -233,41 +260,60 @@ class Cl(Spectrum):
         return
 
     def _init_cl_settings(self, settings):
-        """TODO
+        """
+        Get attributes common to all the ell dependent spectra.
         """
         self.ell_min = settings['ell_min']
         self.ell_max = settings['ell_max']
-        self.ell_num = self.ell_max - self.ell_max + 1
+        self.ell_range = np.arange(self.ell_min, self.ell_max+1)
+        self.ell_num = len(self.ell_range)
         return
 
     def get_n_vec(self):
+        """
+        Return the size of the data vector.
+        """
         return self.ell_num
 
     def get_names(self):
+        """
+        Default names for the C(ell_i) at bin i.
+        NOTE: bin 0 does not mean ell=0 but ell=2 if ell_min=2.
+        """
         names = ['ell_{}'.format(y) for y in range(self.get_n_vec())]
         return names
 
     def get_header(self):
+        """
+        Default header for the Cell.
+        Format example: {TT, lensed, 2, 2500}
+        """
         # format example (TT, lensed, 0, 2500)
         hd ='dimensionless {} {} [l(l+1)/2pi] C_l for ell={} to {}.\n\n'
         hd += '\t'.join(self.get_names())
         return hd
 
 
+# ----------------- Pk -----------------------------------------------------
+
 class MatterPk(Pk):
     """
-    TODO
     Matter power spectrum.
 
-    NOTE: all the units are in powers of h/Mpc.
+    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
     """
 
     def __init__(self, name, settings, params):
         Pk.__init__(self, name, settings, params)
+        # Put here the list of spectra that Class should
+        # compute. They should go to the 'output' argument.
         self.class_spectrum = ['mPk']
         return
 
     def get_header(self):
+        """
+        Fill the default header.
+        """
         hd = Pk.get_header(self)
         hd = hd.format(
             'Total matter',
@@ -279,6 +325,9 @@ class MatterPk(Pk):
         return hd
     
     def get(self, cosmo):
+        """
+        Return the correct spectrum sampled at k_range bins.
+        """
 
         # Get redshift
         if 'z_pk' in cosmo.pars:
@@ -298,18 +347,22 @@ class MatterPk(Pk):
 
 class ColdBaryonPk(Pk):
     """
-    TODO
     CDM+baryon power spectrum.
 
-    NOTE: all the units are in powers of h/Mpc.
+    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
     """
 
     def __init__(self, name, settings, params):
         Pk.__init__(self, name, settings, params)
+        # Put here the list of spectra that Class should
+        # compute. They should go to the 'output' argument.
         self.class_spectrum = ['mPk']
         return
 
     def get_header(self):
+        """
+        Fill the default header.
+        """
         hd = Pk.get_header(self)
         hd = hd.format(
             'CDM + baryons',
@@ -321,6 +374,9 @@ class ColdBaryonPk(Pk):
         return hd
 
     def get(self, cosmo):
+        """
+        Return the correct spectrum sampled at k_range bins.
+        """
 
         # Get redshift
         if 'z_pk' in cosmo.pars:
@@ -334,6 +390,11 @@ class ColdBaryonPk(Pk):
         # Get pk
         pk = np.array([cosmo.pk_cb(k, z_pk)
                        for k in self.k_range])
+
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
         return pk
+
+
+# ----------------- Cell -----------------------------------------------------
+
