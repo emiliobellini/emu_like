@@ -463,11 +463,11 @@ class ClassSpectra(YModel):
             io.print_level(1, 'Loading classy from {}'.format(classy.__file__))
 
         # Initialise spectra
-        self.spectra = Spectra(outputs, params)
+        self.spectra = Spectra(outputs)
 
         # Build parameter dictionary
         var = {nm: None for nm in self.x_names}
-        self.class_params = self.args | self.spectra.get_class_output() | var
+        self.class_params = self.args | self.spectra.get_class_params() | var
 
         # Fix known properties of the function
         self.n_y = self.get_n_y()

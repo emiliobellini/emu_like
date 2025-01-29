@@ -70,39 +70,33 @@ y_model:
     cl_TT:
       ell_min: 2
       ell_max: 2500
-    # cl_EE:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_TE:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_pp:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_Tp:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_Ep:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_TT_lensed:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_EE_lensed:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_TE_lensed:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_pp_lensed:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_Tp_lensed:
-    #   ell_min: 2
-    #   ell_max: 2500
-    # cl_Ep_lensed:
-    #   ell_min: 2
-    #   ell_max: 2500
+    cl_EE:
+      ell_min: 2
+      ell_max: 2500
+    cl_TE:
+      ell_min: 2
+      ell_max: 2500
+    cl_BB:
+      ell_min: 2
+      ell_max: 2500
+    cl_pp:
+      ell_min: 2
+      ell_max: 2500
+    cl_Tp:
+      ell_min: 2
+      ell_max: 2500
+    cl_TT_lensed:
+      ell_min: 2
+      ell_max: 2500
+    cl_EE_lensed:
+      ell_min: 2
+      ell_max: 2500
+    cl_TE_lensed:
+      ell_min: 2
+      ell_max: 2500
+    cl_BB_lensed:
+      ell_min: 2
+      ell_max: 2500
 
 
 # List of parameters.

@@ -4,6 +4,12 @@
 :Synopsis: Spectra computed by Class.
 :Author: Emilio Bellini
 
+: Description: this module provides a list of classes for each
+spectrum that can be computed. It uses classy to get the spectra,
+the syntax and conventions are equivalent to those in Class. 
+Here we are assuming that a classy.Class() object has already
+been initialised, and the output has been computed. This is done
+in src/emu_like/y_models.py.
 """
 
 import numpy as np
@@ -11,17 +17,24 @@ import scipy.interpolate as interp
 from . import defaults as de
 
 
-# ----------------- Generic Spectra -----------------------------------------
+# ----------------- Generic Spectra ------------------------------------------#
 
 class Spectra(object):
     """
     This class acts as a container for all the spectra.
-    It eases the computation of common quantities.
+    It is useful to get common properties of the spectra,
+    as well as to prepare the parameters that should be
+    passed to classy for a proper run.
     """
 
-    def __init__(self, settings, params):
-        self.list = [Spectrum.choose_one(sp, settings[sp], params)
-                     for sp in settings]
+    def __init__(self, params):
+        """
+        Init the list of spectra to be computed.
+        Arguments:
+        - params (dict): nested dictionary of parameters
+          for each spectrum.
+        """
+        self.list = [Spectrum.choose_one(sp, params[sp]) for sp in params]
         return
 
     def __setitem__(self, item, value):
@@ -74,34 +87,34 @@ class Spectra(object):
             self.want_lensing = False
         return self.want_lensing
 
-    def get_class_output(self):
+    def get_class_params(self):
         """
-        Add keys to the parameters passed to class
-        to have a consistent evolution with all the
-        spectra/settings requested.
+        Build a dictionary of parameters needed by Class
+        to properly compute the spectra requested.
         """
-        class_dict = {}
+        class_params = {}
 
         # Output spectra
-        class_output = [x.class_spectrum for x in self]
+        class_output = [x.class_spectra for x in self]
         class_output = [x for xs in class_output for x in xs]
         class_output = list(set(class_output))
         if class_output:
-            class_dict['output'] = ', '.join(class_output)
+            class_params['output'] = ', '.join(class_output)
 
         # k max Pk
         if self.get_k_max():
-            class_dict['P_k_max_h/Mpc'] = self.k_max
+            class_params['P_k_max_h/Mpc'] = self.k_max
 
         # ell max Pk
         if self.get_ell_max():
-            class_dict['l_max_scalars'] = self.ell_max
+            class_params['l_max_scalars'] = self.ell_max
 
         # lensing
         if self.get_want_lensing():
-            class_dict['lensing'] = self.want_lensing
+            class_params['lensing'] = 'yes'
+            class_params['modes'] = 's'
 
-        return class_dict
+        return class_params
 
     def get_n_vecs(self):
         """
@@ -140,14 +153,16 @@ class Spectrum(object):
     and initialise common attributes.
     """
 
-    def __init__(self, name, settings, params):
+    def __init__(self, name, params):
+        # Name of the spectrum as it is in the
+        # parameter file (used for the y file names)
         self.name = name
-        self.settings = settings
+        # Spectrum dependent parameters, i.e. k_min, k_max, ell_max, ...
         self.params = params
         return
 
     @staticmethod
-    def choose_one(spectrum_type, settings, params):
+    def choose_one(spectrum_type, params):
         """
         Main function to get the correct Spectrum.
 
@@ -158,73 +173,99 @@ class Spectrum(object):
             - Spectrum (object): get the correct
               spectrum and initialize it.
         """
+        # Pk
         if spectrum_type == 'pk_m':
-            return MatterPk(spectrum_type, settings, params)
+            return MatterPk(spectrum_type, params)
         elif spectrum_type == 'pk_cb':
-            return ColdBaryonPk(spectrum_type, settings, params)
+            return ColdBaryonPk(spectrum_type, params)
         elif spectrum_type == 'pk_weyl':
-            return WeylPk(spectrum_type, settings, params)
+            return WeylPk(spectrum_type, params)
+        # Cl
         elif spectrum_type == 'cl_TT':
-            return CellTT(spectrum_type, settings, params)
+            return CellTT(spectrum_type, params)
+        elif spectrum_type == 'cl_EE':
+            return CellEE(spectrum_type, params)
+        elif spectrum_type == 'cl_TE':
+            return CellTE(spectrum_type, params)
+        elif spectrum_type == 'cl_BB':
+            return CellBB(spectrum_type, params)
+        elif spectrum_type == 'cl_pp':
+            return Cellpp(spectrum_type, params)
+        elif spectrum_type == 'cl_Tp':
+            return CellTp(spectrum_type, params)
+        # Cl - lensed
+        elif spectrum_type == 'cl_TT_lensed':
+            return CellTTLensed(spectrum_type, params)
+        elif spectrum_type == 'cl_EE_lensed':
+            return CellEELensed(spectrum_type, params)
+        elif spectrum_type == 'cl_TE_lensed':
+            return CellTELensed(spectrum_type, params)
+        elif spectrum_type == 'cl_BB_lensed':
+            return CellBBLensed(spectrum_type, params)
         else:
-            raise ValueError('Spectrum not recognized!')
+            raise ValueError(
+                'Spectrum {} not recognized!'.format(spectrum_type))
 
     def get_fname(self):
         """
         Get the default file name for each spectrum.
-        It appends the name of the spectrum
-        to the default name.
+        It appends the name of the spectrum to the default name.
         """
         fname = de.file_names['y_sample']['name'].format('_' + self.name)
         return fname
 
+    def _get_range(self, min, max, num, space):
+        """
+        Return a range given specifics.
+        Arguments:
+        - min (float): minimum value;
+        - max (float): maximum value;
+        - num (int): number of elements;
+        - space (str): spacing (linear or log).
+        """
+        if space == 'linear':
+            fun = np.linspace
+            start = min
+            stop = max
+        elif space == 'log':
+            fun = np.logspace
+            start = np.log10(min)
+            stop = np.log10(max)
+        else:
+            raise Exception('Spacing not recognized!')
+        rg = fun(start, stop, num=num)
+        return rg
 
-# ----------------- Generic Pk and Cell ---------------------------------------
+
+# ----------------- Generic Pk and Cell --------------------------------------#
 
 class Pk(Spectrum):
     """
-    Generic class for k-dependent power spectra.
+    Generic class for k-dependent power spectra (matter, cb, weyl).
 
     NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
     """
 
-    def __init__(self, name, settings, params):
-        Spectrum.__init__(self, name, settings, params)
+    def __init__(self, name, params):
+        Spectrum.__init__(self, name, params)
+
+        # Bools to pick the spectrum type
         self.is_pk = True
         self.is_cl = False
-        if settings:
-            self._init_pk_settings(settings)
+
+        # Tipical parameters of k dependent PS
+        self.k_min = params['k_min']
+        self.k_max = params['k_max']
+        self.k_num = params['k_num']
+        self.k_space = params['k_space']
+        self.k_range = self._get_range(
+            self.k_min, self.k_max, self.k_num, self.k_space)
+
+        # - (str) name you want to appear in the header of the
+        #   file, see Pk.get_header
+        self.hd_name = None
         return
 
-    def _init_pk_settings(self, settings):
-        """
-        Get attributes common to all the k dependent spectra.
-        """
-        self.k_min = settings['k_min']
-        self.k_max = settings['k_max']
-        self.k_space = settings['k_space']
-        self.k_num = settings['k_num']
-        self._get_k_range()
-        return
-
-    def _get_k_range(self):
-        """
-        Return the k range.
-        It is possible linear or log spacing.
-        """
-        if self.k_space == 'linear':
-            fun = np.linspace
-            start = self.k_min
-            stop = self.k_max
-        elif self.k_space == 'log':
-            fun = np.logspace
-            start = np.log10(self.k_min)
-            stop = np.log10(self.k_max)
-        else:
-            raise Exception('Spacing not recognized!')
-        self.k_range = fun(start, stop, num=self.k_num)
-        return self.k_range
-    
     def get_n_vec(self):
         """
         Return the size of the data vector.
@@ -245,34 +286,85 @@ class Pk(Spectrum):
         """
         hd = '{} power spectrum P(k) in units (Mpc/h)^3 as a function of '
         hd += 'k (h/Mpc).\nk_min (h/Mpc) = {}, k_max (h/Mpc) = {}, '
-        hd += '{}-sampled, for a total number of k_modes of {}.\n\n'
-        hd += '\t'.join(self.get_names())
+        hd += '{}-sampled, for a total number of k_modes of {}.\n'
+        # hd += '\t'.join(self.get_names())
+
+        hd = hd.format(
+            self.hd_name,
+            self.k_min,
+            self.k_max,
+            self.k_space,
+            self.k_num
+        )
         return hd
 
 
-class Cl(Spectrum):
+class Cell(Spectrum):
     """
     Generic class for ell-dependent power spectra.
     """
 
-    def __init__(self, name, settings, params):
-        Spectrum.__init__(self, name, settings, params)
+    def __init__(self, name, params):
+        Spectrum.__init__(self, name, params)
+
+        # Bools to pick the spectrum type
         self.is_pk = False
         self.is_cl = True
-        self.want_lensing = False
-        if settings:
-            self._init_cl_settings(settings)
-        return
 
-    def _init_cl_settings(self, settings):
-        """
-        Get attributes common to all the ell dependent spectra.
-        """
-        self.ell_min = settings['ell_min']
-        self.ell_max = settings['ell_max']
+        # Tipical parameters of ell dependent PS
+        self.ell_min = params['ell_min']
+        self.ell_max = params['ell_max']
         self.ell_range = np.arange(self.ell_min, self.ell_max+1)
         self.ell_num = len(self.ell_range)
+
+        # Placeholder for spectrum dependent definitions
+        # (adapt them in each class)
+        # - (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = None
+        # - (str) name you want to appear in the header of the
+        #   file, see Cell.get_header
+        self.hd_name = None
+        # - (bool) True if the spectrum needs lensing
+        self.want_lensing = False
         return
+
+    def _get_raw_cl(self, cosmo, cl_name):
+        """
+        Convenience method to get unlensed Cls.
+        Arguments:
+        - cosmo: classy.Class() instance. We assume that
+          the output was previously computed;
+        - cl_name (str): type of cl with the same syntax as Class.
+        """
+
+        # Get cell
+        sp = cosmo.raw_cl(lmax=self.ell_max)
+
+        ell = sp['ell'][self.ell_min:]
+        cl = sp[cl_name][self.ell_min:]
+
+        cl *= ell*(ell+1.)/2./np.pi
+
+        return cl
+
+    def _get_lensed_cl(self, cosmo, cl_name):
+        """
+        Convenience method to get lensed Cls.
+        Arguments:
+        - cosmo: classy.Class() instance. We assume that
+          the output was previously computed;
+        - cl_name (str): type of cl with the same syntax as Class.
+        """
+
+        # Get cell
+        sp = cosmo.lensed_cl(lmax=self.ell_max)
+
+        ell = sp['ell'][self.ell_min:]
+        cl = sp[cl_name][self.ell_min:]
+
+        cl *= ell*(ell+1.)/2./np.pi
+
+        return cl
 
     def get_n_vec(self):
         """
@@ -293,12 +385,19 @@ class Cl(Spectrum):
         Default header for the Cell.
         Format example: {TT, lensed, 2, 2500}
         """
-        hd ='dimensionless {} {} [l(l+1)/2pi] C_l for ell={} to {}.\n\n'
-        hd += '\t'.join(self.get_names())
+        hd ='dimensionless {} [l(l+1)/2pi] C_l for ell={} to {}.\n'
+        # hd += '\t'.join(self.get_names())
+
+        # Cl specific settings
+        hd = hd.format(
+            self.hd_name,
+            self.ell_min,
+            self.ell_max,
+        )
         return hd
 
 
-# ----------------- Pk -----------------------------------------------------
+# ----------------- Pk -------------------------------------------------------#
 
 class MatterPk(Pk):
     """
@@ -307,27 +406,17 @@ class MatterPk(Pk):
     NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
     """
 
-    def __init__(self, name, settings, params):
-        Pk.__init__(self, name, settings, params)
-        # Put here the list of spectra that Class should
-        # compute. They should go to the 'output' argument.
-        self.class_spectrum = ['mPk']
+    def __init__(self, name, params):
+        Pk.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['mPk']
+        # (str) name you want to appear in the header of the
+        # file, see Pk.get_header
+        self.hd_name = 'Total matter'
         return
 
-    def get_header(self):
-        """
-        Fill the default header.
-        """
-        hd = Pk.get_header(self)
-        hd = hd.format(
-            'Total matter',
-            self.k_min,
-            self.k_max,
-            self.k_space,
-            self.k_num
-        )
-        return hd
-    
     def get(self, cosmo):
         """
         Return the correct spectrum sampled at k_range bins.
@@ -357,26 +446,16 @@ class ColdBaryonPk(Pk):
     NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
     """
 
-    def __init__(self, name, settings, params):
-        Pk.__init__(self, name, settings, params)
-        # Put here the list of spectra that Class should
-        # compute. They should go to the 'output' argument.
-        self.class_spectrum = ['mPk']
-        return
+    def __init__(self, name, params):
+        Pk.__init__(self, name, params)
 
-    def get_header(self):
-        """
-        Fill the default header.
-        """
-        hd = Pk.get_header(self)
-        hd = hd.format(
-            'CDM + baryons',
-            self.k_min,
-            self.k_max,
-            self.k_space,
-            self.k_num
-        )
-        return hd
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['mPk']
+        # (str) name you want to appear in the header of the
+        # file, see Pk.get_header
+        self.hd_name = 'CDM + baryons'
+        return
 
     def get(self, cosmo):
         """
@@ -416,27 +495,17 @@ class WeylPk(Pk):
     TODO: this is ok at linear order. Beyond that I should check it.
     """
 
-    def __init__(self, name, settings, params):
-        Pk.__init__(self, name, settings, params)
-        # Put here the list of spectra that Class should
-        # compute. They should go to the 'output' argument.
-        self.class_spectrum = ['mPk', 'dTk']
+    def __init__(self, name, params):
+        Pk.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['mPk', 'dTk']
+        # (str) name you want to appear in the header of the
+        # file, see Pk.get_header
+        self.hd_name = 'Weyl'
         return
 
-    def get_header(self):
-        """
-        Fill the default header.
-        """
-        hd = Pk.get_header(self)
-        hd = hd.format(
-            'Weyl',
-            self.k_min,
-            self.k_max,
-            self.k_space,
-            self.k_num
-        )
-        return hd
-    
     def get(self, cosmo):
         """
         Return the correct spectrum sampled at k_range bins.
@@ -466,9 +535,9 @@ class WeylPk(Pk):
         return pk
 
 
-# ----------------- Cell -----------------------------------------------------
+# ----------------- Cell -----------------------------------------------------#
 
-class CellTT(Cl):
+class CellTT(Cell):
     """
     TT power spectrum.
     As in Class, we compute the dimensionless Cell using:
@@ -477,37 +546,304 @@ class CellTT(Cl):
 
         """
 
-    def __init__(self, name, settings, params):
-        Cl.__init__(self, name, settings, params)
-        # Put here the list of spectra that Class should
-        # compute. They should go to the 'output' argument.
-        self.class_spectrum = ['tCl']
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['tCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'tt'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'TT'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = False
         return
 
-    def get_header(self):
-        """
-        Fill the default header.
-        """
-        hd = Cl.get_header(self)
-        hd = hd.format(
-            'TT',
-            '',
-            self.ell_min,
-            self.ell_max,
-        )
-        return hd
-    
     def get(self, cosmo):
         """
         Return the correct spectrum sampled up to ell max.
         """
+        return self._get_raw_cl(cosmo, self.class_name)
 
-        # Get cell
-        sp = cosmo.raw_cl(lmax=self.ell_max)
 
-        ell = sp['ell'][self.ell_min:]
-        cl = sp['tt'][self.ell_min:]
+class CellEE(Cell):
+    """
+    EE power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
 
-        cl *= ell*(ell+1.)/2./np.pi
+        """
 
-        return cl
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['pCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'ee'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'EE'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = False
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_raw_cl(cosmo, self.class_name)
+
+
+class CellTE(Cell):
+    """
+    TE power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['tCl', 'pCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'te'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'TE'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = False
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_raw_cl(cosmo, self.class_name)
+
+
+class CellBB(Cell):
+    """
+    BB power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['pCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'bb'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'BB'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = False
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_raw_cl(cosmo, self.class_name)
+
+
+class Cellpp(Cell):
+    """
+    phi-phi power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'pp'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'phi-phi'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = False
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_raw_cl(cosmo, self.class_name)
+
+
+class CellTp(Cell):
+    """
+    T-phi power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['tCl', 'lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'tp'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'T-phi'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = False
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_raw_cl(cosmo, self.class_name)
+
+
+# ----------------- Cell - lensed --------------------------------------------#
+
+class CellTTLensed(Cell):
+    """
+    TT lensed power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['tCl', 'lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'tt'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'TT lensed'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = True
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_lensed_cl(cosmo, self.class_name)
+
+
+class CellEELensed(Cell):
+    """
+    EE lensed power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['pCl', 'lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'ee'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'EE lensed'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = True
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_lensed_cl(cosmo, self.class_name)
+
+
+class CellTELensed(Cell):
+    """
+    TE lensed power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['tCl', 'pCl', 'lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'te'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'TE lensed'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = True
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_lensed_cl(cosmo, self.class_name)
+
+
+class CellBBLensed(Cell):
+    """
+    BB lensed power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['pCl', 'lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'bb'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'BB lensed'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = True
+        return
+
+    def get(self, cosmo):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_lensed_cl(cosmo, self.class_name)
