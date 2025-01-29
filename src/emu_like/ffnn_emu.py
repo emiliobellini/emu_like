@@ -169,7 +169,7 @@ class FFNNEmu(Emulator):
           loss function is improved;
         - Logfile: saves a log file in the main directory
         - Early Stopping: stop earlier if loss of the validation
-          sample does not improve for a certain number of epochs.
+          dataset does not improve for a certain number of epochs.
         """
 
         # Checkpoint
@@ -265,8 +265,8 @@ class FFNNEmu(Emulator):
         fname = os.path.join(path, de.file_names['y_scaler']['name'])
         self.y_scaler = Scaler.load(fname, verbose=verbose)
 
-        # Load sample details
-        fname = os.path.join(path, de.file_names['sample_details']['name'])
+        # Load dataset details
+        fname = os.path.join(path, de.file_names['dataset_details']['name'])
         details = Params().load(fname)
         self.x_names = details['x_names']
         self.y_names = details['y_names']
@@ -328,7 +328,7 @@ class FFNNEmu(Emulator):
         if verbose:
             io.info('Saving best model at {}'.format(fname))
 
-        # Save sample details
+        # Save dataset details
         # We do not always have names for 'x' and 'y'
         # In case we do not have them, just store None.
         try:
@@ -344,8 +344,8 @@ class FFNNEmu(Emulator):
             'y_names': save_y,
             'x_ranges': self.x_ranges.tolist(),
         })
-        fname = os.path.join(path, de.file_names['sample_details']['name'])
-        details.save(fname, header=de.file_names['sample_details']['header'])
+        fname = os.path.join(path, de.file_names['dataset_details']['name'])
+        details.save(fname, header=de.file_names['dataset_details']['header'])
 
         return
 
@@ -359,16 +359,16 @@ class FFNNEmu(Emulator):
         The params dictionary should contain the following keys:
         - activation (str): any activation function from (str)
           https://keras.io/api/layers/activations;
-        - sample_n_x (int): number of x variables. Here we use it to fix
+        - data_n_x (int): number of x variables. Here we use it to fix
           the number of neurons of the input layer;
         - neurons_hidden (list of positive int): number of neurons
           for each hidden layer;
-        - sample_n_y (int): number of y variables. Here we use it to fix
+        - data_n_y (int): number of y variables. Here we use it to fix
           the number of neurons of the output layer;
         - batch_normalization (bool): normalize tensors with mean and variance;
         - dropout_rate (float): relative dropout during training.
           It helps with overfitting;
-        - batch_size (int): divide sample into batches of this size;
+        - batch_size (int): divide dataset into batches of this size;
         - optimizer (str): any optimizer from
           https://www.tensorflow.org/api_docs/python/tf/keras/optimizers
         - loss (str): name of the loss function. Options: any of the functions
@@ -403,7 +403,7 @@ class FFNNEmu(Emulator):
         # Input layer
         model.add(
             keras.layers.Input(
-                shape=(params['sample_n_x'],),
+                shape=(params['data_n_x'],),
                 batch_size=self.batch_size)
             )
         if params['batch_normalization']:
@@ -419,7 +419,7 @@ class FFNNEmu(Emulator):
             model.add(keras.layers.Dropout(params['dropout_rate']))
         # Output layer
         if want_output_layer:
-            model.add(keras.layers.Dense(params['sample_n_y'],
+            model.add(keras.layers.Dense(params['data_n_y'],
                                          activation=None))
 
         model.compile(optimizer=params['optimizer'], loss=params['loss'])
@@ -431,13 +431,13 @@ class FFNNEmu(Emulator):
 
         return
 
-    def train(self, sample, epochs, learning_rate,
+    def train(self, data, epochs, learning_rate,
               path=None, get_plot=False, verbose=False):
         """
         Train the emulator.
         Arguments:
-        - sample (src.emu_like_sample.Sample object): class
-          with the sample (already loaded, rescaled and split
+        - data (src.emu_like.datasets.Dataset object): class
+          with the dataset (already loaded, rescaled and split
           into training and testing samples) that should be
           used to train the emulator;
         - epochs (int or list of ints): epochs to run. If it is
@@ -452,12 +452,12 @@ class FFNNEmu(Emulator):
         - verbose (bool, default: False): verbosity.
         """
 
-        # Save sample details as attributes
-        self.x_scaler = sample.x_scaler
-        self.y_scaler = sample.y_scaler
-        self.x_names = sample.x_names
-        self.y_names = sample.y_names
-        self.x_ranges = sample.x_ranges
+        # Save dataset details as attributes
+        self.x_scaler = data.x_scaler
+        self.y_scaler = data.y_scaler
+        self.x_names = data.x_names
+        self.y_names = data.y_names
+        self.x_ranges = data.x_ranges
 
         # Take the last element of the list and use this
         if isinstance(epochs, list):
@@ -476,14 +476,14 @@ class FFNNEmu(Emulator):
         else:
             initial_epoch = 0
         self.model.fit(
-            sample.x_train_scaled,
-            sample.y_train_scaled,
+            data.x_train_scaled,
+            data.y_train_scaled,
             epochs=initial_epoch+epochs,
             initial_epoch=initial_epoch,
             batch_size=self.batch_size,
             validation_data=(
-                sample.x_test_scaled,
-                sample.y_test_scaled),
+                data.x_test_scaled,
+                data.y_test_scaled),
             callbacks=callbacks,
             verbose=int(verbose))
 
@@ -494,8 +494,8 @@ class FFNNEmu(Emulator):
 
         # Plot - Loss per epoch
         if get_plot:
-            plt.semilogy(self.epochs, self.loss, label='training sample')
-            plt.semilogy(self.epochs, self.val_loss, label='validation sample')
+            plt.semilogy(self.epochs, self.loss, label='training data')
+            plt.semilogy(self.epochs, self.val_loss, label='validation data')
             plt.xlabel('epoch')
             plt.ylabel(self.model.loss)
             plt.legend()

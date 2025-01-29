@@ -132,7 +132,7 @@ class YModel(object):
         """
         Get y_fnames.
         """
-        self.y_fnames = [de.file_names['y_sample']['name'].format('')]
+        self.y_fnames = [de.file_names['y_data']['name'].format('')]
         return self.y_fnames
 
     def get_y(self, x, **kwargs):

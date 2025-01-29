@@ -161,7 +161,7 @@ class XSampler(object):
         """
         Get x_fname.
         """
-        self.x_fname = de.file_names['x_sample']['name']
+        self.x_fname = de.file_names['x_data']['name']
         return self.x_fname
 
     def get_x(self):

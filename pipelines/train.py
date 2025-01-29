@@ -175,8 +175,8 @@ def train_emu(args):
         emu.load(params['output'], model_to_load='best', verbose=args.verbose)
     # Otherwise
     else:
-        params['emulator']['args']['sample_n_x'] = data.n_x
-        params['emulator']['args']['sample_n_y'] = data.n_y
+        params['emulator']['args']['data_n_x'] = data.n_x
+        params['emulator']['args']['data_n_y'] = data.n_y
         # Build architecture
         emu.build(params['emulator']['args'], verbose=args.verbose)
 

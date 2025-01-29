@@ -518,7 +518,7 @@ class DataCollection(object):
         self.y_headers = []  # Headers for y files
 
         # Paths
-        self.path = None  # Path of the sample
+        self.path = None  # Path of the dataset
         self.x_fname = None  # File name of x data
         self.y_fnames = []  # File names of y data
 
@@ -550,7 +550,7 @@ class DataCollection(object):
         """
         # Arguments or defaults
         if fname is None:
-            fname = de.file_names['x_sample']['name']
+            fname = de.file_names['x_data']['name']
         if root is None:
             root = self.path
         if x_array is None:
@@ -704,7 +704,7 @@ class DataCollection(object):
         # Get correct index
         if name is not None:
             idx = self.y_fnames.index(
-                de.file_names['y_sample']['name'].format('_'+name))
+                de.file_names['y_data']['name'].format('_'+name))
         elif len(self.y_fnames) == 1:
             idx = 0
         else:
@@ -865,7 +865,7 @@ class DataCollection(object):
         # 4) Assign values.
         for ny_gen, y_gen in enumerate(y_model.y):
             y_gen[:self.counter_samples] = y[ny_gen]
-        # 5) Synchronize with Sample.y.
+        # 5) Synchronize with self.y.
         self.y = y_model.y
 
         # Get remaining y attributes
@@ -978,6 +978,7 @@ class DataCollection(object):
             **y_args,
             verbose=verbose)
 
+        # Get y attributes
         self.n_y = y_model.get_n_y()
         self.y_names = y_model.get_y_names()
         self.y_headers = y_model.get_y_headers()
@@ -986,17 +987,30 @@ class DataCollection(object):
         if save_incrementally:
             self._save_y(verbose=verbose)
         
-        for nx, x in enumerate(tqdm.tqdm(self.x)):
-            y_one = y_model.evaluate(x, nx)
+        # Init self.y
+        y_model.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+        self.y = y_model.y
+
+        # Start iteration
+        for ns, x in enumerate(tqdm.tqdm(self.x)):
+            y_one = y_model.evaluate(x, ns)
             self.counter_samples += 1
 
             # Save array
             if save_incrementally:
                 self._append_y(y_one)
+            
+        # Get remaining attributes
+        self.y_ranges = y_model.get_y_ranges()
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
         self.y_model = y_model
+
+        # Get single dataset if only one "y"
+        if len(self.y_fnames) == 1:
+            self.get_one_y_dataset()
+
         return
 
     def resume(self, save_incrementally=False, verbose=False):
@@ -1023,13 +1037,20 @@ class DataCollection(object):
             return
 
         start = self.counter_samples
-        for nx, x in enumerate(tqdm.tqdm(self.x[start:])):
-            y_one = self.y_model.evaluate(x, start + nx)
+        for ns, x in enumerate(tqdm.tqdm(self.x[start:])):
+            y_one = self.y_model.evaluate(x, start + ns)
             self.counter_samples += 1
-
+        
             # Save array
             if save_incrementally:
                 self._append_y(y_one)
-        
+
+        # Get remaining attributes
+        self.y_ranges = self.y_model.get_y_ranges()
+
+        # Get single dataset if only one "y"
+        if len(self.y_fnames) == 1:
+            self.get_one_y_dataset()
+
         return
 
