@@ -81,8 +81,8 @@ class YModel(object):
         elif name == 'cobaya_loglike':
             return CobayaLoglike(params, n_samples, verbose=verbose, **kwargs)
         elif name == 'class_spectra':
-            return ClassSpectra(params, n_samples, outputs,
-                                verbose=verbose, **kwargs)
+            return ClassSpectra(
+                params, n_samples, outputs, verbose=verbose, **kwargs)
         else:
             raise Exception('YModel not recognised!')
 
@@ -473,6 +473,11 @@ class ClassSpectra(YModel):
         self.n_y = self.get_n_y()
         self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
 
+        # Compute reference cosmology (in case, to take the ratio)
+        cosmo_ref = self.classy.Class()
+        cosmo_ref.set(de.cosmo_params | self.spectra.get_class_params())
+        cosmo_ref.compute()
+        self.y_ref = [sp.get(cosmo_ref)[np.newaxis] for sp in self.spectra]
         return
 
     def get_n_y(self):
@@ -528,7 +533,13 @@ class ClassSpectra(YModel):
             # Fill with nans if error
             y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
 
+        # Take the ratio
+        for nsp, sp in enumerate(self.spectra):
+            if sp.ratio:
+                y[nsp] = y[nsp]/self.y_ref[nsp]
+
         # Store in self
         for ny in range(len(self.n_y)):
             self.y[ny][idx] = y[ny]
+
         return y

@@ -46,3 +46,13 @@ file_names = {
         'name': 'chain.txt',
     },
 }
+
+# Cosmo (Planck 2018 bestfit, Table 1 of https://arxiv.org/pdf/1807.06209)
+cosmo_params = {
+    'h': 0.6732,
+    'Omega_m': 0.3158,
+    'Omega_b': 0.0494,
+    'A_s': 2.1006e-9,
+    'n_s': 0.96605,
+    'tau_reio': 0.0543
+}

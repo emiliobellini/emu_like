@@ -12,6 +12,7 @@ been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
 """
 
+import classy
 import numpy as np
 import scipy.interpolate as interp
 from . import defaults as de
@@ -157,8 +158,15 @@ class Spectrum(object):
         # Name of the spectrum as it is in the
         # parameter file (used for the y file names)
         self.name = name
+        # Ratio
+        self.ratio = False
         # Spectrum dependent parameters, i.e. k_min, k_max, ell_max, ...
         self.params = params
+        # Get ratio
+        try:
+            self.ratio = self.params['ratio']
+        except KeyError:
+            self.ratio = False
         return
 
     @staticmethod
@@ -284,9 +292,13 @@ class Pk(Spectrum):
         Default header for the Pk.
         Format example: {Matter, 1.e-3, 1., log, 600}
         """
-        hd = '{} power spectrum P(k) in units (Mpc/h)^3 as a function of '
-        hd += 'k (h/Mpc).\nk_min (h/Mpc) = {}, k_max (h/Mpc) = {}, '
-        hd += '{}-sampled, for a total number of k_modes of {}.\n'
+        if self.ratio:
+            hd = 'Ratio of the {} power spectrum P(k) w.r.t. the reference P(k) '
+        else:
+            hd = '{} power spectrum P(k) in units (Mpc/h)^3 '
+        hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
+        hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
+        hd += 'of k_modes of {}.\n'
         # hd += '\t'.join(self.get_names())
 
         hd = hd.format(
@@ -385,7 +397,10 @@ class Cell(Spectrum):
         Default header for the Cell.
         Format example: {TT, lensed, 2, 2500}
         """
-        hd ='dimensionless {} [l(l+1)/2pi] C_l for ell={} to {}.\n'
+        if self.ratio:
+            hd = 'Ratio of the {} C_l for ell={} to {}.\n'
+        else:
+            hd ='dimensionless {} [l(l+1)/2pi] C_l for ell={} to {}.\n'
         # hd += '\t'.join(self.get_names())
 
         # Cl specific settings
@@ -472,7 +487,10 @@ class ColdBaryonPk(Pk):
         k_range = self.k_range * cosmo.h()
 
         # Get pk
-        pk = np.array([cosmo.pk_cb(k, z_pk) for k in k_range])
+        try:
+            pk = np.array([cosmo.pk_cb(k, z_pk) for k in k_range])
+        except classy.CosmoSevereError:
+            pk = np.array([cosmo.pk(k, z_pk) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.

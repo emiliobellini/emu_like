@@ -57,22 +57,27 @@ y_model:
       k_max: 1.
       k_space: 'log'
       k_num: 600
+      ratio: True
     pk_cb:
       k_min: 1.e-4
       k_max: 1.
       k_space: 'log'
       k_num: 600
+      ratio: True
     pk_weyl:
       k_min: 1.e-4
       k_max: 1.
       k_space: 'log'
       k_num: 600
+      ratio: True
     cl_TT:
       ell_min: 2
       ell_max: 2500
+      ratio: True
     cl_EE:
       ell_min: 2
       ell_max: 2500
+      ratio: True
     cl_TE:
       ell_min: 2
       ell_max: 2500
@@ -82,15 +87,18 @@ y_model:
     cl_pp:
       ell_min: 2
       ell_max: 2500
+      ratio: True
     cl_Tp:
       ell_min: 2
       ell_max: 2500
     cl_TT_lensed:
       ell_min: 2
       ell_max: 2500
+      ratio: True
     cl_EE_lensed:
       ell_min: 2
       ell_max: 2500
+      ratio: True
     cl_TE_lensed:
       ell_min: 2
       ell_max: 2500
