@@ -28,7 +28,7 @@ emulator:
     # Name of the loss function (str). Options: any of the functions
     # defined in https://keras.io/api/losses/ (prepending keras.losses.),
     # plus the ones defined in src/emu_like/loss_functions.py
-    loss: keras.losses.mean_squared_error
+    loss: mean_squared_error
     # Number of epochs to be run before stop (int).
     # To keep track of resuming, this is converted and saved as a list.
     # In case a list is provided, the last value is the total number of
@@ -75,7 +75,7 @@ datasets:
   #   - columns_x: [all columns except last]
   #   - columns_y: [last column]
   columns_x:
-  columns_y: [4]
+  columns_y:
 
   # Since in a single dataset it is possible to have different y files,
   # here it is possible to specify the name of the single dataset we
