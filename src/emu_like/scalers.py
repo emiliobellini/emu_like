@@ -64,7 +64,7 @@ class Scaler(object):
             - Scaler (object): get the correct
               scaler and initialize it.
         """
-        if scaler_type == 'None':
+        if scaler_type == 'None' or scaler_type == None:
             return NoneScaler(scaler_type)
         elif scaler_type == 'StandardScaler':
             return StandardScaler(scaler_type)

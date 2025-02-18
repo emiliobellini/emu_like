@@ -198,7 +198,7 @@ class FFNNEmu(Emulator):
         early_stopping = keras.callbacks.EarlyStopping(
             monitor="val_loss",
             min_delta=0,
-            patience=300,
+            patience=30,
             verbose=1,
             mode="auto",
             baseline=None,
@@ -501,7 +501,8 @@ class FFNNEmu(Emulator):
             plt.legend()
             if path:
                 plt.savefig(os.path.join(path, 'loss_function.pdf'))
-                plt.close()
+            plt.show()
+            plt.close()
 
         return
 
