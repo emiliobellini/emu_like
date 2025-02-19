@@ -15,6 +15,7 @@ methods and attributes to your needs.
 """
 
 import numpy as np
+import scipy.interpolate as interp
 from . import io as io
 from . import defaults as de
 from .spectra import Spectra
@@ -473,12 +474,42 @@ class ClassSpectra(YModel):
         self.n_y = self.get_n_y()
         self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
 
-        # Compute reference cosmology (in case, to take the ratio)
+        # Compute reference spectra (this is used to take the ratio if requested)
+        # 1) Infer the maximum redshift
+        z_max = self._get_z_max()
+        # 2) Compute Class
         cosmo_ref = self.classy.Class()
-        cosmo_ref.set(de.cosmo_params | self.spectra.get_class_params())
+        cosmo_ref.set(de.cosmo_params | self.spectra.get_class_params() | {'z_max_pk': z_max})
         cosmo_ref.compute()
-        self.y_ref = [sp.get(cosmo_ref)[np.newaxis] for sp in self.spectra]
+        # 3) Compute all the spectra
+        self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]
+        # 4) Store the redshift values at which Pk have been computed
+        self.z_array = self._get_z_array(self.spectra)
         return
+
+    def _get_z_max(self):
+        z_max = 0.1
+        try:
+            z_max = max(z_max, self.args['z_pk'])
+        except KeyError:
+            pass
+        try:
+            z_max = max(z_max, self.args['z_max_pk'])
+        except KeyError:
+            pass
+        try:
+            z_max = max(z_max, self.params['z_pk']['prior']['max'])
+        except KeyError:
+            pass
+        return z_max
+
+    def _get_z_array(self, spectra):
+        for sp in spectra:
+            try:
+                z_array = sp.z_array
+            except AttributeError:
+                pass
+        return z_array
 
     def get_n_y(self):
         """
@@ -512,7 +543,7 @@ class ClassSpectra(YModel):
         """
         Arguments:
         - x: 1D array of input data (one sample);
-        - idx (int): row of x in the sull sample;
+        - idx (int): row of x in the full sample;
         Output:
         - y: 1D array of output data (one sample).
 
@@ -522,17 +553,21 @@ class ClassSpectra(YModel):
         for npar, par in enumerate(self.x_names):
             self.class_params[par] = x[npar]
 
-        # Update z_max_pk if needed
+        # Update z_max_pk if needed and get z
+        self.class_params['z_max_pk'] = 0.
         if self.class_params['z_pk']:
             self.class_params['z_max_pk'] = max(
                 self.class_params['z_pk'], self.class_params['z_max_pk'])
+            z = self.class_params['z_pk']
+        else:
+            z = 0.
 
         try:
             # Compute class
             self.cosmo.set(self.class_params)
             self.cosmo.compute()
 
-            y = [sp.get(self.cosmo)[np.newaxis] for sp in self.spectra]
+            y = [sp.get(self.cosmo, z=z)[np.newaxis] for sp in self.spectra]
 
         except self.classy.CosmoComputationError:
             # Fill with nans if error
@@ -541,7 +576,12 @@ class ClassSpectra(YModel):
         # Take the ratio
         for nsp, sp in enumerate(self.spectra):
             if sp.ratio:
-                y[nsp] = y[nsp]/self.y_ref[nsp]
+                # Get y_ref at the correct z
+                if sp.is_pk:
+                    den = interp.make_splrep(self.z_array, self.y_ref[nsp].T, s=0)(z).T
+                else:
+                    den = self.y_ref[nsp]
+                y[nsp] = y[nsp]/den
 
         # Store in self
         for ny in range(len(self.n_y)):

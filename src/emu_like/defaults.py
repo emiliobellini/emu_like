@@ -55,4 +55,7 @@ cosmo_params = {
     'A_s': 2.1006e-9,
     'n_s': 0.96605,
     'tau_reio': 0.0543,
+    # Precision parameters
+    'k_per_decade_for_pk': 1000,
+    'k_per_decade_for_bao': 2000,
 }

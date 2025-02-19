@@ -66,17 +66,6 @@ class Spectra(object):
             self.k_max = None
         return self.k_max
 
-    # def get_z_max(self):
-    #     """
-    #     Get the global z_max.
-    #     """
-    #     z_max = [x.z_max for x in self.list if x.is_pk]
-    #     try:
-    #         self.z_max = max(z_max)
-    #     except ValueError:
-    #         self.z_max = None
-    #     return self.z_max
-
     def get_ell_max(self):
         """
         Get the global ell_max.
@@ -116,10 +105,6 @@ class Spectra(object):
         # k max Pk
         if self.get_k_max():
             class_params['P_k_max_h/Mpc'] = self.k_max
-
-        # # z max Pk
-        # if self.get_z_max():
-        #     class_params['z_max_pk'] = self.z_max
 
         # ell max Cell
         if self.get_ell_max():
@@ -289,6 +274,29 @@ class Pk(Spectrum):
         #   file, see Pk.get_header
         self.hd_name = None
         return
+
+    def _get_2D_pk(self, cosmo, k_range, only_cb):
+
+        # Decide if non linear
+        if 'non_linear' in cosmo.pars:
+            nonlinear = True
+        else:
+            nonlinear = False
+
+        # Get array of pk
+        pk_array, k_array, z_array = cosmo.get_pk_and_k_and_z(
+            nonlinear=nonlinear,
+            only_clustering_species = only_cb,
+            h_units=False)
+
+        # Flip z_array (for the interpolation it has to be increasing)
+        z_array = np.flip(z_array)
+        pk_array = np.flip(pk_array, axis=1)
+
+        # Evaluate pk at the requested range
+        pk = interp.make_splrep(k_array, pk_array, s=0)(k_range)
+
+        return pk, z_array
 
     def get_n_vec(self):
         """
@@ -466,6 +474,38 @@ class GrowthRate(Pk):
         )
         return hd
 
+    def get(self, cosmo, z=None):
+        """
+        Get the growth rate of the desired spectrum.
+        This is the same for each spectrum, provided that
+        self.pk points to the write one (definition in __init__)
+        """
+
+        # Get array of pk
+        pk_array = self.pk.get(cosmo, z=None)
+
+        # If z is None return f(k, z)
+        if z is None:
+            # Compute pk
+            pk = pk_array
+            # Compute derivative (d ln P / d ln z)
+            dpkdz = interp.make_splrep(
+                self.pk.z_array, pk_array.T, s=0).derivative()(self.pk.z_array).T
+            # Compute growth factor f
+            fk = -0.5 * (1+self.pk.z_array) * dpkdz/pk
+
+        # Otherwise return f(k)
+        else:
+            # Compute pk
+            pk = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z)
+            # Compute derivative (d ln P / d ln z)
+            dpkdz = interp.make_splrep(
+                self.pk.z_array, pk_array.T, s=0).derivative()(z)
+            # Compute growth factor f
+            fk = -0.5 * (1+z) * dpkdz/pk
+
+        return fk
+
 
 # ----------------- Pk -------------------------------------------------------#
 
@@ -492,19 +532,18 @@ class MatterPk(Pk):
         Return the correct spectrum sampled at k_range bins.
         """
 
-        # Get redshift
-        if z:
-            z_pk = z
-        elif 'z_pk' in cosmo.pars:
-            z_pk = cosmo.pars['z_pk']
-        else:
-            z_pk = 0.
-
         # convert k in units of 1/Mpc
         k_range = self.k_range * cosmo.h()
 
-        # Get pk
-        pk = np.array([cosmo.pk(k, z_pk) for k in k_range])
+        # If z is None return P(k, z)
+        if z is None:
+            pk, z_array = self._get_2D_pk(cosmo, k_range, only_cb=False)
+            # Store the z_array
+            self.z_array = z_array
+
+        # Otherwise return P(k)
+        else:
+            pk = np.array([cosmo.pk(k, z) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
@@ -534,22 +573,21 @@ class ColdBaryonPk(Pk):
         Return the correct spectrum sampled at k_range bins.
         """
 
-        # Get redshift
-        if z:
-            z_pk = z
-        elif 'z_pk' in cosmo.pars:
-            z_pk = cosmo.pars['z_pk']
-        else:
-            z_pk = 0.
-
         # convert k in units of 1/Mpc
         k_range = self.k_range * cosmo.h()
 
-        # Get pk
-        try:
-            pk = np.array([cosmo.pk_cb(k, z_pk) for k in k_range])
-        except classy.CosmoSevereError:
-            pk = np.array([cosmo.pk(k, z_pk) for k in k_range])
+        # If z is None return P(k, z)
+        if z is None:
+            pk, z_array = self._get_2D_pk(cosmo, k_range, only_cb=True)
+            # Store the z_array
+            self.z_array = z_array
+
+        # Otherwise return P(k)
+        else:
+            try:
+                pk = np.array([cosmo.pk_cb(k, z) for k in k_range])
+            except classy.CosmoSevereError:
+                pk = np.array([cosmo.pk(k, z) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
@@ -588,29 +626,37 @@ class WeylPk(Pk):
         Return the correct spectrum sampled at k_range bins.
         """
 
-        # Get redshift
-        if z:
-            z_pk = z
-        elif 'z_pk' in cosmo.pars:
-            z_pk = cosmo.pars['z_pk']
-        else:
-            z_pk = 0.
-
         # convert k in units of 1/Mpc
         k_range = self.k_range * cosmo.h()
 
-        # Get pk
-        pk = np.array([cosmo.pk(k, z_pk) for k in k_range])
+        # Decide if non linear
+        if 'non_linear' in cosmo.pars:
+            nonlinear = True
+        else:
+            nonlinear = False
+
+        # Get array of pk
+        pk_array, k_array, z_array = cosmo.get_Weyl_pk_and_k_and_z(
+            nonlinear=nonlinear,
+            h_units=False)
+
+        # Flip z_array (for the interpolation it has to be increasing)
+        z_array = np.flip(z_array)
+        pk_array = np.flip(pk_array, axis=1)
+
+        # Evaluate pk at the requested range
+        pk = interp.make_splrep(k_array, pk_array, s=0)(k_range)
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
 
-        # Get transfer functions to rescale the matter Pk
-        tk = cosmo.get_transfer(z=z_pk)
-        fac = ((tk['phi'] + tk['psi'])/2./tk['d_m'])**2. * tk['k (h/Mpc)']**4.
-        fac = interp.interp1d(tk['k (h/Mpc)'], fac)(self.k_range)
+        # Store the z_array
+        if z is None:
+            self.z_array = z_array
+        # Or interpolate and get pk at the correct z
+        else:
+            pk = interp.make_splrep(z_array, pk.T, s=0)(z)
 
-        pk *= fac
         return pk
 
 
@@ -635,78 +681,9 @@ class MatterGrowthRate(GrowthRate):
         # (str) name you want to appear in the header of the
         # file, see Pk.get_header
         self.hd_name = 'Total matter'
+        # Define matter pk object
+        self.pk = MatterPk(name='pk_m', params=self.params)
         return
-
-    def get(self, cosmo, z=None):
-        """
-        Return the correct growth rate sampled at k_range bins.
-        """
-
-        # Get redshift
-        if z:
-            z_pk = z
-        elif 'z_pk' in cosmo.pars:
-            z_pk = cosmo.pars['z_pk']
-        else:
-            z_pk = 0.
-
-        # TODO: Two equivalent methods to get the derivative, decide which is less noisy
-        if False:
-            # Decide if non linear
-            if 'non_linear' in cosmo.pars:
-                nonlinear = True
-            else:
-                nonlinear = False
-
-            # Get array of pk
-            pk_array, k_array, z_array = cosmo.get_pk_and_k_and_z(
-                nonlinear=nonlinear,
-                only_clustering_species = False,
-                h_units=False)
-
-            # convert k in units of 1/Mpc
-            k_range = self.k_range * cosmo.h()
-
-            # Flip z_array (for the interpolation it has to be increasing)
-            z_array = np.flip(z_array)
-            pk_array = np.flip(pk_array, axis=1)
-
-            # Compute pk
-            pk = interp.make_splrep(z_array, pk_array.T, s=0)(z_pk)
-
-            # Compute derivative (d ln P / d ln z)
-            dpkdz = interp.make_splrep(z_array, pk_array.T, s=0).derivative()(z_pk)
-
-            # Compute growth factor f
-            f_array = -0.5 * (1+z_pk) * dpkdz/pk
-
-            # Intepolate f with array
-            f = interp.make_splrep(k_array, f_array, s=0)(k_range)
-        else:
-
-            z_step = 0.1
-            pk_z = MatterPk.get(self, cosmo=cosmo, z=z_pk)
-
-            # if possible, use two-sided derivative with default value of z_step
-            if z_pk - z_step >= 0.:
-                pk_z_p1 = MatterPk.get(self, cosmo=cosmo, z=z_pk+z_step)
-                pk_z_m1 = MatterPk.get(self, cosmo=cosmo, z=z_pk-z_step)
-                dpkdz = (pk_z_p1-pk_z_m1)/(2.*z_step)
-            # if z is between z_step/10 and z_step, reduce z_step to z, and then stick to two-sided derivative
-            elif z_pk - z_step/10. > 0.:
-                z_step = z_pk
-                pk_z_p1 = MatterPk.get(self, cosmo=cosmo, z=z_pk+z_step)
-                pk_z_m1 = MatterPk.get(self, cosmo=cosmo, z=z_pk-z_step)
-                dpkdz = (pk_z_p1-pk_z_m1)/(2.*z_step)
-            # if z is between 0 and z_step/10, use single-sided derivative with z_step/10
-            else:
-                z_step /=10
-                pk_z_p1 = MatterPk.get(self, cosmo=cosmo, z=z_pk+z_step)
-                dpkdz = (pk_z_p1-pk_z)/z_step
-
-            f = -0.5 * (1 + z_pk) * dpkdz/pk_z
-
-        return f
 
 
 # ----------------- Cell -----------------------------------------------------#
@@ -735,7 +712,7 @@ class CellTT(Cell):
         self.want_lensing = False
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -766,7 +743,7 @@ class CellEE(Cell):
         self.want_lensing = False
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -797,7 +774,7 @@ class CellTE(Cell):
         self.want_lensing = False
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -828,7 +805,7 @@ class CellBB(Cell):
         self.want_lensing = False
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -859,7 +836,7 @@ class Cellpp(Cell):
         self.want_lensing = False
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -890,7 +867,7 @@ class CellTp(Cell):
         self.want_lensing = False
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -923,7 +900,7 @@ class CellTTLensed(Cell):
         self.want_lensing = True
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -954,7 +931,7 @@ class CellEELensed(Cell):
         self.want_lensing = True
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -985,7 +962,7 @@ class CellTELensed(Cell):
         self.want_lensing = True
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
@@ -1016,7 +993,7 @@ class CellBBLensed(Cell):
         self.want_lensing = True
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, **kwargs):
         """
         Return the correct spectrum sampled up to ell max.
         """
