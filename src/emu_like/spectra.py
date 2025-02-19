@@ -650,6 +650,7 @@ class MatterGrowthRate(GrowthRate):
         else:
             z_pk = 0.
 
+        # TODO: Two equivalent methods to get the derivative, decide which is less noisy
         if False:
             # Decide if non linear
             if 'non_linear' in cosmo.pars:
