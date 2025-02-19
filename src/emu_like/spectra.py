@@ -66,6 +66,17 @@ class Spectra(object):
             self.k_max = None
         return self.k_max
 
+    # def get_z_max(self):
+    #     """
+    #     Get the global z_max.
+    #     """
+    #     z_max = [x.z_max for x in self.list if x.is_pk]
+    #     try:
+    #         self.z_max = max(z_max)
+    #     except ValueError:
+    #         self.z_max = None
+    #     return self.z_max
+
     def get_ell_max(self):
         """
         Get the global ell_max.
@@ -106,7 +117,11 @@ class Spectra(object):
         if self.get_k_max():
             class_params['P_k_max_h/Mpc'] = self.k_max
 
-        # ell max Pk
+        # # z max Pk
+        # if self.get_z_max():
+        #     class_params['z_max_pk'] = self.z_max
+
+        # ell max Cell
         if self.get_ell_max():
             class_params['l_max_scalars'] = self.ell_max
 
@@ -158,8 +173,6 @@ class Spectrum(object):
         # Name of the spectrum as it is in the
         # parameter file (used for the y file names)
         self.name = name
-        # Ratio
-        self.ratio = False
         # Spectrum dependent parameters, i.e. k_min, k_max, ell_max, ...
         self.params = params
         # Get ratio
@@ -188,6 +201,9 @@ class Spectrum(object):
             return ColdBaryonPk(spectrum_type, params)
         elif spectrum_type == 'pk_weyl':
             return WeylPk(spectrum_type, params)
+        # Growth rates
+        elif spectrum_type == 'f_m':
+            return MatterGrowthRate(spectrum_type, params)
         # Cl
         elif spectrum_type == 'cl_TT':
             return CellTT(spectrum_type, params)
@@ -412,6 +428,45 @@ class Cell(Spectrum):
         return hd
 
 
+class GrowthRate(Pk):
+    """
+    Base class for the scale dependent growth rate f.
+
+    Return the scale dependent growth factor
+    f(z)= 1/2 * [d ln P(k,a) / d ln a]
+        = - 0.5 * (1+z) * [d ln P(k,z) / d z]
+    where P(k,z) is the power spectrum used
+
+    NOTE: k is in units of h/Mpc. f(k) is dimensionless.
+    """
+
+    def __init__(self, name, params):
+        Pk.__init__(self, name, params)
+        return
+
+    def get_header(self):
+        """
+        Header for the growth rate.
+        """
+        if self.ratio:
+            hd = 'Ratio of the {} growth rate f(k) w.r.t. the reference f(k) '
+        else:
+            hd = '{} growth rate f(k) '
+        hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
+        hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
+        hd += 'of k_modes of {}.\n'
+        # hd += '\t'.join(self.get_names())
+
+        hd = hd.format(
+            self.hd_name,
+            self.k_min,
+            self.k_max,
+            self.k_space,
+            self.k_num
+        )
+        return hd
+
+
 # ----------------- Pk -------------------------------------------------------#
 
 class MatterPk(Pk):
@@ -432,13 +487,15 @@ class MatterPk(Pk):
         self.hd_name = 'Total matter'
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, z=None):
         """
         Return the correct spectrum sampled at k_range bins.
         """
 
         # Get redshift
-        if 'z_pk' in cosmo.pars:
+        if z:
+            z_pk = z
+        elif 'z_pk' in cosmo.pars:
             z_pk = cosmo.pars['z_pk']
         else:
             z_pk = 0.
@@ -472,13 +529,15 @@ class ColdBaryonPk(Pk):
         self.hd_name = 'CDM + baryons'
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, z=None):
         """
         Return the correct spectrum sampled at k_range bins.
         """
 
         # Get redshift
-        if 'z_pk' in cosmo.pars:
+        if z:
+            z_pk = z
+        elif 'z_pk' in cosmo.pars:
             z_pk = cosmo.pars['z_pk']
         else:
             z_pk = 0.
@@ -524,13 +583,15 @@ class WeylPk(Pk):
         self.hd_name = 'Weyl'
         return
 
-    def get(self, cosmo):
+    def get(self, cosmo, z=None):
         """
         Return the correct spectrum sampled at k_range bins.
         """
 
         # Get redshift
-        if 'z_pk' in cosmo.pars:
+        if z:
+            z_pk = z
+        elif 'z_pk' in cosmo.pars:
             z_pk = cosmo.pars['z_pk']
         else:
             z_pk = 0.
@@ -551,6 +612,100 @@ class WeylPk(Pk):
 
         pk *= fac
         return pk
+
+
+class MatterGrowthRate(GrowthRate):
+    """
+    Scale dependent total matter growth rate f.
+
+    Return the scale dependent growth factor
+    f(z)= 1/2 * [d ln P(k,a) / d ln a]
+        = - 0.5 * (1+z) * [d ln P(k,z) / d z]
+    where P(k,z) is the total matter power spectrum
+
+    NOTE: k is in units of h/Mpc. f(k) is dimensionless.
+    """
+
+    def __init__(self, name, params):
+        GrowthRate.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['mPk']
+        # (str) name you want to appear in the header of the
+        # file, see Pk.get_header
+        self.hd_name = 'Total matter'
+        return
+
+    def get(self, cosmo, z=None):
+        """
+        Return the correct growth rate sampled at k_range bins.
+        """
+
+        # Get redshift
+        if z:
+            z_pk = z
+        elif 'z_pk' in cosmo.pars:
+            z_pk = cosmo.pars['z_pk']
+        else:
+            z_pk = 0.
+
+        if False:
+            # Decide if non linear
+            if 'non_linear' in cosmo.pars:
+                nonlinear = True
+            else:
+                nonlinear = False
+
+            # Get array of pk
+            pk_array, k_array, z_array = cosmo.get_pk_and_k_and_z(
+                nonlinear=nonlinear,
+                only_clustering_species = False,
+                h_units=False)
+
+            # convert k in units of 1/Mpc
+            k_range = self.k_range * cosmo.h()
+
+            # Flip z_array (for the interpolation it has to be increasing)
+            z_array = np.flip(z_array)
+            pk_array = np.flip(pk_array, axis=1)
+
+            # Compute pk
+            pk = interp.make_splrep(z_array, pk_array.T, s=0)(z_pk)
+
+            # Compute derivative (d ln P / d ln z)
+            dpkdz = interp.make_splrep(z_array, pk_array.T, s=0).derivative()(z_pk)
+
+            # Compute growth factor f
+            f_array = -0.5 * (1+z_pk) * dpkdz/pk
+
+            # Intepolate f with array
+            f = interp.make_splrep(k_array, f_array, s=0)(k_range)
+        else:
+
+            z_step = 0.1
+            pk_z = MatterPk.get(self, cosmo=cosmo, z=z_pk)
+
+            # if possible, use two-sided derivative with default value of z_step
+            if z_pk - z_step >= 0.:
+                pk_z_p1 = MatterPk.get(self, cosmo=cosmo, z=z_pk+z_step)
+                pk_z_m1 = MatterPk.get(self, cosmo=cosmo, z=z_pk-z_step)
+                dpkdz = (pk_z_p1-pk_z_m1)/(2.*z_step)
+            # if z is between z_step/10 and z_step, reduce z_step to z, and then stick to two-sided derivative
+            elif z_pk - z_step/10. > 0.:
+                z_step = z_pk
+                pk_z_p1 = MatterPk.get(self, cosmo=cosmo, z=z_pk+z_step)
+                pk_z_m1 = MatterPk.get(self, cosmo=cosmo, z=z_pk-z_step)
+                dpkdz = (pk_z_p1-pk_z_m1)/(2.*z_step)
+            # if z is between 0 and z_step/10, use single-sided derivative with z_step/10
+            else:
+                z_step /=10
+                pk_z_p1 = MatterPk.get(self, cosmo=cosmo, z=z_pk+z_step)
+                dpkdz = (pk_z_p1-pk_z)/z_step
+
+            f = -0.5 * (1 + z_pk) * dpkdz/pk_z
+
+        return f
 
 
 # ----------------- Cell -----------------------------------------------------#

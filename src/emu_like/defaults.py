@@ -54,5 +54,5 @@ cosmo_params = {
     'Omega_b': 0.0494,
     'A_s': 2.1006e-9,
     'n_s': 0.96605,
-    'tau_reio': 0.0543
+    'tau_reio': 0.0543,
 }

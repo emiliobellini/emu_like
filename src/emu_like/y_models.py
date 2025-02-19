@@ -522,6 +522,11 @@ class ClassSpectra(YModel):
         for npar, par in enumerate(self.x_names):
             self.class_params[par] = x[npar]
 
+        # Update z_max_pk if needed
+        if self.class_params['z_pk']:
+            self.class_params['z_max_pk'] = max(
+                self.class_params['z_pk'], self.class_params['z_max_pk'])
+
         try:
             # Compute class
             self.cosmo.set(self.class_params)
