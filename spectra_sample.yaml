@@ -75,7 +75,16 @@ y_model:
       k_max: 1.
       k_space: 'log'
       k_num: 600
-      # ratio: True
+    f_cb:
+      k_min: 1.e-4
+      k_max: 1.
+      k_space: 'log'
+      k_num: 600
+    f_weyl:
+      k_min: 1.e-4
+      k_max: 1.
+      k_space: 'log'
+      k_num: 600
     cl_TT:
       ell_min: 2
       ell_max: 2500

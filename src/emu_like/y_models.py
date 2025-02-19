@@ -554,12 +554,12 @@ class ClassSpectra(YModel):
             self.class_params[par] = x[npar]
 
         # Update z_max_pk if needed and get z
-        self.class_params['z_max_pk'] = 0.
-        if self.class_params['z_pk']:
+        self.class_params['z_max_pk'] = 0.1
+        try:
             self.class_params['z_max_pk'] = max(
                 self.class_params['z_pk'], self.class_params['z_max_pk'])
             z = self.class_params['z_pk']
-        else:
+        except KeyError:
             z = 0.
 
         try:

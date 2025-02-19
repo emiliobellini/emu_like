@@ -189,6 +189,10 @@ class Spectrum(object):
         # Growth rates
         elif spectrum_type == 'f_m':
             return MatterGrowthRate(spectrum_type, params)
+        elif spectrum_type == 'f_cb':
+            return ColdBaryonGrowthRate(spectrum_type, params)
+        elif spectrum_type == 'f_weyl':
+            return WeylGrowthRate(spectrum_type, params)
         # Cl
         elif spectrum_type == 'cl_TT':
             return CellTT(spectrum_type, params)
@@ -701,6 +705,58 @@ class MatterGrowthRate(GrowthRate):
         self.hd_name = 'Total matter'
         # Define matter pk object
         self.pk = MatterPk(name='pk_m', params=self.params)
+        return
+
+
+class ColdBaryonGrowthRate(GrowthRate):
+    """
+    Scale dependent CDM+baryon growth rate f.
+
+    Return the scale dependent growth factor
+    f(z)= 1/2 * [d ln P(k,a) / d ln a]
+        = - 0.5 * (1+z) * [d ln P(k,z) / d z]
+    where P(k,z) is the CDM+baryon power spectrum
+
+    NOTE: k is in units of h/Mpc. f(k) is dimensionless.
+    """
+
+    def __init__(self, name, params):
+        GrowthRate.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['mPk']
+        # (str) name you want to appear in the header of the
+        # file, see Pk.get_header
+        self.hd_name = 'CDM + baryons'
+        # Define matter pk object
+        self.pk = ColdBaryonPk(name='pk_cb', params=self.params)
+        return
+
+
+class WeylGrowthRate(GrowthRate):
+    """
+    Scale dependent Weyl growth rate f.
+
+    Return the scale dependent growth factor
+    f(z)= 1/2 * [d ln P(k,a) / d ln a]
+        = - 0.5 * (1+z) * [d ln P(k,z) / d z]
+    where P(k,z) is the Weyl power spectrum
+
+    NOTE: k is in units of h/Mpc. f(k) is dimensionless.
+    """
+
+    def __init__(self, name, params):
+        GrowthRate.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['mPk', 'dTk']
+        # (str) name you want to appear in the header of the
+        # file, see Pk.get_header
+        self.hd_name = 'Weyl'
+        # Define matter pk object
+        self.pk = WeylPk(name='pk_weyl', params=self.params)
         return
 
 
