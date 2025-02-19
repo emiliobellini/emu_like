@@ -499,8 +499,26 @@ class GrowthRate(Pk):
             # Compute pk
             pk = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z)
             # Compute derivative (d ln P / d ln z)
-            dpkdz = interp.make_splrep(
-                self.pk.z_array, pk_array.T, s=0).derivative()(z)
+            if True:
+                dpkdz = interp.make_splrep(
+                    self.pk.z_array, pk_array.T, s=0).derivative()(z)
+            # Here we keep also the manual derivative because the growth rate is noisy
+            # and we may want to check it is less noisy with this (for now they are equivalent)
+            else:
+                z_step = 0.1
+                if z - z_step >= 0.:
+                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
+                    pk_m1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z-z_step)
+                    dpkdz = (pk_p1-pk_m1)/(2.*z_step)
+                elif z - z_step/10 >= 0.:
+                    z_step = z
+                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
+                    pk_m1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z-z_step)
+                    dpkdz = (pk_p1-pk_m1)/(2.*z_step)
+                else:
+                    z_step /=10
+                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
+                    dpkdz = (pk_p1-pk)/z_step
             # Compute growth factor f
             fk = -0.5 * (1+z) * dpkdz/pk
 
