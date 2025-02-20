@@ -45,6 +45,9 @@ file_names = {
     'chains': {
         'name': 'chain.txt',
     },
+    'spectra_factor': {
+        'name': 'spectra_factor.fits',
+    },
 }
 
 # Cosmo (Planck 2018 bestfit, Table 1 of https://arxiv.org/pdf/1807.06209)

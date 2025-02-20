@@ -15,6 +15,7 @@ methods and attributes to your needs.
 """
 
 import numpy as np
+import os
 import scipy.interpolate as interp
 from . import io as io
 from . import defaults as de
@@ -145,6 +146,12 @@ class YModel(object):
         for nx, x_val in enumerate(x):
             self.evaluate(x_val, nx, **kwargs)
         return self.y
+
+    def save(self, path):
+        """
+        Placeholder in case we want to save something.
+        """
+        return
 
     def evaluate(self, x, idx, **kwargs):
         """
@@ -483,7 +490,14 @@ class ClassSpectra(YModel):
         cosmo_ref.compute()
         # 3) Compute all the spectra
         self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]
-        # 4) Store the redshift values at which Pk have been computed
+        # 4) Replace with ones if we do not take ratio
+        for nsp, sp in enumerate(self.spectra):
+            if not sp.ratio:
+                if sp.is_pk:
+                    self.y_ref[nsp] = np.ones_like(self.y_ref[nsp][:,:,0])
+                else:
+                    self.y_ref[nsp] = np.ones_like(self.y_ref[nsp])
+        # 5) Store the redshift values at which Pk have been computed
         self.z_array = self._get_z_array(self.spectra)
         return
 
@@ -588,3 +602,22 @@ class ClassSpectra(YModel):
             self.y[ny][idx] = y[ny]
 
         return y
+
+    def save(self, path, verbose=False):
+        """
+        Save reference spectra.
+        """
+        path = os.path.join(path, de.file_names['spectra_factor']['name'])
+        if verbose:
+            io.print_level(1, 'Saving reference spectra to {}'.format(path))
+
+        fits = io.FitsFile(path=path)
+
+        # Write z_array
+        fits.write(self.z_array, 'z_array', type='image')
+
+        # Write spectra
+        for nsp, sp in enumerate(self.spectra):
+            fits.write(self.y_ref[nsp], sp.name, type='image')
+        
+        return

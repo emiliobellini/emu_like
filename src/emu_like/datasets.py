@@ -977,6 +977,10 @@ class DataCollection(object):
             self.n_samples,
             **y_args,
             verbose=verbose)
+        
+        # Save after init what has to be saved
+        if save_incrementally:
+            y_model.save(output, verbose=verbose)
 
         # Get y attributes
         self.n_y = y_model.get_n_y()

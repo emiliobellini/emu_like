@@ -9,6 +9,7 @@ authors = [{name="Emilio Bellini"}]
 description = "TODO"
 requires-python = ">=3.8.0"
 dependencies = [
+    "astropy",
     "cobaya>=3.0",
     "emcee>=3.1",
     "numpy>=1.26",
