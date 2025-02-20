@@ -510,7 +510,7 @@ class FitsFile(File):
         with fits.open(self.path) as fn:
             return fn[name].header
 
-    def write(self, array, name, type='image', header=None):
+    def write(self, array, name, type='image', header=None, verbose=False):
         """ Write an array to a fits file.
 
         Args:
@@ -542,8 +542,9 @@ class FitsFile(File):
             else:
                 print('Type '+type+' not recognized! Data not saved to file!')
                 return True
-        print('Appended ' + name.upper() + ' to ' + os.path.relpath(self.path))
-        sys.stdout.flush()
+        if verbose:
+            print('Appended ' + name.upper() + ' to ' + os.path.relpath(self.path))
+            sys.stdout.flush()
         return warning
 
     def print_info(self):
