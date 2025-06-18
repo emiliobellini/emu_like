@@ -12,7 +12,6 @@ been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
 """
 
-import classy
 import numpy as np
 import scipy.interpolate as interp
 from . import defaults as de
@@ -35,6 +34,8 @@ class Spectra(object):
         - params (dict): nested dictionary of parameters
           for each spectrum.
         """
+        # Init classy
+        import classy
         self.list = [Spectrum.choose_one(sp, params[sp]) for sp in params]
         return
 

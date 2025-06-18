@@ -147,7 +147,7 @@ class YModel(object):
             self.evaluate(x_val, nx, **kwargs)
         return self.y
 
-    def save(self, path):
+    def save(self, path, verbose=False):
         """
         Placeholder in case we want to save something.
         """
