@@ -201,10 +201,12 @@ class Dataset(object):
 
         return self
 
-    def remove_non_finite(self, verbose=False):
+    def remove_non_finite(self, store_non_finites=False, verbose=False):
         """
         Remove from the dataset non finite samples (inf and nan).
         Arguments:
+        - store_non_finites (bool, default: False): store x's that
+          give non finite y in non_finites_x.
         - verbose (bool, default: False): verbosity.
         """
 
@@ -213,6 +215,11 @@ class Dataset(object):
 
         # Finite indices
         only_finites = np.all(np.isfinite(self.y), axis=1)
+
+        # Sore non finite elements
+        if store_non_finites:
+            only_non_finites = np.array([not elem for elem in only_finites])
+            self.non_finites_x = self.x[only_non_finites]
 
         self.x = self.x[only_finites]
         self.y = self.y[only_finites]
