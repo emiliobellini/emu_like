@@ -24,11 +24,8 @@ file_names = {
         'name': 'checkpoint_epoch{epoch:04d}.weights.h5',
         'folder': 'checkpoints',
     },
-    'model_last': {
-        'name': 'model_last.keras',
-    },
-    'model_best': {
-        'name': 'model_best.keras',
+    'model': {
+        'name': 'model.keras',
     },
     'x_scaler': {
         'name': 'x_scaler.save',

@@ -133,29 +133,6 @@ class FFNNEmu(Emulator):
                         params.content[key1][key2] = default_dict[key1][key2]
         return params
 
-    def _get_best_model_epoch(self, path=None):
-        """
-        Method to get the epoch of the best model,
-        i.e. the one with smaller val_loss.
-        It can be retrieved from path (preferentially,
-        if specified) or from a loaded model.
-        Arguments:
-        - path (str): path to the emulator.
-        """
-        if path:
-            fname = os.path.join(path, de.file_names['log']['name'])
-            history = np.genfromtxt(fname, delimiter=",", skip_header=1)
-            val_loss = np.nan_to_num(history[:, 2], nan=np.inf)
-            epochs = history[:, 0]
-        else:
-            val_loss = self.model.history.history['val_loss']
-            epochs = self.model.history.epoch
-        idx_min = np.argmin(val_loss)
-        # We need the +1 below because files are saved from epoch=1,
-        # while the logger starts from epoch=0
-        epoch_min = {'epoch': int(epochs[idx_min])+1}
-        return epoch_min
-
     def _callbacks(self, path=None, verbose=False):
         """
         Define and initialise callbacks.
@@ -310,23 +287,10 @@ class FFNNEmu(Emulator):
             io.warning('y_scaler not loaded yet, impossible to save it!')
 
         # Save last model
-        fname = os.path.join(path, de.file_names['model_last']['name'])
+        fname = os.path.join(path, de.file_names['model']['name'])
         if verbose:
-            io.info('Saving last model at {}'.format(fname))
+            io.info('Saving model at {}'.format(fname))
         self.model.save(fname, overwrite=True)
-
-        # Save best model
-        epoch_min = self._get_best_model_epoch(path=path)
-        fname = os.path.join(
-            path,
-            de.file_names['checkpoint']['folder'],
-            de.file_names['checkpoint']['name'].format(**epoch_min)
-        )
-        self.model.load_weights(fname)
-        fname = os.path.join(path, de.file_names['model_best']['name'])
-        self.model.save(fname, overwrite=True)
-        if verbose:
-            io.info('Saving best model at {}'.format(fname))
 
         # Save dataset details
         # We do not always have names for 'x' and 'y'

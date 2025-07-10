@@ -114,8 +114,8 @@ class XSampler(object):
         if self.x is None:
             self.get_x()
 
-        self.x_ranges = list(zip(
-            np.min(self.x, axis=0), np.max(self.x, axis=0)))
+        self.x_ranges = np.array(list(zip(
+            np.min(self.x, axis=0), np.max(self.x, axis=0))))
         return self.x_ranges
 
     def get_n_x(self):

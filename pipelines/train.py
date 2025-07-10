@@ -159,15 +159,6 @@ def train_emu(args):
         params['datasets']['rescale_x'],
         params['datasets']['rescale_y'],
         verbose=args.verbose)
-    # Save scalers
-    data.x_scaler.save(
-        de.file_names['x_scaler']['name'],
-        root=params['output'],
-        verbose=args.verbose)
-    data.y_scaler.save(
-        de.file_names['y_scaler']['name'],
-        root=params['output'],
-        verbose=args.verbose)
 
     # If resume
     if args.resume:

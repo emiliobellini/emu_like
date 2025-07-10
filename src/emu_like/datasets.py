@@ -228,12 +228,12 @@ class Dataset(object):
         self.n_samples = self.x.shape[0]
 
         # Adjust ranges
-        self.x_ranges = list(zip(
+        self.x_ranges = np.array(list(zip(
             np.min(self.x, axis=0),
-            np.max(self.x, axis=0)))
-        self.y_ranges = list(zip(
+            np.max(self.x, axis=0))))
+        self.y_ranges = np.array(list(zip(
             np.min(self.y, axis=0),
-            np.max(self.y, axis=0)))
+            np.max(self.y, axis=0))))
 
         return self
 
@@ -305,10 +305,10 @@ class Dataset(object):
         _, self.n_y = self.y.shape
 
         # Get ranges
-        self.x_ranges = list(zip(np.min(self.x, axis=0),
-                                 np.max(self.x, axis=0)))
-        self.y_ranges = list(zip(np.min(self.y, axis=0),
-                                 np.max(self.y, axis=0)))
+        self.x_ranges = np.array(list(zip(np.min(self.x, axis=0),
+                                          np.max(self.x, axis=0))))
+        self.y_ranges = np.array(list(zip(np.min(self.y, axis=0),
+                                          np.max(self.y, axis=0))))
         # Slice data
         self.slice(columns_x, columns_y, verbose=verbose)
 
