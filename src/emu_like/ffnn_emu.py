@@ -211,14 +211,11 @@ class FFNNEmu(Emulator):
             io.info('Loading FFNN architecture')
 
         # Load last model
-        if model_to_load == 'last':
-            fname = os.path.join(path, de.file_names['model_last']['name'])
-            self.model = keras.models.load_model(fname)
-        elif model_to_load == 'best':
-            fname = os.path.join(path, de.file_names['model_best']['name'])
+        if model_to_load == 'best':
+            fname = os.path.join(path, de.file_names['model']['name'])
             self.model = keras.models.load_model(fname)
         elif isinstance(model_to_load, int):
-            fname = os.path.join(path, de.file_names['model_last']['name'])
+            fname = os.path.join(path, de.file_names['model']['name'])
             self.model = keras.models.load_model(fname)
             epoch = {'epoch': model_to_load}
             fname = os.path.join(
