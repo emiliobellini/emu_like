@@ -49,6 +49,7 @@ y_model:
     N_ur: 2.0308
     N_ncdm: 1
     m_ncdm: 0.06
+    YHe: 0.24
   # List of output files (only for class_spectra)
   outputs:
     # Each spectrum is saved in a different file
