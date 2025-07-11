@@ -293,11 +293,11 @@ class FFNNEmu(Emulator):
         # We do not always have names for 'x' and 'y'
         # In case we do not have them, just store None.
         try:
-            save_x = self.x_names.tolist()
+            save_x = self.x_names
         except AttributeError:
             save_x = None
         try:
-            save_y = self.y_names.tolist()
+            save_y = self.y_names
         except AttributeError:
             save_y = None
         details = Params({
