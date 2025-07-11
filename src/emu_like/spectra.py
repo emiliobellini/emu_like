@@ -225,11 +225,7 @@ class Spectrum(object):
         Get the default file name for each spectrum.
         It appends the name of the spectrum to the default name.
         """
-        if self.ratio:
-            name = '_ratio_' + self.name
-        else:
-            name = '_' + self.name
-        fname = de.file_names['y_data']['name'].format(name)
+        fname = de.file_names['y_data']['name'].format(self.name)
         return fname
 
     def _get_range(self, min, max, num, space):

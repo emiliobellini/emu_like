@@ -711,7 +711,7 @@ class DataCollection(object):
         # Get correct index
         if name is not None:
             idx = self.y_fnames.index(
-                de.file_names['y_data']['name'].format('_'+name))
+                de.file_names['y_data']['name'].format(name))
         elif len(self.y_fnames) == 1:
             idx = 0
         else:
