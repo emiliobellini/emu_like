@@ -27,11 +27,9 @@ class Dataset(object):
     To load a dataset there are two ways:
     - create a Dataset instance and manually define all the required
       attributes;
-    - create a DataCollection instance and load the dataset. If there
-      is just one "y", an instance of the Dataset class is stored in
-      DataCollection.one_y_dataset. If there are multiple "y", select
-      the data you want to store in DataCollection.one_y_dataset using
-      the DataCollection.get_one_y_dataset(name) method.
+    - create a DataCollection instance and load the dataset. Use the
+      DataCollection.get_one_y_dataset(name) method to extract the
+      desired Dataset.
 
     Available methods:
     - join: if they are compatible, join two datasets and return a
@@ -46,6 +44,7 @@ class Dataset(object):
 
     def __init__(
             self,
+            name=None,
             x=None,
             y=None,
             x_ranges=None,
@@ -55,11 +54,14 @@ class Dataset(object):
             n_samples=None,
             x_names=None,
             y_names=None,
+            y_model=None,
             path=None
             ):
         """
         Placeholders.
         """
+        # Name
+        self.name = name
         # Data arrays
         self.x = x  # x
         self.y = y  # y
@@ -82,8 +84,12 @@ class Dataset(object):
         self.x_names = x_names  # List of names of x data
         self.y_names = y_names  # List of names of y data
 
+        # y_model
+        self.y_model = y_model
+
         # Path
         self.path = path
+
         return
 
     @staticmethod
@@ -378,6 +384,11 @@ class Dataset(object):
         # n_samples
         data.n_samples = sum([s.n_samples for s in datasets])
 
+        # y_model.
+        # NOTE: we are assuming that all datsets are sharing the
+        # same y_model, which is taken from the first one.
+        data.y_model = datasets[0].y_model
+
         return data
 
     def train_test_split(self, frac_train, seed, verbose=False):
@@ -472,11 +483,11 @@ class DataCollection(object):
     possible to get a Dataset in three ways:
     - create a Dataset instance and manually define all the required
       attributes;
-    - if there is just one "y", an instance of the Dataset class is
-      stored in DataCollection.one_y_dataset;
-    - if there are multiple "y", select the data you want to store
-      in DataCollection.one_y_dataset using the
-      DataCollection.get_one_y_dataset(name) method.
+    - if there is just one "y", it is possible to use the
+      DataCollection.get_one_y_dataset() method to get the single
+      dataset;
+    - if there are multiple "y", select the data you want to
+      extract using the DataCollection.get_one_y_dataset(name) method.
 
     Available methods:
     - load: load a dataset from a path;
@@ -532,11 +543,12 @@ class DataCollection(object):
         # Container for all the settings
         self.settings = None
 
+        # Container for the YModel
+        self.y_model = None
+
         # Useful to keep track of how many samples have been computed
         self.counter_samples = 0
 
-        # The Dataset class has a list of y
-        self.one_y_dataset = None
         return
 
     def _save_x(
@@ -719,7 +731,8 @@ class DataCollection(object):
                 'It is not possible to extract a single dataset if no name '
                 'is specified and there are multiple datasets!')
 
-        self.one_y_dataset = Dataset(
+        dataset = Dataset(
+            name=name,
             x=self.x,
             y=self.y[idx],
             x_ranges=self.x_ranges,
@@ -729,18 +742,22 @@ class DataCollection(object):
             n_samples=self.n_samples,
             x_names=self.x_names,
             y_names=self.y_names[idx],
+            y_model=self.y_model[idx],
             path=self.path,
         )
-        return self.one_y_dataset
+
+        return dataset
 
     def save(
             self,
             fname_setts=None,
             fname_x=None,
             fnames_y=None,
+            fname_y_model=None,
             root_setts=None,
             root_x=None,
             roots_y=None,
+            root_y_model=None,
             settings=None,
             x_array=None,
             y_arrays=None,
@@ -783,13 +800,22 @@ class DataCollection(object):
             y_array=y_arrays,
             header=headers_y,
             verbose=verbose)
+        
+        # Save y_model
+        if root_y_model is None:
+            root_y_model = self.path
+        if fname_y_model is None:
+            fname_y_model = de.file_names['spectra_factor']['name']
+        self.y_model.save(
+            fname=fname_y_model,
+            root=root_y_model,
+            verbose=verbose)
 
         return
 
     def load(
             self,
             path,
-            one_y_name=None,
             verbose=False):
         """
         Load an existing dataset.
@@ -800,9 +826,6 @@ class DataCollection(object):
           or to a file containing both the x and y data or to a file
           containing only the x data. In this last case, 'path_y' should
           be specified. See discussion at the top of this class;
-        - one_y_name (str, default:None): if specified, it runs the
-          DataCollection.get_one_y_dataset(one_y_name) method to get the
-          DataCollection.one_y_dataset attribute;
         - verbose (bool, default: False): verbosity.
 
         NOTE: when generated by this code, the dataset files have specific
@@ -854,6 +877,13 @@ class DataCollection(object):
             self.n_samples,
             **self.settings['y_model']['args'],
             verbose=False)
+        
+        # Load y_model
+        y_model.load(
+            de.file_names['spectra_factor']['name'],
+            root=self.path,
+            verbose=False,
+        )
 
         # Get y file names
         self.y_fnames = y_model.get_y_fnames()
@@ -887,10 +917,6 @@ class DataCollection(object):
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
         self.y_model = y_model
-
-        # Get single dataset if only one "y" or one_y_name
-        if len(self.y_fnames) == 1 or one_y_name is not None:
-            self.get_one_y_dataset(one_y_name)
 
         # Print info
         if verbose:
@@ -987,7 +1013,9 @@ class DataCollection(object):
         
         # Save after init what has to be saved
         if save_incrementally:
-            y_model.save(output, verbose=verbose)
+            y_model.save(
+                root=self.path,
+                verbose=verbose)
 
         # Get y attributes
         self.n_y = y_model.get_n_y()
@@ -1017,10 +1045,6 @@ class DataCollection(object):
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
         self.y_model = y_model
-
-        # Get single dataset if only one "y"
-        if len(self.y_fnames) == 1:
-            self.get_one_y_dataset()
 
         return
 
@@ -1058,10 +1082,6 @@ class DataCollection(object):
 
         # Get remaining attributes
         self.y_ranges = self.y_model.get_y_ranges()
-
-        # Get single dataset if only one "y"
-        if len(self.y_fnames) == 1:
-            self.get_one_y_dataset()
 
         return
 

@@ -100,11 +100,10 @@ def train_emu(args):
     if paths_is_dir:
         data = [DataCollection().load(
             path=path,
-            one_y_name=params['datasets']['name'],
             verbose=False)
             for path in params['datasets']['paths']]
         # Get Dataset from DataCollection
-        data = [d.one_y_dataset for d in data]
+        data = [d.get_one_y_dataset(params['datasets']['name']) for d in data]
         # Slice data
         data = [d.slice(params['datasets']['columns_x'],
                         params['datasets']['columns_y'],

@@ -46,6 +46,12 @@ class YModel(object):
                         if XSampler._is_varying(self.params, x)]
         return
 
+    def __getitem__(self, item):
+        if item is None or item == 0:
+            return self
+        else:
+            raise TypeError('Base YModel object is not subscriptable. Implement your own rules!')
+
     @staticmethod
     def choose_one(
         name,
@@ -147,9 +153,15 @@ class YModel(object):
             self.evaluate(x_val, nx, **kwargs)
         return self.y
 
-    def save(self, path, verbose=False):
+    def save(self, fname=None, root=None, verbose=False):
         """
         Placeholder in case we want to save something.
+        """
+        return
+
+    def load(self, fname=None, root=None, verbose=False):
+        """
+        Placeholder in case we want to load something.
         """
         return
 
@@ -456,7 +468,25 @@ class ClassSpectra(YModel):
     Power spectra from Class.
     """
 
-    def __init__(self, params, n_samples, outputs, verbose=False, **kwargs):
+    def __init__(
+            self,
+            params=None,
+            n_samples=None,
+            outputs=None,
+            verbose=False,
+            **kwargs):
+
+        # Decide wether to fully initialize (it calls Class to
+        # compute the reference spectra, which takes some time) or not.        
+        skip_init = False
+        if params is None or n_samples is None or outputs is None:
+            skip_init = True
+
+        if skip_init:
+            if verbose:
+                io.info('Skipping initializazion of ClassSpectra model.')
+            return
+
         if verbose:
             io.info('Initializing ClassSpectra model.')
 
@@ -500,6 +530,34 @@ class ClassSpectra(YModel):
         # 5) Store the redshift values at which Pk have been computed
         self.z_array = self._get_z_array(self.spectra)
         return
+
+    def __getitem__(self, item):
+        if item is None:
+            return self
+        
+        # Get correct name and index for spectrum
+        name = self.spectra[item].name
+        idx = self.spectra._get_idx_from_name(name)
+        
+        oneclassspectrum = ClassSpectra()
+        # Fix relevant attributes
+        oneclassspectrum.classy = self.classy
+        oneclassspectrum.cosmo = self.cosmo
+        oneclassspectrum.args = self.args
+        oneclassspectrum.class_params = self.class_params
+        oneclassspectrum.n_samples = self.n_samples
+        oneclassspectrum.params = self.params
+        oneclassspectrum.outputs = {name: self.outputs[name]}
+        oneclassspectrum.x_names = self.x_names
+        oneclassspectrum.y = [self.y[idx]]
+        oneclassspectrum.y_fnames = [self.y_fnames[idx]]
+        oneclassspectrum.y_headers = [self.y_headers[idx]]
+        oneclassspectrum.y_names = [self.y_names[idx]]
+        oneclassspectrum.y_ranges = [self.y_ranges[idx]]
+        oneclassspectrum.y_ref = [self.y_ref[idx]]
+        oneclassspectrum.z_array = self.z_array
+        oneclassspectrum.spectra = Spectra([self.spectra[idx]])
+        return oneclassspectrum
 
     def _get_z_max(self):
         z_max = 0.1
@@ -603,13 +661,18 @@ class ClassSpectra(YModel):
 
         return y
 
-    def save(self, path, verbose=False):
+    def save(self, fname=None, root=None, verbose=False):
         """
         Save reference spectra.
         """
-        path = os.path.join(path, de.file_names['spectra_factor']['name'])
+        if fname is None:
+            fname = de.file_names['spectra_factor']['name']
+        if root is None:
+            path = fname
+        else:
+            path = os.path.join(root, fname)
         if verbose:
-            io.print_level(1, 'Saving reference spectra to {}'.format(path))
+            io.info('Saving reference spectra to {}'.format(path))
 
         fits = io.FitsFile(path=path)
 
@@ -619,5 +682,28 @@ class ClassSpectra(YModel):
         # Write spectra
         for nsp, sp in enumerate(self.spectra):
             fits.write(self.y_ref[nsp], sp.name, type='image')
+        
+        return
+
+    def load(self, fname=None, root=None, verbose=False):
+        """
+        Load reference spectra.
+        """
+        if fname is None:
+            fname = de.file_names['spectra_factor']['name']
+        if root is None:
+            path = fname
+        else:
+            path = os.path.join(root, fname)
+        if verbose:
+            io.print_level(1, 'Loading reference spectra from {}'.format(path))
+
+        fits = io.FitsFile(path=path)
+
+        # Read z_array
+        self.z_array = fits.read_key('z_array')
+
+        # Read spectra
+        self.y_ref = [fits.read_key(sp.name) for sp in self.spectra]
         
         return

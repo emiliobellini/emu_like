@@ -27,23 +27,62 @@ class Spectra(object):
     passed to classy for a proper run.
     """
 
-    def __init__(self, params):
+    def __init__(self, dict_or_list):
         """
         Init the list of spectra to be computed.
         Arguments:
-        - params (dict): nested dictionary of parameters
-          for each spectrum.
+        - dict_or_list (dict or list): either nested dictionary
+          of parameters for each spectrum, or a list of Spectrum objects.
         """
         # Init classy
         import classy
-        self.list = [Spectrum.choose_one(sp, params[sp]) for sp in params]
+        if isinstance(dict_or_list, dict):
+            self.list = [Spectrum.choose_one(sp, dict_or_list[sp]) for sp in dict_or_list]
+        elif isinstance(dict_or_list, list):
+            self.list = dict_or_list
         return
 
     def __setitem__(self, item, value):
-        self.list[item] = value
+        """
+        Make Spectra subsriptable. Item can be:
+        - integer: position of the spectrum
+        - string: name of the spectrum
+        In both cases it assigns value to the corresponding Spectrum.
+        """
+        if isinstance(item, int):
+            idx = item
+        elif isinstance(item, str):
+            idx = self._get_idx_from_name(item)
+        self.list[idx] = value
 
     def __getitem__(self, item):
-        return self.list[item]
+        """
+        Make Spectra subsriptable. Item can be:
+        - integer: position of the spectrum
+        - string: name of the spectrum
+        In both cases it returns the corresponding Spectrum object.
+        """
+        if isinstance(item, int):
+            idx = item
+        elif isinstance(item, str):
+            idx = self._get_idx_from_name(item)
+        return self.list[idx]
+
+    def _get_idx_from_name(self, name):
+        """
+        From the name (str) of the Spectrum,
+        it returns its position (int) in Spectra.
+        """
+        idx = self.get_fnames().index(
+            de.file_names['y_data']['name'].format(name))
+        return idx
+
+    def _get_name_from_idx(self, idx):
+        """
+        From the position (int) of the Spectrum,
+        it returns its name (str).
+        """
+        return self.list[idx].name
 
     def get_k_min(self):
         """

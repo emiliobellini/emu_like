@@ -308,6 +308,9 @@ class FFNNEmu(Emulator):
         fname = os.path.join(path, de.file_names['dataset_details']['name'])
         details.save(fname, header=de.file_names['dataset_details']['header'])
 
+        # Save y_model
+        self.y_model.save(root=path, verbose=True)
+
         return
 
     def build(self, params, verbose=False):
@@ -413,12 +416,13 @@ class FFNNEmu(Emulator):
         - verbose (bool, default: False): verbosity.
         """
 
-        # Save dataset details as attributes
+        # Store dataset details as attributes
         self.x_scaler = data.x_scaler
         self.y_scaler = data.y_scaler
         self.x_names = data.x_names
         self.y_names = data.y_names
         self.x_ranges = data.x_ranges
+        self.y_model = data.y_model
 
         # Take the last element of the list and use this
         if isinstance(epochs, list):
