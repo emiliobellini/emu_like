@@ -309,7 +309,7 @@ class FFNNEmu(Emulator):
         details.save(fname, header=de.file_names['dataset_details']['header'])
 
         # Save y_model
-        self.y_model.save(root=path, verbose=True)
+        self.y_model.save(root=path, verbose=verbose)
 
         return
 
