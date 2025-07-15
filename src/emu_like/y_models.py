@@ -527,8 +527,22 @@ class ClassSpectra(YModel):
                     self.y_ref[nsp] = np.ones_like(self.y_ref[nsp][:,:,0])
                 else:
                     self.y_ref[nsp] = np.ones_like(self.y_ref[nsp])
-        # 5) Store the redshift values at which Pk have been computed
+        # 5) Store the redshift values at which all Pk have been computed
         self.z_array = self._get_z_array(self.spectra)
+        # 6) Store the k modes values at which all Pk have been computed
+        self.k_ranges = [None for sp in self.spectra]
+        for nsp, sp in enumerate(self.spectra):
+            try:
+                self.k_ranges[nsp] = sp.k_range
+            except AttributeError:
+                pass
+        # 7) Store the ell modes values at which all Cell have been computed
+        self.ell_ranges = [None for sp in self.spectra]
+        for nsp, sp in enumerate(self.spectra):
+            try:
+                self.ell_ranges[nsp] = sp.ell_range
+            except AttributeError:
+                pass
         return
 
     def __getitem__(self, item):
@@ -555,8 +569,12 @@ class ClassSpectra(YModel):
         oneclassspectrum.y_names = [self.y_names[idx]]
         oneclassspectrum.y_ranges = [self.y_ranges[idx]]
         oneclassspectrum.y_ref = [self.y_ref[idx]]
-        oneclassspectrum.z_array = self.z_array
         oneclassspectrum.spectra = Spectra([self.spectra[idx]])
+        if self.spectra[idx].is_pk:
+            oneclassspectrum.z_array = self.z_array
+            oneclassspectrum.k_ranges = [self.k_ranges[idx]]
+        elif self.spectra[idx].is_cl:
+            oneclassspectrum.ell_ranges = [self.ell_ranges[idx]]
         return oneclassspectrum
 
     def _get_z_max(self):
@@ -676,12 +694,18 @@ class ClassSpectra(YModel):
 
         fits = io.FitsFile(path=path)
 
-        # Write z_array
-        fits.write(self.z_array, 'z_array', type='image')
 
-        # Write spectra
         for nsp, sp in enumerate(self.spectra):
+            # Write spectra
             fits.write(self.y_ref[nsp], sp.name, type='image')
+            if sp.is_pk:
+                # Write z_array
+                fits.write(self.z_array, 'z_array', type='image')
+                # Write k_range
+                fits.write(self.k_ranges[nsp], 'k_range_{}'.format(sp.name), type='image')
+            elif sp.is_cl:
+                # Write ell_range
+                fits.write(self.ell_ranges[nsp], 'ell_range_{}'.format(sp.name), type='image')
         
         return
 
@@ -700,10 +724,18 @@ class ClassSpectra(YModel):
 
         fits = io.FitsFile(path=path)
 
-        # Read z_array
-        self.z_array = fits.read_key('z_array')
-
         # Read spectra
         self.y_ref = [fits.read_key(sp.name) for sp in self.spectra]
+
+        # Read z_array, k_ranges, ell_ranges
+        self.z_array = None
+        self.k_ranges = [None for sp in self.spectra]
+        self.ell_ranges = [None for sp in self.spectra]
+        for nsp, sp in enumerate(self.spectra):
+            if sp.is_pk:
+                self.z_array = fits.read_key('z_array')
+                self.k_ranges[nsp] = fits.read_key('k_range_{}'.format(sp.name))
+            elif sp.is_cl:
+                self.ell_ranges[nsp] = fits.read_key('ell_range_{}'.format(sp.name))
         
         return
