@@ -253,6 +253,9 @@ class FFNNEmu(Emulator):
         self.loss = list(history[:, 1])
         self.val_loss = list(history[:, 2])
 
+        # Save y_model
+        self.y_model.load(root=path, verbose=verbose)
+
         return self
 
     def save(self, path, verbose=False):
