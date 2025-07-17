@@ -16,6 +16,7 @@ from . import io as io
 from .emu import Emulator
 from .params import Params
 from .scalers import Scaler
+from .y_models import YModel
 # TODO: something is not working here
 from . import loss_functions as lf  # noqa:F401
 # from tensorflow import keras
@@ -247,13 +248,24 @@ class FFNNEmu(Emulator):
         self.x_ranges = details['x_ranges']
 
         # Load history
-        fname = os.path.join(path, de.file_names['log']['name'])
-        history = np.genfromtxt(fname, delimiter=",", skip_header=1)
-        self.epochs = [int(x) for x in history[:, 0]]
-        self.loss = list(history[:, 1])
-        self.val_loss = list(history[:, 2])
+        try:
+            fname = os.path.join(path, de.file_names['log']['name'])
+            history = np.genfromtxt(fname, delimiter=",", skip_header=1)
+            self.epochs = [int(x) for x in history[:, 0]]
+            self.loss = list(history[:, 1])
+            self.val_loss = list(history[:, 2])
+        except FileNotFoundError:
+            pass
 
-        # Save y_model
+        # Init y_model
+        self.y_model = YModel.choose_one(
+            details['y_model']['name'],
+            details['y_model']['params'],
+            details['y_model']['outputs'],
+            details['y_model']['n_samples'],
+            **details['y_model']['args'],
+            verbose=False)
+        # Load y_model
         self.y_model.load(root=path, verbose=verbose)
 
         return self
@@ -307,6 +319,13 @@ class FFNNEmu(Emulator):
             'x_names': save_x,
             'y_names': save_y,
             'x_ranges': self.x_ranges.tolist(),
+            'y_model': {
+                'name': self.y_model.name,
+                'params': self.y_model.params,
+                'outputs': self.y_model.outputs,
+                'n_samples': self.y_model.n_samples,
+                'args': self.y_model.args,
+            }
         })
         fname = os.path.join(path, de.file_names['dataset_details']['name'])
         details.save(fname, header=de.file_names['dataset_details']['header'])

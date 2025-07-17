@@ -29,7 +29,8 @@ class YModel(object):
     Base class YModel.
     """
 
-    def __init__(self, params, n_samples, **kwargs):
+    def __init__(self, name, params, n_samples, **kwargs):
+        self.name = name
         self.params = params
         self.args = kwargs
         self.n_samples = n_samples
@@ -40,6 +41,7 @@ class YModel(object):
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
         self.y_fnames = []  # File names of y data
+        self.outputs = None
 
         # Derive varying parameters
         self.x_names = [x for x in self.params
@@ -77,20 +79,20 @@ class YModel(object):
           the correct sampling function and initialize it.
         """
         if name == 'linear_1d':
-            return Linear1D(params, n_samples, verbose=verbose, **kwargs)
+            return Linear1D(name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'quadratic_1d':
-            return Quadratic1D(params, n_samples, verbose=verbose, **kwargs)
+            return Quadratic1D(name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'gaussian_1d':
-            return Gaussian1D(params, n_samples, verbose=verbose, **kwargs)
+            return Gaussian1D(name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'linear_2d':
-            return Linear2D(params, n_samples, verbose=verbose, **kwargs)
+            return Linear2D(name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'quadratic_2d':
-            return Quadratic2D(params, n_samples, verbose=verbose, **kwargs)
+            return Quadratic2D(name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'cobaya_loglike':
-            return CobayaLoglike(params, n_samples, verbose=verbose, **kwargs)
+            return CobayaLoglike(name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'class_spectra':
             return ClassSpectra(
-                params, n_samples, outputs, verbose=verbose, **kwargs)
+                name, params, n_samples, outputs, verbose=verbose, **kwargs)
         else:
             raise Exception('YModel not recognised!')
 
@@ -184,11 +186,11 @@ class Linear1D(YModel):
     y = a*x + b
     """
 
-    def __init__(self, params, n_samples, verbose=False, **kwargs):
+    def __init__(self, name, params, n_samples, verbose=False, **kwargs):
         if verbose:
             io.info('Initializing Linear1D model.')
 
-        YModel.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, name, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -224,11 +226,11 @@ class Quadratic1D(YModel):
     y = a*x^2 + b*x + c
     """
 
-    def __init__(self, params, n_samples, verbose=False, **kwargs):
+    def __init__(self, name, params, n_samples, verbose=False, **kwargs):
         if verbose:
             io.info('Initializing Quadratic1D model.')
 
-        YModel.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, name, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -265,11 +267,11 @@ class Gaussian1D(YModel):
     y = exp(-(x-mean^2)/std/2)
     """
 
-    def __init__(self, params, n_samples, verbose=False, **kwargs):
+    def __init__(self, name, params, n_samples, verbose=False, **kwargs):
         if verbose:
             io.info('Initializing Gaussian1D model.')
 
-        YModel.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, name, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -307,11 +309,11 @@ class Linear2D(YModel):
     y = a*x1 + b*x2 + c
     """
 
-    def __init__(self, params, n_samples, verbose=False, **kwargs):
+    def __init__(self, name, params, n_samples, verbose=False, **kwargs):
         if verbose:
             io.info('Initializing Linear2D model.')
 
-        YModel.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, name, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -349,11 +351,11 @@ class Quadratic2D(YModel):
     y = a*x1^2 + b*x2^2 + c*x1*x2 + d*x1 + e*x2 + f
     """
 
-    def __init__(self, params, n_samples, verbose=False, **kwargs):
+    def __init__(self, name, params, n_samples, verbose=False, **kwargs):
         if verbose:
             io.info('Initializing Quadratic2D model.')
 
-        YModel.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, name, params, n_samples, **kwargs)
 
         # Fix known properties of the function
         self.n_y = [1]
@@ -394,11 +396,11 @@ class CobayaLoglike(YModel):
     Log-likelihoods from Cobaya.
     """
 
-    def __init__(self, params, n_samples, verbose=False, **kwargs):
+    def __init__(self, name, params, n_samples, verbose=False, **kwargs):
         if verbose:
             io.info('Initializing CobayaLoglike model.')
 
-        YModel.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, name, params, n_samples, **kwargs)
 
         # Init Cobaya
         import cobaya
@@ -470,6 +472,7 @@ class ClassSpectra(YModel):
 
     def __init__(
             self,
+            name=None,
             params=None,
             n_samples=None,
             outputs=None,
@@ -490,7 +493,7 @@ class ClassSpectra(YModel):
         if verbose:
             io.info('Initializing ClassSpectra model.')
 
-        YModel.__init__(self, params, n_samples, **kwargs)
+        YModel.__init__(self, name, params, n_samples, **kwargs)
         self.outputs = outputs
 
         # Init classy
@@ -555,6 +558,7 @@ class ClassSpectra(YModel):
         
         oneclassspectrum = ClassSpectra()
         # Fix relevant attributes
+        oneclassspectrum.name = self.name
         oneclassspectrum.classy = self.classy
         oneclassspectrum.cosmo = self.cosmo
         oneclassspectrum.args = self.args
