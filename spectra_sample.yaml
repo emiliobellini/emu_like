@@ -25,7 +25,7 @@ x_sampler:
   # Arguments
   args:
     # Number of samples (int). Used in all but evaluate
-    n_samples: 10
+    n_samples: 50
     # Seed (int). Used only in latin_hypercube to ensure
     # deterministic sampling
     seed: 12
@@ -46,81 +46,97 @@ y_model:
   name: class_spectra
   # Arguments
   args:
+    Omega_m: 0.3158
+    Omega_b: 0.0494
+    A_s: 2.1006e-9
+    n_s: 0.96605
+    tau_reio: 0.0543
     N_ur: 2.0308
     N_ncdm: 1
     m_ncdm: 0.06
     YHe: 0.24
+    # Precision parameters
+    k_per_decade_for_pk: 1000
+    k_per_decade_for_bao: 2000
+    l_logstep: 1.026
+    l_linstep: 25
+    perturbations_sampling_stepsize: 0.01
+    l_switch_limber: 20
+    accurate_lensing: 1
+    delta_l_max: 1000
+    k_max_tau0_over_l_max: 8
+
   # List of output files (only for class_spectra)
   outputs:
     # Each spectrum is saved in a different file
     pk_m:
       k_min: 1.e-4
-      k_max: 1.
+      k_max: 12.
       k_space: 'log'
       k_num: 600
       ratio: True
     pk_cb:
       k_min: 1.e-4
-      k_max: 1.
+      k_max: 12.
       k_space: 'log'
       k_num: 600
       ratio: True
     pk_weyl:
       k_min: 1.e-4
-      k_max: 1.
+      k_max: 12.
       k_space: 'log'
       k_num: 600
       ratio: True
     f_m:
       k_min: 1.e-4
-      k_max: 1.
+      k_max: 12.
       k_space: 'log'
       k_num: 600
     f_cb:
       k_min: 1.e-4
-      k_max: 1.
+      k_max: 12.
       k_space: 'log'
       k_num: 600
     f_weyl:
       k_min: 1.e-4
-      k_max: 1.
+      k_max: 12.
       k_space: 'log'
       k_num: 600
     cl_TT:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
       ratio: True
     cl_EE:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
       ratio: True
     cl_TE:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
     cl_BB:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
     cl_pp:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
       ratio: True
     cl_Tp:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
     cl_TT_lensed:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
       ratio: True
     cl_EE_lensed:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
       ratio: True
     cl_TE_lensed:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
     cl_BB_lensed:
       ell_min: 2
-      ell_max: 2500
+      ell_max: 5000
 
 
 # List of parameters.

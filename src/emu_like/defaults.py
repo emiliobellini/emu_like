@@ -58,4 +58,11 @@ cosmo_params = {
     # Precision parameters
     'k_per_decade_for_pk': 1000,
     'k_per_decade_for_bao': 2000,
+    'l_logstep': 1.026,
+    'l_linstep': 25,
+    'perturbations_sampling_stepsize': 0.01,
+    'l_switch_limber': 20,
+    'accurate_lensing': 1,
+    'delta_l_max': 1000,
+    'k_max_tau0_over_l_max': 8,
 }
