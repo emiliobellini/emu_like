@@ -55,9 +55,9 @@ y_model:
     N_ncdm: 1
     m_ncdm: 0.06
     YHe: 0.24
-    # Precision parameters
-    k_per_decade_for_pk: 1000
-    k_per_decade_for_bao: 2000
+    # Precision parameters (this should be a good compromise, check for more general models)
+    k_per_decade_for_pk: 200
+    k_per_decade_for_bao: 400
     l_logstep: 1.026
     l_linstep: 25
     perturbations_sampling_stepsize: 0.01

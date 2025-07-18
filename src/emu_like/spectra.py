@@ -320,6 +320,10 @@ class Pk(Spectrum):
         return
 
     def _get_2D_pk(self, cosmo, k_range, only_cb):
+        """
+        Here the k_range is expected to be in units of 1/Mpc
+        and pk is in units of Mpc^3.
+        """
 
         # Decide if non linear
         if 'non_linear' in cosmo.pars:
