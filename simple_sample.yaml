@@ -2,8 +2,11 @@
 # Usage:
 #   python main.py sample simple_sample.yaml -v
 
-# Output folder (str)
-output: output/simple/sample
+output:
+  # Output folder (str)
+  path: output/simple/sample
+  # Save incrementally or at the end (bool)
+  save_incrementally: True
 
 
 # Sampling method for x.

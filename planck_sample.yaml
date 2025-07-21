@@ -4,8 +4,11 @@
 # Usage:
 #   python main.py sample planck_sample.yaml -v
 
-# Output folder (str)
-output: output/planck/sample
+output:
+  # Output folder (str)
+  path: output/planck/sample
+  # Save incrementally or at the end (bool)
+  save_incrementally: True
 
 
 # Sampling method for x.

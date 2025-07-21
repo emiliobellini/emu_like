@@ -2,8 +2,11 @@
 # Usage:
 #   python main.py sample spectra_sample.yaml -v
 
-# Output folder (str)
-output: output/spectra/sample
+output:
+  # Output folder (str)
+  path: output/spectra/sample
+  # Save incrementally or at the end (bool)
+  save_incrementally: True
 
 
 # Sampling method for x.
@@ -25,7 +28,7 @@ x_sampler:
   # Arguments
   args:
     # Number of samples (int). Used in all but evaluate
-    n_samples: 50
+    n_samples: 2
     # Seed (int). Used only in latin_hypercube to ensure
     # deterministic sampling
     seed: 12

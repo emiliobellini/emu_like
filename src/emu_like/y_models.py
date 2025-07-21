@@ -695,6 +695,7 @@ class ClassSpectra(YModel):
             path = os.path.join(root, fname)
         if verbose:
             io.info('Saving reference spectra to {}'.format(path))
+        io.Folder(os.path.dirname(path)).create()
 
         fits = io.FitsFile(path=path)
 

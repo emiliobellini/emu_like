@@ -66,9 +66,12 @@ class Params(object):
         - verbose (bool, default: False): verbosity.
         """
 
-        # Join root
-        if root:
+        # Create root folder and join path
+        if root is None:
+            io.Folder(os.path.dirname(path)).create()
+        else:
             path = os.path.join(root, path)
+            io.Folder(root).create()
 
         if header:
             with open(path, 'w') as file:

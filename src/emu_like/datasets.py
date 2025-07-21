@@ -583,6 +583,7 @@ class DataCollection(object):
 
         if verbose:
             io.print_level(1, 'Saved x array at: {}'.format(fname))
+        io.Folder(os.path.dirname(os.path.join(root, fname))).create()
         np.savetxt(os.path.join(root, fname), x_save, header=head)
         return
 
@@ -619,6 +620,7 @@ class DataCollection(object):
             heads = headers
 
         for nf in range(len(fnames)):
+            io.Folder(os.path.dirname(os.path.join(roots[nf], fnames[nf]))).create()
             np.savetxt(os.path.join(roots[nf], fnames[nf]),
                        y_save[nf], header=heads[nf])
             if verbose:
@@ -689,7 +691,10 @@ class DataCollection(object):
         - params (Params): params object;
         """
         default_dict = {
-            'output': None,
+            'output': {
+                'path': None,
+                'save_incrementally': False,
+            },
             'x_sampler': {
                 'name': None,
                 'args': {},
@@ -795,10 +800,10 @@ class DataCollection(object):
 
         # Save y
         self._save_y(
-            fname=fnames_y,
-            root=roots_y,
-            y_array=y_arrays,
-            header=headers_y,
+            fnames=fnames_y,
+            roots=roots_y,
+            y_arrays=y_arrays,
+            headers=headers_y,
             verbose=verbose)
         
         # Save y_model
@@ -960,13 +965,16 @@ class DataCollection(object):
             io.info('Generating dataset.')
 
         # Create main folder
+        self.path = output
         if save_incrementally:
-            self.path = output
             io.Folder(self.path).create(verbose=verbose)
 
         # Create settings dictionary
         self.settings = {
-            'output': output,
+            'output': {
+                'path': output,
+                'save_incrementally': save_incrementally,
+            },
             'x_sampler': {
                 'name': x_name,
                 'args': x_args,

@@ -35,14 +35,14 @@ def sample_emu(args):
     # If resume
     if args.resume:
         if args.verbose:
-            io.info('Resuming from {}.'.format(params['output']))
+            io.info('Resuming from {}.'.format(params['output']['path']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
         # Read params from output folder
         params = Params().load(de.file_names['params']['name'],
-                               root=params['output'])
+                               root=params['output']['path'])
 
         # Load the dataset
-        data.load(params['output'], verbose=args.verbose)
+        data.load(params['output']['path'], verbose=args.verbose)
         # Resume the dataset
         data.resume(
             save_incrementally=True,
@@ -50,9 +50,9 @@ def sample_emu(args):
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
-        if io.Folder(params['output']).is_empty():
+        if io.Folder(params['output']['path']).is_empty():
             if args.verbose:
-                io.info("Writing output in {}".format(params['output']))
+                io.info("Writing output in {}".format(params['output']['path']))
         else:
             raise Exception(
                 'Output folder not empty! Exiting to avoid corruption of '
@@ -67,8 +67,11 @@ def sample_emu(args):
             y_name=params['y_model']['name'],
             y_args=params['y_model']['args'],
             y_outputs=params['y_model']['outputs'],
-            output=params['output'],
-            save_incrementally=True,
+            output=params['output']['path'],
+            save_incrementally=params['output']['save_incrementally'],
             verbose=args.verbose)
+        
+        if params['output']['save_incrementally'] is False:
+            data.save(verbose=args.verbose)
 
     return
