@@ -1086,9 +1086,9 @@ class DataCollection(object):
             pool.join()
 
             # Stack the dataset
-            for n_spectrum in range(len(self.n_y)):
+            for n_out in range(len(self.n_y)):
                 for n_sample in range(self.n_samples):
-                    y_model.y[n_spectrum][n_sample] = y[n_sample][n_spectrum][0]
+                    y_model.y[n_out][n_sample] = y[n_sample][n_out][0]
 
 
         # Get remaining attributes
