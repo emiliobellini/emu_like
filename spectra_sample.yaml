@@ -6,7 +6,11 @@ output:
   # Output folder (str)
   path: output/spectra/sample
   # Save incrementally or at the end (bool)
+  # If True use num_processes: 1
   save_incrementally: True
+  # Number of processes to sample in parallel (int)
+  # If > 1 use save_incrementally: False
+  num_processes: 1
 
 
 # Sampling method for x.

@@ -12,7 +12,7 @@ from emu_like.params import Params
 from emu_like.datasets import DataCollection
 
 
-def sample_emu(args):
+def sample_emu(args, init_parallel_sampling, do_parallel_sampling):
     """ Generate the dataset for the emulator.
 
     Args:
@@ -69,6 +69,9 @@ def sample_emu(args):
             y_outputs=params['y_model']['outputs'],
             output=params['output']['path'],
             save_incrementally=params['output']['save_incrementally'],
+            num_processes=params['output']['num_processes'],
+            init_parallel_sampling=init_parallel_sampling,
+            do_parallel_sampling=do_parallel_sampling,
             verbose=args.verbose)
         
         if params['output']['save_incrementally'] is False:
