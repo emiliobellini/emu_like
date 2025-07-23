@@ -40,6 +40,9 @@ class Spectra(object):
             self.list = [Spectrum.choose_one(sp, dict_or_list[sp]) for sp in dict_or_list]
         elif isinstance(dict_or_list, list):
             self.list = dict_or_list
+        
+        # List of names of the spectra
+        self.names = self.get_names()
         return
 
     def __setitem__(self, item, value):
@@ -167,9 +170,16 @@ class Spectra(object):
 
     def get_names(self):
         """
+        Get a list of the spectra names.
+        """
+        names = [sp.name for sp in self.list]
+        return names
+
+    def get_y_names(self):
+        """
         Get a list of the y names of each spectrum computed.
         """
-        names = [sp.get_names() for sp in self.list]
+        names = [sp.get_y_names() for sp in self.list]
         return names
 
     def get_headers(self):
@@ -352,7 +362,7 @@ class Pk(Spectrum):
         """
         return self.k_num
 
-    def get_names(self):
+    def get_y_names(self):
         """
         Default names for the P(k_i) at bin i.
         """
@@ -371,7 +381,7 @@ class Pk(Spectrum):
         hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
         hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
         hd += 'of k_modes of {}.\n'
-        # hd += '\t'.join(self.get_names())
+        # hd += '\t'.join(self.get_y_names())
 
         hd = hd.format(
             self.hd_name,
@@ -456,7 +466,7 @@ class Cell(Spectrum):
         """
         return self.ell_num
 
-    def get_names(self):
+    def get_y_names(self):
         """
         Default names for the C(ell_i) at bin i.
         NOTE: bin 0 does not mean ell=0 but ell=2 if ell_min=2.
@@ -473,7 +483,7 @@ class Cell(Spectrum):
             hd = 'Ratio of the {} C_l for ell={} to {}.\n'
         else:
             hd ='dimensionless {} [l(l+1)/2pi] C_l for ell={} to {}.\n'
-        # hd += '\t'.join(self.get_names())
+        # hd += '\t'.join(self.get_y_names())
 
         # Cl specific settings
         hd = hd.format(
@@ -511,7 +521,7 @@ class GrowthRate(Pk):
         hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
         hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
         hd += 'of k_modes of {}.\n'
-        # hd += '\t'.join(self.get_names())
+        # hd += '\t'.join(self.get_y_names())
 
         hd = hd.format(
             self.hd_name,

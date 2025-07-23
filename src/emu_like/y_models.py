@@ -616,7 +616,7 @@ class ClassSpectra(YModel):
         """
         Get y_names.
         """
-        self.y_names = self.spectra.get_names()
+        self.y_names = self.spectra.get_y_names()
         return self.y_names
 
     def get_y_headers(self):
