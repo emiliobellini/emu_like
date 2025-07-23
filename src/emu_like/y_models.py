@@ -516,10 +516,13 @@ class ClassSpectra(YModel):
 
         # Compute reference spectra (this is used to take the ratio if requested)
         # 1) Infer the maximum redshift
-        z_max = self._get_z_max()
+        if any([sp.is_pk for sp in self.spectra]):
+            z_max = {'z_max_pk': self._get_z_max()}
+        else:
+            z_max = {}
         # 2) Compute Class
         cosmo_ref = self.classy.Class()
-        cosmo_ref.set(de.cosmo_params | self.spectra.get_class_params() | {'z_max_pk': z_max})
+        cosmo_ref.set(de.cosmo_params | self.spectra.get_class_params() | z_max)
         cosmo_ref.compute()
         # 3) Compute all the spectra
         self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]

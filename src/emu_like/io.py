@@ -401,7 +401,7 @@ class File(Path):
         # Main body
         with open(path, 'w') as f:
             f.write(content)
-        print('--> File saved at {}!'.format(path))
+        print_level(1, 'File saved at {}!'.format(path))
         return
 
     def append(self, content=None, path=None):
@@ -422,7 +422,7 @@ class File(Path):
         # Main body
         with open(path, 'a') as f:
             f.write(content)
-        print('--> Content appended to file at {}!'.format(path))
+        print_level(1, 'Content appended to file at {}!'.format(path))
         return
 
     def remove(self):
@@ -540,10 +540,10 @@ class FitsFile(File):
             elif type == 'table':
                 hdul.append(array)
             else:
-                print('Type '+type+' not recognized! Data not saved to file!')
+                warning('Type {} not recognized! Data not saved to file!'.format(type))
                 return True
         if verbose:
-            print('Appended ' + name.upper() + ' to ' + os.path.relpath(self.path))
+            print_level(1, 'Appended {} to {}'.format(name.upper(), os.path.relpath(self.path)))
             sys.stdout.flush()
         return warning
 
@@ -576,13 +576,13 @@ def write_green(msg):
 
 def warning(msg):
     prepend = write_red('[WARNING]')
-    print('{} {}'.format(prepend, msg))
+    print('{} {}'.format(prepend, msg), flush=True)
     return
 
 
 def info(msg):
     prepend = write_green('[info]')
-    print('{} {}'.format(prepend, msg))
+    print('{} {}'.format(prepend, msg), flush=True)
     return
 
 
@@ -594,5 +594,5 @@ def print_level(num, msg, arrow=True):
             prepend = (4*num+2)*' '
     else:
         prepend = ''
-    print('{}{}'.format(prepend, msg))
+    print('{}{}'.format(prepend, msg), flush=True)
     return
