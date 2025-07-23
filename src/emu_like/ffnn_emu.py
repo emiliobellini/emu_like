@@ -479,6 +479,10 @@ class FFNNEmu(Emulator):
         self.loss = self.loss + self.model.history.history['loss']
         self.val_loss = self.val_loss + self.model.history.history['val_loss']
 
+        # Save emulator
+        if path:
+            self.save(path)
+
         # Plot - Loss per epoch
         if get_plot:
             plt.semilogy(self.epochs, self.loss, label='training data')
