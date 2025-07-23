@@ -602,7 +602,7 @@ class ClassSpectra(YModel):
             try:
                 z_array = sp.z_array
             except AttributeError:
-                pass
+                z_array = None
         return z_array
 
     def get_n_y(self):
