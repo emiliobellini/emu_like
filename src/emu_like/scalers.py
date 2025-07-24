@@ -70,8 +70,10 @@ class Scaler(object):
             return StandardScaler(scaler_type)
         elif scaler_type == 'MinMaxScaler':
             return MinMaxScaler(scaler_type)
-        elif scaler_type == 'MinMaxScalerPlus1':
-            return MinMaxScalerPlus1(scaler_type)
+        elif scaler_type == 'MinMaxCommonScaler':
+            return MinMaxCommonScaler(scaler_type)
+        elif scaler_type == 'MinMaxPlus1Scaler':
+            return MinMaxPlus1Scaler(scaler_type)
         elif scaler_type == 'ExpMinMaxScaler':
             return ExpMinMaxScaler(scaler_type)
         else:
@@ -221,7 +223,38 @@ class MinMaxScaler(Scaler):
         return x
 
 
-class MinMaxScalerPlus1(Scaler):
+class MinMaxCommonScaler(Scaler):
+    """
+    Transform features by scaling each
+    feature to the (0, 1) range common to all.
+    """
+
+    def __init__(self, name):
+        Scaler.__init__(self, name='MinMaxCommonScaler')
+        self.skl_scaler = skl_pre.MinMaxScaler()
+        return
+
+    def fit(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_to_fit = self._replace_inf(x)
+        else:
+            x_to_fit = x
+        self.global_min = np.min(x_to_fit)
+        self.global_max = np.max(x_to_fit)
+        return
+
+    def transform(self, x, replace_infinity=True):
+        if replace_infinity:
+            x = self._replace_inf(x)
+        x_scaled = (x + self.global_min)/(self.global_max - self.global_min)
+        return x_scaled
+
+    def inverse_transform(self, x_scaled):
+        x = x_scaled * (self.global_max - self.global_min) - self.global_min
+        return x
+
+
+class MinMaxPlus1Scaler(Scaler):
     """
     Transform features by scaling each
     feature to the (1, 2) range.
@@ -229,7 +262,7 @@ class MinMaxScalerPlus1(Scaler):
     """
 
     def __init__(self, name):
-        Scaler.__init__(self, name='MinMaxScalerPlus1')
+        Scaler.__init__(self, name='MinMaxPlus1Scaler')
         self.skl_scaler = skl_pre.MinMaxScaler()
         return
 
