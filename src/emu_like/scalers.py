@@ -246,11 +246,21 @@ class MinMaxCommonScaler(Scaler):
     def transform(self, x, replace_infinity=True):
         if replace_infinity:
             x = self._replace_inf(x)
-        x_scaled = (x + self.global_min)/(self.global_max - self.global_min)
+        if self.global_min == 0. and self.global_max == 0.:
+            x_scaled = x
+        elif self.global_min == self.global_max:
+            x_scaled = x/self.global_max
+        else:
+            x_scaled = (x + self.global_min)/(self.global_max - self.global_min)
         return x_scaled
 
     def inverse_transform(self, x_scaled):
-        x = x_scaled * (self.global_max - self.global_min) - self.global_min
+        if self.global_min == 0. and self.global_max == 0.:
+            x = x_scaled
+        elif self.global_min == self.global_max:
+            x = x_scaled * self.global_max
+        else:
+            x = x_scaled * (self.global_max - self.global_min) - self.global_min
         return x
 
 
