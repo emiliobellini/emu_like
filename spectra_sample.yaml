@@ -78,72 +78,72 @@ y_model:
     # Each spectrum is saved in a different file
     pk_m:
       k_min: 1.e-4
-      k_max: 12.
+      k_max: 2.
       k_space: 'log'
       k_num: 600
       ratio: True
     pk_cb:
       k_min: 1.e-4
-      k_max: 12.
+      k_max: 2.
       k_space: 'log'
       k_num: 600
       ratio: True
     pk_weyl:
       k_min: 1.e-4
-      k_max: 12.
+      k_max: 2.
       k_space: 'log'
       k_num: 600
       ratio: True
     f_m:
       k_min: 1.e-4
-      k_max: 12.
+      k_max: 2.
       k_space: 'log'
       k_num: 600
     f_cb:
       k_min: 1.e-4
-      k_max: 12.
+      k_max: 2.
       k_space: 'log'
       k_num: 600
     f_weyl:
       k_min: 1.e-4
-      k_max: 12.
+      k_max: 2.
       k_space: 'log'
       k_num: 600
     cl_TT:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
       ratio: True
     cl_EE:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
       ratio: True
     cl_TE:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
     cl_BB:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
     cl_pp:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
       ratio: True
     cl_Tp:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
     cl_TT_lensed:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
       ratio: True
     cl_EE_lensed:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
       ratio: True
     cl_TE_lensed:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
     cl_BB_lensed:
       ell_min: 2
-      ell_max: 5000
+      ell_max: 3000
 
 
 # List of parameters.
