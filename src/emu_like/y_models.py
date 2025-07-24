@@ -601,11 +601,10 @@ class ClassSpectra(YModel):
         return z_max
 
     def _get_z_array(self, spectra):
+        z_array = None
         for sp in spectra:
-            try:
+            if sp.is_pk:
                 z_array = sp.z_array
-            except AttributeError:
-                z_array = None
         return z_array
 
     def get_n_y(self):

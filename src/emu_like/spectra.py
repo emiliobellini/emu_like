@@ -551,6 +551,8 @@ class GrowthRate(Pk):
                 self.pk.z_array, pk_array.T, s=0).derivative()(self.pk.z_array).T
             # Compute growth factor f
             fk = -0.5 * (1+self.pk.z_array) * dpkdz/pk
+            # Store the z_array
+            self.z_array = self.pk.z_array
 
         # Otherwise return f(k)
         else:
