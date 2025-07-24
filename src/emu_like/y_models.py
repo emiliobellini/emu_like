@@ -529,10 +529,7 @@ class ClassSpectra(YModel):
         # 4) Replace with ones if we do not take ratio
         for nsp, sp in enumerate(self.spectra):
             if not sp.ratio:
-                if sp.is_pk:
-                    self.y_ref[nsp] = np.ones_like(self.y_ref[nsp][:,:,0])
-                else:
-                    self.y_ref[nsp] = np.ones_like(self.y_ref[nsp])
+                self.y_ref[nsp] = np.ones_like(self.y_ref[nsp])
         # 5) Store the redshift values at which all Pk have been computed
         self.z_array = self._get_z_array(self.spectra)
         # 6) Store the k modes values at which all Pk have been computed
