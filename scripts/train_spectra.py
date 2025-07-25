@@ -187,11 +187,13 @@ if __name__ == '__main__':
             ax[4, count].plot(x, ref*derived[name][spectrum]['y_emu'][idx_max])
             ax[4, count].plot(x, ref*data[name][spectrum].y[idx_max], '--')
 
-            # Print stuff
+        plt.subplots_adjust(bottom=0.15, hspace=0.05, wspace=0.15)
+        plt.savefig(os.path.join(train_folder.path, 'summary_{}.pdf'.format(spectrum)))
+
+    # Print stuff
+    for spectrum in spectra_to_train:
+        for name in names:
             io.info('Worst fit {} - {} points'.format(spectrum, name))
             for var, val in zip(data[name][spectrum].x_names, data[name][spectrum].x[idx_max]):
                 io.print_level(1, '{} = {}'.format(var, val))
             print()
-
-        plt.subplots_adjust(bottom=0.15, hspace=0.05, wspace=0.15)
-        plt.savefig(os.path.join(train_folder.path, 'summary_{}.pdf'.format(spectrum)))
