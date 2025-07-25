@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ---- Metadata configuration ----
-#SBATCH --job-name=lcdm_train
+#SBATCH --job-name=train_lcdm
 #SBATCH --mail-type=END
 #SBATCH --mail-user=emilio.bellini@ung.si
 
@@ -54,7 +54,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/init_files/lcdm_train.py
+python /ceph/hpc/home/bellinie/emu_like/scripts/train_spectra.py /ceph/hpc/home/bellinie/emu_like/output/lcdm -d 50 100 1000
 
 
 # ==== END OF JOB COMMANDS ===== #

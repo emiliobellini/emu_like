@@ -242,6 +242,43 @@ class Folder(object):
                 raise Exception('Multiple files matching patterns')
         return filtered
 
+    def list_subfolders(self, patterns=None, unique=False):
+        """
+        List all subfolders matching any of the patterns (if specified).
+
+        Arguments:
+            - patterns (str or list of str, optional): regex patterns
+                (subfolder included if any of them is satisfied)
+            - unique (bool, optional): check if there is more than
+                one subfolder satisfying the patterns
+
+        Return:
+            - list of files satisfying the pattern
+        """
+        if not self.exists:
+            filtered = []
+        else:
+            # List all files in path
+            for root, dirs, _ in os.walk(self.path):
+                if root == self.path:
+                    all = [os.path.join(root, x) for x in dirs]
+            # Filter with pattern
+            if patterns:
+                if isinstance(patterns, str):
+                    patterns = [patterns]
+                filtered = []
+                for pattern in patterns:
+                    filtered += [x for x in all if re.match(pattern, x)]
+            else:
+                filtered = all
+        # Check uniqueness
+        if unique:
+            if len(filtered) == 0:
+                raise Exception('No subfolders matching patterns')
+            elif len(filtered) > 1:
+                raise Exception('Multiple subfolders matching patterns')
+        return filtered
+
     def is_empty(self):
         """
         Check if a folder is empty or not.
@@ -256,7 +293,7 @@ class Folder(object):
         else:
             return True
 
-    def subfolder(self, subpath):
+    def subfolder(self, subpath, should_exist=False):
         """
         Define subfolder.
 
@@ -264,7 +301,7 @@ class Folder(object):
             - Folder class for the resulting path
         """
         path = os.path.join(self.path, subpath)
-        return Folder(path=path)
+        return Folder(path=path, should_exist=should_exist)
 
     def join(self, subpath):
         """
