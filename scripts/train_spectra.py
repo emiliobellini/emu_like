@@ -79,11 +79,11 @@ if __name__ == '__main__':
             data[name][spectrum].rescale(
                 rescale_x = 'MinMaxScaler',
                 rescale_y = 'MinMaxCommonScaler')
+            derived[name][spectrum] = {}
 
     # Load or train the emulators
     io.info('Training models')
     for spectrum in spectra_to_train:
-        derived[name][spectrum] = {}
         for name in names:
 
             if args.force:
