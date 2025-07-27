@@ -8,6 +8,29 @@ from emu_like.datasets import DataCollection
 from emu_like.ffnn_emu import FFNNEmu
 
 
+def get_y(emu, x):
+    return np.array([emu.eval(xp) for xp in x])
+
+def get_diff(emu, x, y):
+    y_emu = get_y(emu, x)
+    diff =  y_emu/y-1
+    return diff
+
+def get_derived(emu, data):
+    derived = {
+        'y_emu': get_y(emu, data.x),
+        'diff': get_diff(emu, data.x, data.y),
+        'diff_train': get_diff(emu, data.x_train, data.y_train),
+        'diff_test': get_diff(emu, data.x_test, data.y_test),
+    }
+    derived['idx_max'] = get_idx_max_diff(derived['diff'])
+    return derived
+
+def get_idx_max_diff(diff):
+    idx = np.argmax(np.mean(diff**2., axis=1))
+    return idx
+
+
 # -----------------MAIN-CALL-----------------------------------------
 if __name__ == '__main__':
 
@@ -128,12 +151,7 @@ if __name__ == '__main__':
                     )
 
             # Get derived quantities
-            y_emu_train = np.array([emu[name][spectrum].eval(x) for x in data[name][spectrum].x_train])
-            y_emu_test = np.array([emu[name][spectrum].eval(x) for x in data[name][spectrum].x_test])
-            derived[name][spectrum]['y_emu'] = np.array([emu[name][spectrum].eval(x) for x in data[name][spectrum].x])
-            derived[name][spectrum]['diff'] = (derived[name][spectrum]['y_emu']/data[name][spectrum].y-1)
-            derived[name][spectrum]['diff_train'] = (y_emu_train/data[name][spectrum].y_train-1)
-            derived[name][spectrum]['diff_test'] = (y_emu_test/data[name][spectrum].y_test-1)
+            derived[name][spectrum] = get_derived(emu[name][spectrum], data[name][spectrum])
         
         # Summary plot
         io.info('Saving summary plot for {}'.format(spectrum))
@@ -168,7 +186,7 @@ if __name__ == '__main__':
             # Validation set
             ax[1, count].plot(x, derived[name][spectrum]['diff_test'].T*100, 'k-', alpha=0.2)
 
-            idx_max = np.argmax(np.max(np.abs(derived[name][spectrum]['diff']), axis=1))
+            idx_max = derived[name][spectrum]['idx_max']
 
             # Worst fit, rel diff
             ax[2, count].plot(x, derived[name][spectrum]['diff'][idx_max]*100, 'k-')
@@ -193,6 +211,7 @@ if __name__ == '__main__':
     # Print stuff
     for spectrum in spectra_to_train:
         for name in names:
+            idx_max = derived[name][spectrum]['idx_max']
             io.info('Worst fit {} - {} points'.format(spectrum, name))
             for var, val in zip(data[name][spectrum].x_names, data[name][spectrum].x[idx_max]):
                 io.print_level(1, '{} = {}'.format(var, val))

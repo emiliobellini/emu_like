@@ -54,7 +54,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/scripts/train_spectra.py /ceph/hpc/home/bellinie/emu_like/output/lcdm_2D -d 50 100 1000
+python /ceph/hpc/home/bellinie/emu_like/scripts/train_spectra.py /ceph/hpc/home/bellinie/emu_like/output/lcdm_2D -d 50 100 1000 10000
 
 
 # ==== END OF JOB COMMANDS ===== #
