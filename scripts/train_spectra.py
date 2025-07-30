@@ -206,7 +206,7 @@ if __name__ == '__main__':
             ax[4, count].plot(x, ref*data[name][spectrum].y[idx_max], '--')
 
         plt.subplots_adjust(bottom=0.15, hspace=0.05, wspace=0.15)
-        plt.savefig(os.path.join(train_folder.path, 'summary_{}.pdf'.format(spectrum)))
+        plt.savefig(os.path.join(train_folder.path, 'summary_{}.png'.format(spectrum)))
 
     # Print stuff
     for spectrum in spectra_to_train:
