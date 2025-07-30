@@ -55,81 +55,59 @@ y_model:
   args:
     Omega_m: 0.3158
     Omega_b: 0.0494
-    A_s: 2.1006e-9
-    n_s: 0.96605
+    A_s: 2.1e-9
+    n_s: 0.966
     tau_reio: 0.0543
     N_ur: 2.0308
     N_ncdm: 1
     m_ncdm: 0.06
     YHe: 0.24
     # Precision parameters (this should be a good compromise, check for more general models)
-    k_per_decade_for_pk: 200
-    k_per_decade_for_bao: 400
+    k_per_decade_for_pk: 40
+    k_per_decade_for_bao: 80
     l_logstep: 1.026
     l_linstep: 25
-    perturbations_sampling_stepsize: 0.01
+    perturbations_sampling_stepsize: 0.02
     l_switch_limber: 20
     accurate_lensing: 1
     delta_l_max: 1000
-    k_max_tau0_over_l_max: 8
 
   # List of output files (only for class_spectra)
   outputs:
     # Each spectrum is saved in a different file
     pk_m:
-      k_min: 1.e-4
-      k_max: 2.
+      k_min: 1.e-5
+      k_max: 50.
       k_space: 'log'
       k_num: 600
       ratio: True
     pk_cb:
-      k_min: 1.e-4
-      k_max: 2.
+      k_min: 1.e-5
+      k_max: 50.
       k_space: 'log'
       k_num: 600
       ratio: True
     pk_weyl:
-      k_min: 1.e-4
-      k_max: 2.
+      k_min: 1.e-5
+      k_max: 50.
       k_space: 'log'
       k_num: 600
       ratio: True
     f_m:
-      k_min: 1.e-4
-      k_max: 2.
+      k_min: 1.e-5
+      k_max: 50.
       k_space: 'log'
       k_num: 600
     f_cb:
-      k_min: 1.e-4
-      k_max: 2.
+      k_min: 1.e-5
+      k_max: 50.
       k_space: 'log'
       k_num: 600
     f_weyl:
-      k_min: 1.e-4
-      k_max: 2.
+      k_min: 1.e-5
+      k_max: 50.
       k_space: 'log'
       k_num: 600
-    cl_TT:
-      ell_min: 2
-      ell_max: 3000
-      ratio: True
-    cl_EE:
-      ell_min: 2
-      ell_max: 3000
-      ratio: True
-    cl_TE:
-      ell_min: 2
-      ell_max: 3000
-    cl_BB:
-      ell_min: 2
-      ell_max: 3000
-    cl_pp:
-      ell_min: 2
-      ell_max: 3000
-      ratio: True
-    cl_Tp:
-      ell_min: 2
-      ell_max: 3000
     cl_TT_lensed:
       ell_min: 2
       ell_max: 3000
@@ -141,9 +119,17 @@ y_model:
     cl_TE_lensed:
       ell_min: 2
       ell_max: 3000
+    cl_pp:
+      ell_min: 2
+      ell_max: 3000
+      ratio: True
+    cl_Tp:
+      ell_min: 2
+      ell_max: 3000
     cl_BB_lensed:
       ell_min: 2
       ell_max: 3000
+      ratio: True
 
 
 # List of parameters.
@@ -159,7 +145,7 @@ params:
   z_pk:
     prior:
       min: 0.
-      max: 5.
+      max: 10.
   h:
     prior:
       min: 0.5
