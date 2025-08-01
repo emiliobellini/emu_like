@@ -158,6 +158,12 @@ def train_emu(args):
         params['datasets']['rescale_x'],
         params['datasets']['rescale_y'],
         verbose=args.verbose)
+    
+    # If requested apply PCA on x and/or y
+    data.apply_pca(
+        params['datasets']['num_x_pca'],
+        params['datasets']['num_y_pca'],
+        verbose=args.verbose)
 
     # If resume
     if args.resume:
@@ -165,8 +171,8 @@ def train_emu(args):
         emu.load(params['output'], model_to_load='best', verbose=args.verbose)
     # Otherwise
     else:
-        params['emulator']['args']['data_n_x'] = data.n_x
-        params['emulator']['args']['data_n_y'] = data.n_y
+        params['emulator']['args']['data_n_x'] = data.x_train.shape[1]
+        params['emulator']['args']['data_n_y'] = data.y_train.shape[1]
         # Build architecture
         emu.build(params['emulator']['args'], verbose=args.verbose)
 

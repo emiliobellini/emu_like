@@ -177,7 +177,7 @@ class YModel(object):
         """
         return
 
-    def plot(self, emu, path=None):
+    def plot(self, emu, data, path=None):
         """
         Placeholder for model specific plots. Arguments:
         - emu (emu_like.FFNNEmu object)
@@ -768,15 +768,6 @@ class ClassSpectra(YModel):
             diff =  y_emu/y-1
             return diff
 
-        # def get_derived(emu, data):
-        #     derived = {
-        #         'y_emu': get_y(emu, data.x),
-        #         'diff': get_diff(emu, data.x, data.y),
-        #         'diff_train': get_diff(emu, data.x_train, data.y_train),
-        #         'diff_test': get_diff(emu, data.x_test, data.y_test),
-        #     }
-        #     return derived
-
         def get_idx_max_diff(diff):
             idx = np.argmax(np.mean(diff**2., axis=1))
             return idx
@@ -813,10 +804,14 @@ class ClassSpectra(YModel):
             ax[-1, 0].set_yscale('linear')
 
         # Training set
-        ax[0, 0].plot(x, get_diff(emu, data.x_train, data.y_train).T*100., 'k-', alpha=0.1)
+        x_train = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(data.x_train))
+        y_train = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(data.y_train))
+        ax[0, 0].plot(x, get_diff(emu, x_train, y_train).T*100., 'k-', alpha=0.1)
 
         # Validation set
-        ax[1, 0].plot(x, get_diff(emu, data.x_test, data.y_test).T*100., 'k-', alpha=0.1)
+        x_test = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(data.x_test))
+        y_test = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(data.y_test))
+        ax[1, 0].plot(x, get_diff(emu, x_test, y_test).T*100., 'k-', alpha=0.1)
 
         diff = get_diff(emu, data.x, data.y)
         idx_max = get_idx_max_diff(diff)

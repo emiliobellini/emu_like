@@ -15,6 +15,7 @@ from . import defaults as de
 from . import io as io
 from .emu import Emulator
 from .params import Params
+from .pca import PCA
 from .scalers import Scaler
 from .y_models import YModel
 # TODO: something is not working here
@@ -48,6 +49,8 @@ class FFNNEmu(Emulator):
         self.model = None
         self.x_scaler = None
         self.y_scaler = None
+        self.x_pca = None
+        self.y_pca = None
         self.x_names = None
         self.y_names = None
         self.x_ranges = None
@@ -258,6 +261,12 @@ class FFNNEmu(Emulator):
         fname = os.path.join(path, de.file_names['y_scaler']['name'])
         self.y_scaler = Scaler.load(fname, verbose=verbose)
 
+        # Load PCA
+        fname = os.path.join(path, de.file_names['x_pca']['name'])
+        self.x_pca = PCA.load(fname, verbose=verbose)
+        fname = os.path.join(path, de.file_names['y_pca']['name'])
+        self.y_pca = PCA.load(fname, verbose=verbose)
+
         # Load dataset details
         fname = os.path.join(path, de.file_names['dataset_details']['name'])
         details = Params().load(fname)
@@ -315,6 +324,20 @@ class FFNNEmu(Emulator):
                                verbose=verbose)
         except AttributeError:
             io.warning('y_scaler not loaded yet, impossible to save it!')
+
+        # Save PCA
+        try:
+            self.x_pca.save(de.file_names['x_pca']['name'],
+                               root=path,
+                               verbose=verbose)
+        except AttributeError:
+            io.warning('x_pca not loaded yet, impossible to save it!')
+        try:
+            self.y_pca.save(de.file_names['y_pca']['name'],
+                               root=path,
+                               verbose=verbose)
+        except AttributeError:
+            io.warning('y_pca not loaded yet, impossible to save it!')
 
         # Save last model
         fname = os.path.join(path, de.file_names['model']['name'])
@@ -461,6 +484,8 @@ class FFNNEmu(Emulator):
         # Store dataset details as attributes
         self.x_scaler = data.x_scaler
         self.y_scaler = data.y_scaler
+        self.x_pca = data.x_pca
+        self.y_pca = data.y_pca
         self.x_names = data.x_names
         self.y_names = data.y_names
         self.x_ranges = data.x_ranges
@@ -483,14 +508,14 @@ class FFNNEmu(Emulator):
         else:
             initial_epoch = 0
         self.model.fit(
-            data.x_train_scaled,
-            data.y_train_scaled,
+            data.x_train,
+            data.y_train,
             epochs=initial_epoch+epochs,
             initial_epoch=initial_epoch,
             batch_size=self.batch_size,
             validation_data=(
-                data.x_test_scaled,
-                data.y_test_scaled),
+                data.x_test,
+                data.y_test),
             callbacks=callbacks,
             verbose=int(verbose))
 
@@ -533,15 +558,30 @@ class FFNNEmu(Emulator):
             raise ValueError('Unkown input for x!')
 
         # Scale x
-        if self.x_scaler:
-            x_scaled = self.x_scaler.transform(x_reshaped)
-        else:
+        if self.x_scaler is None:
             x_scaled = x_reshaped
+        else:
+            x_scaled = self.x_scaler.transform(x_reshaped)
+
+        # PCA x
+        if self.x_pca is None:
+            x_scaled_pca = x_scaled
+        else:
+            x_scaled_pca = self.x_pca.transform(x_scaled)
 
         # Emulate y
-        y_scaled = self.model(x_scaled, training=False)
+        y_scaled_pca = self.model(x_scaled_pca, training=False)
+
+        # inverse PCA y
+        if self.y_pca is None:
+            y_scaled = y_scaled_pca
+        else:
+            y_scaled = self.y_pca.inverse_transform(y_scaled_pca)
 
         # Scale back y
-        y = self.y_scaler.inverse_transform(y_scaled)[0]
+        if self.y_scaler is None:
+            y = y_scaled
+        else:
+            y = self.y_scaler.inverse_transform(y_scaled)[0]
 
         return y

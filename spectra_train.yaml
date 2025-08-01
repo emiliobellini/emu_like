@@ -99,3 +99,8 @@ datasets:
   # - ExpMinMaxScaler: apply exponential and then MinMaxScaler
   rescale_x: MinMaxScaler
   rescale_y: ExpMinMaxScaler
+  # Apply Principal Component Analysis (PCA) on x and/or y.
+  # num_i_pca (int or None) is the number of PCA modes that should be retained.
+  # If None PCA is not used.
+  num_x_pca: None
+  num_y_pca: None

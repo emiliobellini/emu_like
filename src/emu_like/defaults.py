@@ -33,6 +33,12 @@ file_names = {
     'y_scaler': {
         'name': 'y_scaler.save',
     },
+    'x_pca': {
+        'name': 'x_pca.save',
+    },
+    'y_pca': {
+        'name': 'y_pca.save',
+    },
     'dataset_details': {
         'name': 'dataset_details.yaml',
         'header': (

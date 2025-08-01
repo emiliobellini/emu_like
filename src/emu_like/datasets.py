@@ -15,6 +15,7 @@ import tqdm
 from . import io as io
 from . import defaults as de
 from . import scalers as sc
+from . import pca
 from .params import Params
 from .x_samplers import XSampler
 from .y_models import YModel
@@ -55,6 +56,10 @@ class Dataset(object):
             x_names=None,
             y_names=None,
             y_model=None,
+            x_scaler=None,
+            y_scaler=None,
+            x_pca=None,
+            y_pca=None,
             path=None
             ):
         """
@@ -89,6 +94,12 @@ class Dataset(object):
 
         # Path
         self.path = path
+
+        # Placeholders
+        self.x_scaler = x_scaler
+        self.y_scaler = y_scaler
+        self.x_pca = x_pca
+        self.y_pca = y_pca
 
         return
 
@@ -424,7 +435,7 @@ class Dataset(object):
         written in src/emu_like/scalers.py
         Arguments:
         - rescale_x (str): scaler for x;
-        - rescale_x (str): scaler for y;
+        - rescale_y (str): scaler for y;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that we already splitted
@@ -438,35 +449,73 @@ class Dataset(object):
         # Rescale x
         self.x_scaler = sc.Scaler.choose_one(rescale_x)
         self.x_scaler.fit(self.x_train)
-        self.x_train_scaled = self.x_scaler.transform(self.x_train)
-        self.x_test_scaled = self.x_scaler.transform(self.x_test)
+        self.x_train = self.x_scaler.transform(self.x_train)
+        self.x_test = self.x_scaler.transform(self.x_test)
         # Rescale y
         self.y_scaler = sc.Scaler.choose_one(rescale_y)
         self.y_scaler.fit(self.y_train)
-        self.y_train_scaled = self.y_scaler.transform(self.y_train)
-        self.y_test_scaled = self.y_scaler.transform(self.y_test)
+        self.y_train = self.y_scaler.transform(self.y_train)
+        self.y_test = self.y_scaler.transform(self.y_test)
         if verbose:
             io.print_level(1, 'Rescaled bounds:')
-            mins = np.min(self.x_train_scaled, axis=0)
-            maxs = np.max(self.x_train_scaled, axis=0)
+            mins = np.min(self.x_train, axis=0)
+            maxs = np.max(self.x_train, axis=0)
             for nx, min in enumerate(mins):
                 io.print_level(
                     2, 'x_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
-            mins = np.min(self.x_test_scaled, axis=0)
-            maxs = np.max(self.x_test_scaled, axis=0)
+            mins = np.min(self.x_test, axis=0)
+            maxs = np.max(self.x_test, axis=0)
             for nx, min in enumerate(mins):
                 io.print_level(
                     2, 'x_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
-            mins = np.min(self.y_train_scaled, axis=0)
-            maxs = np.max(self.y_train_scaled, axis=0)
+            mins = np.min(self.y_train, axis=0)
+            maxs = np.max(self.y_train, axis=0)
             for nx, min in enumerate(mins):
                 io.print_level(
                     2, 'y_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
-            mins = np.min(self.y_test_scaled, axis=0)
-            maxs = np.max(self.y_test_scaled, axis=0)
+            mins = np.min(self.y_test, axis=0)
+            maxs = np.max(self.y_test, axis=0)
             for nx, min in enumerate(mins):
                 io.print_level(
                     2, 'y_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+        return
+
+    def apply_pca(self, num_x_pca=None, num_y_pca=None, verbose=False):
+        """
+        Apply PCA to x and/or y of a dataset.
+        Arguments:
+        - num_pca_x (int): number of modes to be retained
+          for x (if 0 or negative PCA is not applied);
+        - num_pca_y (int): number of modes to be retained
+          for y (if 0 or negative PCA is not applied);
+        - verbose (bool, default: False): verbosity.
+
+        NOTE: this method assumes that we already splitted
+        train and test samples.
+        """
+
+        if num_x_pca == 'None':
+            num_x_pca = None
+        if num_y_pca == 'None':
+            num_y_pca = None
+
+        if verbose:
+            if num_x_pca is not None:
+                io.info('Applying PCA on x. Number of modes retained {}.'.format(num_x_pca))
+            if num_y_pca is not None:
+                io.info('Applying PCA on y. Number of modes retained {}.'.format(num_y_pca))
+
+        # PCA x
+        self.x_pca = pca.PCA(n_components=num_x_pca)
+        self.x_pca.fit(self.x_train)
+        self.x_train = self.x_pca.transform(self.x_train)
+        self.x_test = self.x_pca.transform(self.x_test)
+        # PCA y
+        self.y_pca = pca.PCA(n_components=num_y_pca)
+        self.y_pca.fit(self.y_train)
+        self.y_train = self.y_pca.transform(self.y_train)
+        self.y_test = self.y_pca.transform(self.y_test)
+
         return
 
 
