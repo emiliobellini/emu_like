@@ -14,6 +14,7 @@ create the get_x method and adapt its other
 methods and attributes to your needs.
 """
 
+import matplotlib.pyplot as plt
 import numpy as np
 import os
 import scipy.interpolate as interp
@@ -176,6 +177,13 @@ class YModel(object):
         """
         return
 
+    def plot(self, emu, path=None):
+        """
+        Placeholder for model specific plots. Arguments:
+        - emu (emu_like.FFNNEmu object)
+        - path (str, default:None): path where to save the plots.
+        """
+        return
 
 # 1D functions
 
@@ -742,4 +750,95 @@ class ClassSpectra(YModel):
             elif sp.is_cl:
                 self.ell_ranges[nsp] = fits.read_key('ell_range_{}'.format(sp.name))
         
+        return
+
+    def plot(self, emu, data, path=None):
+        """
+        Plot single spectrum. Arguments:
+        - emu (emu_like.FFNNEmu object);
+        - data (src.emu_like.datasets.Dataset object);
+        - path (str, default:None): path where to save the plots.
+        """
+
+        def get_y(emu, x):
+            return np.array([emu.eval(xp) for xp in x])
+
+        def get_diff(emu, x, y):
+            y_emu = get_y(emu, x)
+            diff =  y_emu/y-1
+            return diff
+
+        # def get_derived(emu, data):
+        #     derived = {
+        #         'y_emu': get_y(emu, data.x),
+        #         'diff': get_diff(emu, data.x, data.y),
+        #         'diff_train': get_diff(emu, data.x_train, data.y_train),
+        #         'diff_test': get_diff(emu, data.x_test, data.y_test),
+        #     }
+        #     return derived
+
+        def get_idx_max_diff(diff):
+            idx = np.argmax(np.mean(diff**2., axis=1))
+            return idx
+
+        def get_ref(emu, data, idx_max):
+            if emu.y_model.spectra[0].is_pk:
+                z = data.x[idx_max, 0]
+                ref = interp.make_splrep(emu.y_model.z_array, emu.y_model.y_ref[0][0].T, s=0)(z)
+            else:
+                ref = emu.y_model.y_ref[0][0]
+            return ref
+
+        # Spectrum name
+        spectrum = self.spectra.names[0]
+
+        fig, ax = plt.subplots(nrows=5, ncols=1, figsize=(6., 20.), sharex=True, squeeze=False)
+
+        ax[0, 0].set_ylabel('rel. diff. [%] -- Training set')
+        ax[1, 0].set_ylabel('rel. diff. [%] -- Validation set')
+        ax[2, 0].set_ylabel('rel. diff. [%] -- Worst fit')
+        ax[3, 0].set_ylabel('{}/{}(ref) -- Worst fit'.format(spectrum, spectrum))
+        ax[4, 0].set_ylabel('{} -- Worst fit'.format(spectrum))
+
+        # x variable
+        if self.spectra[0].is_pk:
+            x = emu.y_model.k_ranges[0]
+            ax[-1, 0].set_xlabel('k [h/Mpc]')
+            ax[-1, 0].set_xscale('log')
+            ax[-1, 0].set_yscale('log')
+        elif self.spectra[0].is_cl:
+            x = emu.y_model.ell_ranges[0]
+            ax[-1, 0].set_xlabel('ell')
+            ax[-1, 0].set_xscale('linear')
+            ax[-1, 0].set_yscale('linear')
+
+        # Training set
+        ax[0, 0].plot(x, get_diff(emu, data.x_train, data.y_train).T*100., 'k-', alpha=0.1)
+
+        # Validation set
+        ax[1, 0].plot(x, get_diff(emu, data.x_test, data.y_test).T*100., 'k-', alpha=0.1)
+
+        diff = get_diff(emu, data.x, data.y)
+        idx_max = get_idx_max_diff(diff)
+        y_emu_max = get_y(emu, data.x)[idx_max]
+        ref_max = get_ref(emu, data, idx_max)
+
+        # Worst fit, rel diff
+        ax[2, 0].plot(x, diff[idx_max]*100., 'k-')
+
+        # Worst fit, P/P_ref
+        ax[3, 0].plot(x, y_emu_max, label='Emulated')
+        ax[3, 0].plot(x, data.y[idx_max], '--', label='True')
+        ax[3, 0].legend()
+
+        # Worst fit, P
+        ax[4, 0].plot(x, ref_max*y_emu_max)
+        ax[4, 0].plot(x, ref_max*data.y[idx_max], '--')
+
+        plt.subplots_adjust(bottom=0.15, hspace=0.05, wspace=0.15)
+        if path:
+            plt.savefig(os.path.join(path, 'accuracy_emulator.png'))
+        plt.show()
+        plt.close()
+
         return

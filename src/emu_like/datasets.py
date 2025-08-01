@@ -36,8 +36,7 @@ class Dataset(object):
     - join: if they are compatible, join two datasets and return a
       single one;
     - train_test_split: split a dataset into train and test samples;
-    - rescale: rescale dataset (both x and y);
-    - get_plots: get plots of dataset.
+    - rescale: rescale dataset (both x and y).
 
     NOTE: For all the dataset generation, load, save operations, use the
     DataCollection class.

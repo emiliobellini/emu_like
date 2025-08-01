@@ -192,6 +192,22 @@ class FFNNEmu(Emulator):
 
         return callbacks
 
+    def _plot_loss_per_epoch(self, path=None):
+        """
+        Plot - Loss per epoch. Arguments:
+        - path (str, default: None): save plot to path
+        """
+        plt.semilogy(self.epochs, self.loss, label='training data')
+        plt.semilogy(self.epochs, self.val_loss, label='validation data')
+        plt.xlabel('epoch')
+        plt.ylabel(self.model.loss)
+        plt.legend()
+        if path:
+            plt.savefig(os.path.join(path, 'loss_function.pdf'))
+        plt.show()
+        plt.close()
+        return
+
     def load(self, path, model_to_load='best', verbose=False):
         """
         Load from path a model for the emulator.
@@ -420,7 +436,7 @@ class FFNNEmu(Emulator):
         return
 
     def train(self, data, epochs, learning_rate, patience=100,
-              path=None, get_plot=False, verbose=False):
+              path=None, get_plots=False, verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -438,7 +454,7 @@ class FFNNEmu(Emulator):
           early stopping without improvements;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
-        - get_plot (bool, default: False): get loss vs epoch plot;
+        - get_plots (bool, default: False): get loss vs epoch plot;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -487,17 +503,12 @@ class FFNNEmu(Emulator):
         if path:
             self.save(path)
 
-        # Plot - Loss per epoch
-        if get_plot:
-            plt.semilogy(self.epochs, self.loss, label='training data')
-            plt.semilogy(self.epochs, self.val_loss, label='validation data')
-            plt.xlabel('epoch')
-            plt.ylabel(self.model.loss)
-            plt.legend()
-            if path:
-                plt.savefig(os.path.join(path, 'loss_function.pdf'))
-            plt.show()
-            plt.close()
+        if get_plots:
+            # Plot - Loss per epoch
+            self._plot_loss_per_epoch(path=path)
+
+            # Model specific plots
+            data.y_model.plot(self, data, path=path)
 
         return
 
