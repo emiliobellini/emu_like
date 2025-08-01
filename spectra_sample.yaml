@@ -32,7 +32,7 @@ x_sampler:
   # Arguments
   args:
     # Number of samples (int). Used in all but evaluate
-    n_samples: 2
+    n_samples: 10
     # Seed (int). Used only in latin_hypercube to ensure
     # deterministic sampling
     seed: 12

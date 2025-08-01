@@ -15,13 +15,13 @@ emulator:
   args:
     # Any activation function from (str)
     # https://keras.io/api/layers/activations/
-    activation: sigmoid
+    activation: relu
     # Number of neurons for each hidden layer (list of positive int)
-    neurons_hidden: [1000, 1000]
+    neurons_hidden: [400, 400]
     # Normalize tensors with mean and variance (bool)
     batch_normalization: False
     # Relative dropout during training (float). It helps with overfitting.
-    dropout_rate: 0.5
+    dropout_rate: 0.
     # Any optimizer from (str)
     # https://www.tensorflow.org/api_docs/python/tf/keras/optimizers
     optimizer: adam
@@ -37,7 +37,9 @@ emulator:
     # Divide sample into batches of this size (int). The pipeline is
     # calculated individually in each of these batches and then
     # the loss function takes care of combining each batch.
-    batch_size: 256
+    batch_size: 32
+    # Number of epochs (int) before early stopping without improvements.
+    patience: 100
     # If False remove the output layer (bool, default: True).
     # Useful to reduce to linear regression case.
     want_output_layer: True

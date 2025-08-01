@@ -134,12 +134,14 @@ class FFNNEmu(Emulator):
                         params.content[key1][key2] = default_dict[key1][key2]
         return params
 
-    def _callbacks(self, path=None, verbose=False):
+    def _callbacks(self, path=None, patience=100, verbose=False):
         """
         Define and initialise callbacks.
         Arguments:
         - path (str, default: None): output path. If None, the callbacks
           that require saving some output will be ignored;
+        - patience (intm default: 100): number of epochs (int) before
+          early stopping without improvements;
         - verbose (bool, default: False): verbosity.
 
         Callbacks implemented:
@@ -176,7 +178,7 @@ class FFNNEmu(Emulator):
         early_stopping = keras.callbacks.EarlyStopping(
             monitor="val_loss",
             min_delta=0,
-            patience=30,
+            patience=patience,
             verbose=1,
             mode="auto",
             baseline=None,
@@ -417,7 +419,7 @@ class FFNNEmu(Emulator):
 
         return
 
-    def train(self, data, epochs, learning_rate,
+    def train(self, data, epochs, learning_rate, patience=100,
               path=None, get_plot=False, verbose=False):
         """
         Train the emulator.
@@ -432,6 +434,8 @@ class FFNNEmu(Emulator):
         - learning_rate (float or list of floats): learning
           rate. If it is a list of floats, the last element
           will be used. List is used to keep record of resume;
+        - patience (intm default: 100): number of epochs (int) before
+          early stopping without improvements;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
         - get_plot (bool, default: False): get loss vs epoch plot;
@@ -453,7 +457,7 @@ class FFNNEmu(Emulator):
             learning_rate = learning_rate[-1]
 
         # Callbacks
-        callbacks = self._callbacks(path, verbose=verbose)
+        callbacks = self._callbacks(path, patience=patience, verbose=verbose)
 
         self.model.optimizer.learning_rate = learning_rate
 

@@ -134,18 +134,21 @@ if __name__ == '__main__':
                     data[name][spectrum],
                     epochs=2000,
                     learning_rate=1.e-3,
+                    patience=100,
                     get_plot=True,
                     )
                 emu[name][spectrum].train(
                     data[name][spectrum],
                     epochs=2000,
                     learning_rate=1.e-4,
+                    patience=100,
                     get_plot=True,
                     )
                 emu[name][spectrum].train(
                     data[name][spectrum],
                     epochs=2000,
                     learning_rate=1.e-5,
+                    patience=100,
                     get_plot=True,
                     path = train_folder.subfolder(name).subfolder(spectrum).path
                     )
