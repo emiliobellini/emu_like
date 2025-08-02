@@ -98,19 +98,31 @@ def train_emu(args):
     # Load datasets
     # 1) folders created by this code
     if paths_is_dir:
-        data = [DataCollection().load(
+        # import time
+        # start = time.time()
+        # data = [DataCollection().load(
+        #     path=path,
+        #     verbose=False)
+        #     for path in params['datasets']['paths']]
+        # # Get Dataset from DataCollection
+        # data = [d.get_one_y_dataset(params['datasets']['name']) for d in data]
+        # # Slice data
+        # data = [d.slice(params['datasets']['columns_x'],
+        #                 params['datasets']['columns_y'],
+        #                 verbose=False) for d in data]
+        # print('{}'.format(time.time()-start))
+        # start = time.time()
+        data = [Dataset().load(
             path=path,
+            name=params['datasets']['name'],
+            columns_x=params['datasets']['columns_x'],
+            columns_y=params['datasets']['columns_y'],
             verbose=False)
-            for path in params['datasets']['paths']]
-        # Get Dataset from DataCollection
-        data = [d.get_one_y_dataset(params['datasets']['name']) for d in data]
-        # Slice data
-        data = [d.slice(params['datasets']['columns_x'],
-                        params['datasets']['columns_y'],
-                        verbose=False) for d in data]
+        for path in params['datasets']['paths']]
+        # print('{}'.format(time.time()-start))
     # 2) unique files for both x and y
     elif paths_is_file:
-        data = [Dataset().load(
+        data = [Dataset().load_external(
             path=path,
             columns_x=params['datasets']['columns_x'],
             columns_y=params['datasets']['columns_y'],
@@ -118,7 +130,7 @@ def train_emu(args):
             for path in params['datasets']['paths']]
     # 3) separate files for both x and y
     elif paths_x_is_file and paths_y_is_file:
-        data = [Dataset().load(
+        data = [Dataset().load_external(
             path=path_x,
             path_y=path_y,
             columns_x=params['datasets']['columns_x'],
@@ -128,6 +140,7 @@ def train_emu(args):
                 params['datasets']['paths_x'], params['datasets']['paths_y'])]
     else:
         raise Exception('Something is wrong with the paths you specified!')
+
 
     # Remove non finite "y"
     if params['datasets']['remove_non_finite']:
