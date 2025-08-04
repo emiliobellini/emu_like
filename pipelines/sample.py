@@ -9,8 +9,7 @@
 import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.params import Params
-from emu_like.datasets import DataCollection
-
+from emu_like.datasets import Dataset, DataCollection
 
 def sample_emu(args, init_parallel_sampling, do_parallel_sampling):
     """ Generate the dataset for the emulator.
@@ -30,7 +29,7 @@ def sample_emu(args, init_parallel_sampling, do_parallel_sampling):
     # Read params
     params = Params().load(args.params_file)
     # Fill missing entries
-    params = data.fill_missing_params(params)
+    params = Dataset.fill_missing_params(params)
 
     # If resume
     if args.resume:
