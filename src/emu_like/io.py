@@ -34,10 +34,12 @@ def argument_parser():
         help='Options are: '
         '(i) sample: generate the sample for the emulator. '
         '(ii) train: train the emulator. '
-        '(iii) test: test the emulator.')
+        '(iii) test: test the emulator.'
+        '(iv) export spectra emulators')
     sample_parser = subparsers.add_parser('sample')
     train_parser = subparsers.add_parser('train')
     mcmc_parser = subparsers.add_parser('mcmc')
+    export_parser = subparsers.add_parser('export')
 
     # Sample arguments
     sample_parser.add_argument(
@@ -77,12 +79,26 @@ def argument_parser():
         default=1.e-3,
         help='New learning rate (float)')
 
-    # Test arguments
+    # MCMC arguments
     mcmc_parser.add_argument(
         'params_file',
         type=str,
         help='Parameters file (.yaml)')
     mcmc_parser.add_argument(
+        '--verbose', '-v',
+        help='Verbose (default: False)',
+        action='store_true')
+
+    # Sample arguments
+    export_parser.add_argument(
+        '--input', '-i',
+        type=str,
+        help='Input folder')
+    export_parser.add_argument(
+        '--output', '-o',
+        type=str,
+        help='Output folder')
+    export_parser.add_argument(
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')
