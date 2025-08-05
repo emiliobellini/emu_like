@@ -40,10 +40,10 @@ def sample_emu(args, init_parallel_sampling, do_parallel_sampling):
         params = Params().load(de.file_names['params']['name'],
                                root=params['output']['path'])
 
-        # Load the dataset
-        data.load(params['output']['path'], verbose=args.verbose)
         # Resume the dataset
         data.resume(
+            params['output']['path'],
+            load_minimal=True,
             save_incrementally=True,
             verbose=args.verbose)
     # Otherwise
