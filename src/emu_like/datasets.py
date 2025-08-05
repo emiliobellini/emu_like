@@ -344,7 +344,7 @@ class Dataset(object):
         self.x_fname = x_sampler.get_x_fname()
 
         # Load x data.
-        x_sampler.x, _ = Dataset._load_array(
+        x_sampler.x = Dataset._load_array(
             os.path.join(self.path, self.x_fname))
         self.x = x_sampler.x
 
@@ -376,15 +376,17 @@ class Dataset(object):
 
         # Load y data.
         # 1) load y.
-        y, y_names = Dataset._load_array(os.path.join(self.path, y_fname))
+        y = Dataset._load_array(os.path.join(self.path, y_fname))
         # 2) Infer dimensions
         n_y = y.shape[1]
         self.counter_samples = y.shape[0]
-        # 3) Initialize list of zeros arrays with full n_samples.
+        # 3) Try to infer the names
+        y_names = Dataset._try_to_load_names_array(os.path.join(self.path, y_fname), n_names=n_y)
+        # 4) Initialize list of zeros arrays with full n_samples.
         y_model.y = [np.zeros((self.n_samples, n_y))]
-        # 4) Assign values.
+        # 5) Assign values.
         y_model.y[0][:self.counter_samples] = y
-        # 5) Synchronize with self.y.
+        # 6) Synchronize with self.y.
         self.y = y_model.y[0]
 
         # Get remaining y attributes
@@ -469,12 +471,16 @@ class Dataset(object):
                             'Dataset could not be loaded!')
 
         # Load data
-        self.x, self.x_names = self._load_array(path_x)
-        self.y, self.y_names = self._load_array(path_y)
+        self.x  = self._load_array(path_x)
+        self.y = self._load_array(path_y)
 
         # Get shapes
         self.n_samples, self.n_x = self.x.shape
         _, self.n_y = self.y.shape
+
+        # Try to infer the names
+        self.x_names = Dataset._try_to_load_names_array(path_x, n_names=self.n_y)
+        self.y_names = Dataset._try_to_load_names_array(path_y, n_names=self.n_y)
 
         # Get ranges
         self.x_ranges = np.array(list(zip(np.min(self.x, axis=0),
