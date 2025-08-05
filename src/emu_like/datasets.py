@@ -561,6 +561,13 @@ class Dataset(object):
         # same y_model, which is taken from the first one.
         data.y_model = datasets[0].y_model
 
+        # Adjust params
+        for var in datasets[0].y_model.params:
+            mins = [dat.y_model.params[var]['prior']['min'] for dat in datasets]
+            maxs = [dat.y_model.params[var]['prior']['max'] for dat in datasets]
+            data.y_model.params[var]['prior']['min'] = min(mins)
+            data.y_model.params[var]['prior']['max'] = max(maxs)
+
         return data
 
     def train_test_split(self, frac_train, seed, verbose=False):
