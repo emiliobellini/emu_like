@@ -1,5 +1,5 @@
 """
-.. module:: emu
+.. module:: io
 
 :Synopsis: Input/output related functions and classes.
 :Author: Emilio Bellini

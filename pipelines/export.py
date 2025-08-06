@@ -45,7 +45,7 @@ def export_emu(args):
         name = emu.y_model.spectra[0].name
         emu_dict = {
             'name': name,
-            'x_ranges': emu.x_names,
+            'x_names': emu.x_names,
             'x_ranges': emu.x_ranges,
             'x_scaler': emu.x_scaler,
             'y_scaler': emu.y_scaler,
