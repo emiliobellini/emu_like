@@ -54,8 +54,8 @@ def export_emu(args):
             'model': emu.model,
             'ref': emu.y_model.y_ref[0][0],
             'z_array': emu.y_model.z_array,
-            'k_ranges': emu.y_model.k_ranges[0],
-            'ell_ranges': emu.y_model.ell_ranges[0],
+            'k_array': emu.y_model.k_ranges[0],
+            'ell_array': emu.y_model.ell_ranges[0],
             'class_vars': emu.y_model.params,
             'class_args': emu.y_model.args,
         }
