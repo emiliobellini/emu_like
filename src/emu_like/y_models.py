@@ -673,6 +673,9 @@ class ClassSpectra(YModel):
         except self.classy.CosmoComputationError:
             # Fill with nans if error
             y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
+        except self.classy.CosmoSevereError:
+            # Fill with nans if error
+            y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
 
         # Take the ratio
         for nsp, sp in enumerate(self.spectra):

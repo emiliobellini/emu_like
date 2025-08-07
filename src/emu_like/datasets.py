@@ -1287,6 +1287,9 @@ class DataCollection(object):
                 y_one = y_model.evaluate(x, nx)
                 self.counter_samples += 1
 
+                if any([np.isnan(yy).any() for yy in y_one]):
+                    io.warning(' Found nans with parameters {}'.format(x))
+
                 # Save array
                 if save_incrementally:
                     self._append_y(y_one)
