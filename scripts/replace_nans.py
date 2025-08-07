@@ -56,7 +56,7 @@ if __name__ == '__main__':
         for key in de.cosmo_params:
             if key not in cosmo_params.keys():
                 cosmo_params[key] = de.cosmo_params[key]
-        cosmo_params = cosmo_params | spectra.get_class_params()
+        cosmo_params = cosmo_params | spectra.get_class_params() | {'recombination' 'recfast'}
 
         # Compute
         failed = False
@@ -94,6 +94,6 @@ if __name__ == '__main__':
         old_array = np.genfromtxt(path)
         for idx_one, x_one in zip(idxs_nan, x_nan):
             if new_y[idx_one][sp.name] is not None:
-                old_array[idx_one] = new_y[0][sp.name]
+                old_array[idx_one] = new_y[idx_one][sp.name]
         np.savetxt(path, old_array, header=header)
         io.print_level(1, 'Saved spectrum {}!'.format(sp.name))
