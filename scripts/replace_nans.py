@@ -15,6 +15,7 @@ if __name__ == '__main__':
     parser.add_argument('sample_folder', type=str)
     args = parser.parse_args()
 
+    io.info('Getting nan indices')
     for file in io.Folder(args.sample_folder).list_files():
         if os.path.split(file)[-1].startswith('x_data'):
             x = np.genfromtxt(file)
@@ -22,7 +23,6 @@ if __name__ == '__main__':
             y_ref = np.genfromtxt(file)
     
     is_nan = np.any(np.isnan(y_ref), axis=1)
-    is_nan = np.invert(is_nan)  # TODO
     x_nan = x[is_nan]
     idxs_nan = np.where(is_nan)[0]
 
@@ -30,6 +30,7 @@ if __name__ == '__main__':
     spectra = Spectra(spectra_params['y_model']['outputs'])
     x_names = list(spectra_params['params'].keys())
 
+    io.info('Computing reference spectra')
     # Get params ref
     z_max = {'z_max_pk': spectra_params['params']['z_pk']['prior']['max']}
     cosmo_params_ref = de.cosmo_params | spectra.get_class_params() | z_max
