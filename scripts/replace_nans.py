@@ -25,6 +25,7 @@ if __name__ == '__main__':
     is_nan = np.any(np.isnan(y_ref), axis=1)
     x_nan = x[is_nan]
     idxs_nan = np.where(is_nan)[0]
+    io.print_level(1, 'Found {} nans'.format(len(x_nan)))
 
     spectra_params = Params().load(os.path.join(args.sample_folder, 'params.yaml'))
     spectra = Spectra(spectra_params['y_model']['outputs'])
@@ -71,7 +72,8 @@ if __name__ == '__main__':
 
         if failed:
             io.warning('Class failed for parameters {}'.format(cosmo_params))
-            new_y[idx_one][sp.name] = None
+            for sp in spectra:
+                new_y[idx_one][sp.name] = None
         else:
             # Iterate over spectra
             for sp in spectra:
