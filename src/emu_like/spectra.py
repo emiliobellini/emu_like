@@ -265,6 +265,10 @@ class Spectrum(object):
             return CellTELensed(spectrum_type, params)
         elif spectrum_type == 'cl_BB_lensed':
             return CellBBLensed(spectrum_type, params)
+        elif spectrum_type == 'cl_pp_lensed':
+            return CellppLensed(spectrum_type, params)
+        elif spectrum_type == 'cl_Tp_lensed':
+            return CellTpLensed(spectrum_type, params)
         else:
             raise ValueError(
                 'Spectrum {} not recognized!'.format(spectrum_type))
@@ -1119,6 +1123,68 @@ class CellBBLensed(Cell):
         # (str) name you want to appear in the header of the
         # file, see Cell.get_header
         self.hd_name = 'BB lensed'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = True
+        return
+
+    def get(self, cosmo, **kwargs):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_lensed_cl(cosmo, self.class_name)
+
+
+class CellppLensed(Cell):
+    """
+    Tp lensed power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'pp'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'phi-phi lensed'
+        # (bool) True if the spectrum needs lensing
+        self.want_lensing = True
+        return
+
+    def get(self, cosmo, **kwargs):
+        """
+        Return the correct spectrum sampled up to ell max.
+        """
+        return self._get_lensed_cl(cosmo, self.class_name)
+
+
+class CellTpLensed(Cell):
+    """
+    Tp lensed power spectrum.
+    As in Class, we compute the dimensionless Cell using:
+    
+    ell*(ell+1.)/2./pi * Cl
+
+        """
+
+    def __init__(self, name, params):
+        Cell.__init__(self, name, params)
+
+        # (list of str) list of spectra that Class should compute.
+        # Use the same syntax of the Class output argument.
+        self.class_spectra = ['tCl', 'lCl']
+        # (str) name of the cl as in Class, i.e., tt, te, ee, ...
+        self.class_name = 'tp'
+        # (str) name you want to appear in the header of the
+        # file, see Cell.get_header
+        self.hd_name = 'T-phi lensed'
         # (bool) True if the spectrum needs lensing
         self.want_lensing = True
         return
