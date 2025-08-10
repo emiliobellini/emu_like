@@ -2,8 +2,8 @@
 # Usage:
 #   python main.py sample simple_sample.yaml -v
 
-# Output folder (str)
-output: output/simple/sample
+# Output fits file (str)
+output: output/simple/sample.fits
 
 
 # Sampling method for x.

@@ -633,13 +633,6 @@ class ClassSpectra(YModel):
         self.y_headers = self.spectra.get_headers()
         return self.y_headers
 
-    def get_y_fnames(self):
-        """
-        Get y_fnames.
-        """
-        self.y_fnames = self.spectra.get_fnames()
-        return self.y_fnames
-
     def evaluate(self, x, idx, **kwargs):
         """
         Arguments:
@@ -697,30 +690,47 @@ class ClassSpectra(YModel):
         """
         Save reference spectra.
         """
-        if fname is None:
-            fname = de.file_names['spectra_factor']['name']
         if root is None:
             path = fname
         else:
             path = os.path.join(root, fname)
         if verbose:
             io.info('Saving reference spectra to {}'.format(path))
-        io.Folder(os.path.dirname(path)).create()
 
-        fits = io.FitsFile(path=path)
+        fits = io.FitsFile(path)
 
 
         for nsp, sp in enumerate(self.spectra):
+            is_pk = False
             # Write spectra
-            fits.write(self.y_ref[nsp], sp.name, type='image')
+            fits.write(
+                data=self.y_ref[nsp],
+                header=None,
+                name='ref_{}'.format(sp.name),
+            )
             if sp.is_pk:
-                # Write z_array
-                fits.write(self.z_array, 'z_array', type='image')
                 # Write k_range
-                fits.write(self.k_ranges[nsp], 'k_range_{}'.format(sp.name), type='image')
+                fits.write(
+                    data=self.k_ranges[nsp],
+                    header=None,
+                    name='k_range_{}'.format(sp.name),
+                )
+                is_pk = True
             elif sp.is_cl:
                 # Write ell_range
-                fits.write(self.ell_ranges[nsp], 'ell_range_{}'.format(sp.name), type='image')
+                fits.write(
+                    data=self.ell_ranges[nsp],
+                    header=None,
+                    name='ell_range_{}'.format(sp.name),
+                )
+        
+        if is_pk:
+            # Write z_array
+            fits.write(
+                data=self.z_array,
+                header=None,
+                name='z_array',
+            )
         
         return
 

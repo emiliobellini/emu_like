@@ -2,8 +2,8 @@
 # Usage:
 #   python main.py sample spectra_sample.yaml -v
 
-# Output folder (str)
-output: output/spectra/sample
+# Output fits file (str)
+output: output/spectra/sample.fits
 
 
 # Sampling method for x.

@@ -7,6 +7,7 @@
 """
 
 import argparse
+import numpy as np
 import os
 import re
 import sys
@@ -489,116 +490,114 @@ class File(Path):
 
 # ------------------- Fits Files ---------------------------------------------#
 
-class FitsFile(File):
+class FitsFile(object):
     """
     Class for fits files.
     """
 
-    def __init__(self, path=None, exists=False):
-        File.__init__(self, path, exists)
-        # Placeholder for content
-        self.content = {}
+    def __init__(self, fname=None, root=None, exists=False):
+        # Define path
+        if root is None:
+            self.path = fname
+        else:
+            self.path = os.path.join(root, fname)
+        # Check existence
+        self.exists = os.path.isfile(self.path)
         # Check is fits
-        test1 = self.ext == '.fits'
-        test2 = self.ext == '.gz' and os.path.splitext(self.name)[1] == '.fits'
-        assert test1 or test2, 'Expected .fits file, found {}'.format(
-            self.ext)
+        is_fits = self.path.endswith('.fits') or self.path.endswith('.fits.gz')
+        if not is_fits:
+            raise Exception('Expected .fits file, found {}'.format(self.path))
         return
 
-    def read(self, dtype=None):
-        """ Open a fits file and read all data from it.
-
-        Args:
-            key: name of the data we want to read.
-
-        Returns:
-            array with data for name.
-
-        """
-        with fits.open(self.path) as fn:
-            for key in fn:
-                if dtype:
-                    self.content[key] = fn[key].data.astype(dtype)
+    def _flatten_dict(self, nested_dict, delimiter='__'):
+        # Create a tuple with (key, val), where key is a string
+        # with all the nested keys separated by delimiter
+        flat_dict = {}
+        stack =[(nested_dict, '')]
+        list_key_val = []
+        while stack:
+            mid_dict, mid_key = stack.pop()
+            
+            for key, val in mid_dict.items():
+                new_key = f'{mid_key}{delimiter}{key}' if mid_key else key
+                
+                if isinstance(val, dict):
+                    stack.append((val, new_key))  # Push the nested dictionary onto the stack
                 else:
-                    self.content[key] = fn[key].data
-        return
+                    list_key_val.append((new_key, val))
+        # In astropy, keys can not be longer than 8 characters. We then create a flat
+        # dict where both keys and values are values. This dictionary will have keys
+        # starting with two delimiters for the keys of the previous step dictionary,
+        # and keys starting with one delimiter for the values of the previous dictionary.
+        # To fix the correspondence each key ends with a different integer,
+        for nkey, (key, val)in enumerate(list_key_val):
+            flat_dict['{}{}{}'.format(delimiter, delimiter, nkey)] = key
+            flat_dict['{}{}'.format(delimiter, nkey)] = val
+        return flat_dict
 
-    def read_key(self, key, dtype=None):
-        """
-        Open a fits file and read a key data from it.
+    def _unflatten_dict(self, flat_dict, delimiter='__'):
+        current_dict = {}
+        # We first fix the correspondence between keys and values to get a list of
+        # flattened keys and values (si discussion in _flatten_dict above).
+        for key_flat in flat_dict.keys():
+            if key_flat.startswith('{}{}'.format(delimiter, delimiter)):
+                key = flat_dict[key_flat]
+                val = flat_dict[key_flat[len(delimiter):]]
+                current_dict[key] = val
+        # We now create the nested dict.
+        nested_dict = {}
+        items_list = [(key.split(delimiter), val) for key, val in current_dict.items()]
+        for keys, value in items_list:
+            current_level = nested_dict
+            # Traverse the dictionary, creating levels as needed
+            for key in keys[:-1]:  # All keys except the last
+                if key not in current_level:
+                    current_level[key] = {}
+                current_level = current_level[key]
+            # Assign the value to the innermost key
+            current_level[keys[-1]] = value
+        return nested_dict
 
-        Args:
-            key: name of the data we want to read.
-        """
-        with fits.open(self.path) as fn:
-            if dtype:
-                return fn[key].data.astype(dtype)
-            else:
-                return fn[key].data
-
-    def get_keys(self):
-        """ Get keys from fits file.
-
-        Args:
-            fname: path of the data file.
-
-        Returns:
-            list of keys.
-
-        """
-        with fits.open(self.path) as fn:
-            return [x.name for x in fn]
-
-    def get_header(self, name):
-        """ Open a fits file and read header from it.
-
-        Args:
-            fname: path of the data file.
-            name: name of the data we want to extract.
-
-        Returns:
-            header.
-
-        """
-        with fits.open(self.path) as fn:
-            return fn[name].header
-
-    def write(self, array, name, type='image', header=None, verbose=False):
-        """ Write an array to a fits file.
-
-        Args:
-            fname: path of the input file.
-            array: array to save.
-            name: name of the image.
-
-        Returns:
-            None
-
-        """
-
-        warning = False
-
-        # If file does not exist, create it
-        if not os.path.exists(self.path):
-            hdul = fits.HDUList([fits.PrimaryHDU()])
+    def write(self, data, header, name, verbose=False):
+        # We assume that header is either a dictionary, or a fits.Header
+        if isinstance(header, dict):
+            header = self._flatten_dict(header)
+            header = fits.Header(header)
+        # Create first HDU
+        if not self.exists:
+            hdul = fits.HDUList([fits.PrimaryHDU(data=data, header=header)])
             hdul.writeto(self.path)
-        # Open the file
-        with fits.open(self.path, mode='update') as hdul:
-            try:
-                hdul.__delitem__(name)
-            except KeyError:
-                pass
-            if type == 'image':
-                hdul.append(fits.ImageHDU(array, name=name, header=header))
-            elif type == 'table':
-                hdul.append(array)
-            else:
-                warning('Type {} not recognized! Data not saved to file!'.format(type))
-                return True
+            self.exists = True
+        else:
+            # Open the file and append
+            with fits.open(self.path, mode='append') as hdul:
+                hdul.append(fits.ImageHDU(data, name=name, header=header))
         if verbose:
             print_level(1, 'Appended {} to {}'.format(name.upper(), os.path.relpath(self.path)))
             sys.stdout.flush()
-        return warning
+        return
+
+    def append(self, data, name, header=None):
+        # If array already exists, append data to it,
+        # otherwise create array.
+        try:
+            with fits.open(self.path, mode='update') as hdul:
+                hdul[name].data = np.vstack([hdul[name].data, data])
+        except KeyError:
+            with fits.open(self.path, mode='append') as hdul:
+                hdul.append(fits.ImageHDU(data, name=name, header=header))
+        # try:
+        #     if hdul[name].data is None:
+        #         with fits.open(self.path, mode='update') as hdul:
+        #             hdul[name].data = data
+        #     else:
+        #         with fits.open(self.path, mode='update') as hdul:
+        #             hdul[name].data = np.vstack([hdul[name].data, data])
+        # except KeyError:
+        #     with fits.open(self.path, mode='append') as hdul:
+        #         hdul.append(fits.ImageHDU(data, name=name, header=header))
+        
+        return
 
     def print_info(self):
         """ Print on screen fits file info.

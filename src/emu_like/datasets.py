@@ -758,80 +758,6 @@ class DataCollection(object):
 
         return
 
-    def _save_x(
-            self,
-            fname,
-            root=None,
-            x_array=None,
-            header=None,
-            verbose=False):
-        """
-        Quick way to save x array in path.
-        Arguments:
-        - fname (str, default: None): file name for x_array;
-        - root (str, default: None): folder for x_array;
-        - x_array (array, default: None): 2D x array;
-        - header (str, default: None): x_array header;
-        - verbose (bool, default: False): verbosity.
-        """
-        # Arguments or defaults
-        if root is None:
-            root = self.path
-        if x_array is None:
-            x_save = self.x
-        else:
-            x_save = x_array
-        if header is None:
-            head = self.x_header
-        else:
-            head = header
-
-        if verbose:
-            io.print_level(1, 'Saved x array at: {}'.format(fname))
-        io.Folder(os.path.dirname(os.path.join(root, fname))).create()
-        np.savetxt(os.path.join(root, fname), x_save, header=head)
-        return
-
-    def _save_y(
-            self,
-            fnames=None,
-            roots=None,
-            y_arrays=None,
-            headers=None,
-            verbose=False):
-        """
-        Quick way to save y arrays.
-        Arguments:
-        - fnames (list of str, default: None): file names for y_array;
-        - roots (list of str, default: None): folders for y_array;
-        - y_arrays (list of arrays, default: None): list of 2D y array;
-        - headers (str, default: None): y_array headers;
-        - verbose (bool, default: False): verbosity.
-        """
-        # Arguments or defaults
-        if fnames is None:
-            fnames = self.y_fnames
-        if roots is None:
-            roots = [self.path] * len(fnames)
-        if y_arrays is None and self.y == []:
-            y_save = [[]] * len(fnames)
-        elif y_arrays is None:
-            y_save = self.y
-        else:
-            y_save = y_arrays
-        if headers is None:
-            heads = self.y_headers
-        else:
-            heads = headers
-
-        for nf in range(len(fnames)):
-            io.Folder(os.path.dirname(os.path.join(roots[nf], fnames[nf]))).create()
-            np.savetxt(os.path.join(roots[nf], fnames[nf]),
-                       y_save[nf], header=heads[nf])
-            if verbose:
-                io.print_level(1, 'Saved y array at: {}'.format(fnames[nf]))
-        return
-
     def _append_y(
             self,
             y_vals,
@@ -881,34 +807,6 @@ class DataCollection(object):
 
         return rows, cols
 
-    def _save_settings(
-            self,
-            fname=None,
-            root=None,
-            settings=None,
-            header=None,
-            verbose=False):
-        """
-        Quick way to save settings dictionary in path.
-        Arguments:
-        - fname (str, default: None): file name for settings;
-        - root (str, default: None): folder for settings;
-        - settings (dict, default: None): settings dictionary;
-        - header (str, default: None): settings header;
-        - verbose (bool, default: False): verbosity.
-        """
-        # Arguments or defaults
-        if root is None:
-            root = self.path
-        if settings is None:
-            setts = self.settings
-        else:
-            setts = settings
-
-        params = Params(setts)
-        params.save(root=root, header=header, verbose=verbose)
-        return
-
     def get_one_y_dataset(self, name=None):
         """
         Extract one datase from DataCollection.
@@ -949,65 +847,81 @@ class DataCollection(object):
 
     def save(
             self,
-            fname_setts=None,
-            fname_x=None,
-            fnames_y=None,
-            fname_y_model=None,
-            root_setts=None,
-            root_x=None,
-            roots_y=None,
-            root_y_model=None,
+            fname=None,
+            root=None,
             settings=None,
-            x_array=None,
-            y_arrays=None,
-            header_setts=None,
-            header_x=None,
-            headers_y=None,
+            data_x=None,
+            data_ys=None,
+            hd_x=None,
+            hd_ys=None,
+            name_x=None,
+            name_ys=None,
+            y_model=None,
             verbose=False
             ):
         """
         Save dataset to path.
         Arguments:
-        - fname_setts, fname_x, fname_y (str, default: None): file names;
-        - root_setts, root_x, root_y (str, default: None): folders;
+        - fname (str, default: None): file name;
+        - root (str, default: None): eventually root;
         - settings (dict, default: None): settings dictionary;
-        - x_array, y_array (array, default: None): 2D x, y array;
-        - header_setts, header_x, header_y (str, default: None): headers;
+        - data_x (array, default: None): 2D array;
+        - data_ys (list, default: None): list of 2D arrays;
+        - hd_x (str or dict, default: None): string or dict for x header;
+        - hd_ys (list, default: None): list of strings or dicts for x header;
+        - name_x (str, default: None): keyword for data_x;
+        - name_ys (str, default: None): list of keywords for data_ys;
+        - y_model (emu_like.YModel, default None): model to save;
         - verbose (bool, default: False): verbosity.
         """
 
+        fits = io.FitsFile(
+            fname=fname,
+            root=root,
+        )
+
         # Save settings
-        self._save_settings(
-            fname=fname_setts,
-            root=root_setts,
-            settings=settings,
-            header=header_setts,
-            verbose=verbose)
+        if settings is None:
+            settings = self.settings
+        fits.write(
+            data=None,
+            header=self.settings,
+            name=None,
+            verbose=verbose,
+        )
 
         # Save x
-        self._save_x(
-            fname=fname_x,
-            root=root_x,
-            x_array=x_array,
-            header=header_x,
-            verbose=verbose)
+        if data_x is None:
+            data_x = self.x
+        if name_x is None:
+            name_x = self.x_key
+        fits.write(
+            data=data_x,
+            header=hd_x,
+            name=name_x,
+            verbose=verbose,
+        )
 
         # Save y
-        self._save_y(
-            fnames=fnames_y,
-            roots=roots_y,
-            y_arrays=y_arrays,
-            headers=headers_y,
-            verbose=verbose)
+        if data_ys is None:
+            data_ys = self.y
+        if name_ys is None:
+            name_ys = self.y_keys
+        if hd_ys is None:
+            hd_ys = [None for _ in range(len(data_ys))]
+        for idx in range(len(data_ys)):
+            fits.write(
+                data=data_ys[idx],
+                header=hd_ys[idx],
+                name=name_ys[idx],
+                verbose=verbose,
+            )
         
         # Save y_model
-        if root_y_model is None:
-            root_y_model = self.path
-        if fname_y_model is None:
-            fname_y_model = de.file_names['spectra_factor']['name']
-        self.y_model.save(
-            fname=fname_y_model,
-            root=root_y_model,
+        if y_model is None:
+            y_model = self.y_model
+        y_model.save(
+            fname=self.path,
             verbose=verbose)
 
         return
@@ -1174,8 +1088,7 @@ class DataCollection(object):
         if output is not None:
             save_it = True
             self.path = output
-            # fits = io.FitsFile(self.path)
-            fits = io.Folder(self.path)  # TODO: remove this line and uncomment previous
+            fits = io.FitsFile(self.path)
             if fits.exists:
                 raise Exception(
                     'Output file exists! Exiting to avoid corruption of precious '
@@ -1184,7 +1097,6 @@ class DataCollection(object):
             elif verbose:
                 io.info('Generating dataset.')
                 io.print_level(1, 'Writing output in {}'.format(output))
-                io.Folder(self.path).create(verbose=verbose)
 
         # Create settings dictionary
         self.settings = {
@@ -1201,7 +1113,11 @@ class DataCollection(object):
         }
         # Save settings
         if save_it:
-            self._save_settings(verbose=verbose)
+            fits.write(
+                data=None,
+                header=self.settings,
+                name=None,
+            )
 
         # Init x sampler
         x_sampler = XSampler.choose_one(
@@ -1212,15 +1128,18 @@ class DataCollection(object):
 
         # Get x data and attributes
         self.x = x_sampler.get_x()
-        self.x_ranges = x_sampler.get_x_ranges()
         self.n_x = x_sampler.get_n_x()
-        self.x_names = x_sampler.get_x_names()
-        self.x_header = x_sampler.get_x_header()
         self.n_samples = x_sampler.get_n_samples()
+        self.x_names = x_sampler.get_x_names()
+        self.x_key = x_sampler.x_key
 
         # Save x_array
         if save_it:
-            self._save_x(x_sampler.x_key, verbose=verbose)
+            fits.write(
+                data=self.x,
+                header=None,
+                name=x_sampler.x_key,
+            )
 
         # Init y_model
         y_model = YModel.choose_one(
@@ -1234,18 +1153,15 @@ class DataCollection(object):
         # Save after init what has to be saved
         if save_it:
             y_model.save(
-                root=self.path,
+                fname=self.path,
                 verbose=verbose)
 
         # Get y attributes
         self.n_y = y_model.get_n_y()
         self.y_names = y_model.get_y_names()
         self.y_headers = y_model.get_y_headers()
-        self.y_fnames = y_model.get_y_fnames()
+        self.y_keys = y_model.spectra.names
 
-        if save_it:
-            self._save_y(verbose=verbose)
-    
         # Init self.y
         y_model.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
         self.y = y_model.y
@@ -1260,8 +1176,11 @@ class DataCollection(object):
 
             # Save array
             if save_it:
-                self._append_y(y_one)
-
+                for nname, name in enumerate(self.y_keys):
+                    fits.append(
+                        data=y_one[nname],
+                        name=name,
+                    )
 
         # Get remaining attributes
         self.y_ranges = y_model.get_y_ranges()

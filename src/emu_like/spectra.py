@@ -76,8 +76,7 @@ class Spectra(object):
         From the name (str) of the Spectrum,
         it returns its position (int) in Spectra.
         """
-        idx = self.get_fnames().index(
-            de.file_names['y_data']['name'].format(name))
+        idx = self.names.index(name)
         return idx
 
     def _get_name_from_idx(self, idx):
@@ -189,13 +188,6 @@ class Spectra(object):
         headers = [sp.get_header() for sp in self.list]
         return headers
 
-    def get_fnames(self):
-        """
-        Get a list of the y file names of each spectrum computed.
-        """
-        fnames = [sp.get_fname() for sp in self.list]
-        return fnames
-
 
 class Spectrum(object):
     """
@@ -272,14 +264,6 @@ class Spectrum(object):
         else:
             raise ValueError(
                 'Spectrum {} not recognized!'.format(spectrum_type))
-
-    def get_fname(self):
-        """
-        Get the default file name for each spectrum.
-        It appends the name of the spectrum to the default name.
-        """
-        fname = de.file_names['y_data']['name'].format(self.name)
-        return fname
 
     def _get_range(self, min, max, num, space):
         """
