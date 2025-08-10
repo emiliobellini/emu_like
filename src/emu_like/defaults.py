@@ -5,12 +5,6 @@ values and names of the code.
 
 # File names
 file_names = {
-    'params': {
-        'name': 'params.yaml',
-        'header': (
-            '# This is an automatically generated file. Do not modify it!\n'
-            '# It is used to resume training instead of the input one.\n\n'),
-    },
     'x_data': {
         'name': 'x_data.txt',
     },

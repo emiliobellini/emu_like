@@ -6,7 +6,6 @@
 
 """
 
-import multiprocessing
 import numpy as np
 import os
 import re
@@ -321,8 +320,7 @@ class Dataset(object):
         self.name = name
 
         # Load settings
-        self.settings = Params().load(os.path.join(
-            path, de.file_names['params']['name']))
+        self.settings = Params().load(root=path)
         # Fill missing entries
         self.settings = Dataset.fill_missing_params(self.settings)
 
@@ -906,21 +904,15 @@ class DataCollection(object):
         - verbose (bool, default: False): verbosity.
         """
         # Arguments or defaults
-        if fname is None:
-            fname = de.file_names['params']['name']
         if root is None:
             root = self.path
         if settings is None:
             setts = self.settings
         else:
             setts = settings
-        if header is None:
-            head = de.file_names['params']['header']
-        else:
-            head = header
 
         params = Params(setts)
-        params.save(fname, root=root, header=head, verbose=verbose)
+        params.save(root=root, header=header, verbose=verbose)
         return
 
     def get_one_y_dataset(self, name=None):
@@ -1055,8 +1047,7 @@ class DataCollection(object):
             io.info('Loading data collection.')
 
         # Load settings
-        self.settings = Params().load(os.path.join(
-            path, de.file_names['params']['name']))
+        self.settings = Params().load(root=path)
         # Fill missing entries
         self.settings = Dataset.fill_missing_params(self.settings)
 

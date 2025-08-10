@@ -20,6 +20,10 @@ class Params(object):
     def __init__(self, content=None):
         if content:
             self.content = content
+        self.default_name = 'params.yaml'
+        self.default_header = (
+            '# This is an automatically generated file. Do not modify it!\n'
+            '# It is used to resume training instead of the input one.\n\n')
         return
 
     def __setitem__(self, item, value):
@@ -37,41 +41,49 @@ class Params(object):
     def keys(self):
         return self.content.keys()
 
-    def load(self, path, root=None):
+    def load(self, fname=None, root=None):
         """
         Load .yaml file and store it into a dictionary.
         Arguments:
-        - path (str): path to the parameters file;
+        - fname (str): path to the parameters file;
         - root (str, default: None): root of the file;
         - fill_missing (bool, default: False): fill missing
           blocks with default structure.
         """
 
         # Join root
-        if root:
-            path = os.path.join(root, path)
+        if fname is None:
+            fname = self.default_name
+        if root is None:
+            path = fname
+        else:
+            path = os.path.join(root, fname)
 
         with open(path) as file:
             self.content = yaml.safe_load(file)
         
         return self
 
-    def save(self, path, root=None, header=None, verbose=False):
+    def save(self, fname=None, root=None, header=None, verbose=False):
         """
         Save parameter to path, with the header if specified.
         Arguments:
-        - path (str): destination file name, relative to root if specified;
+        - fname (str): destination file name, relative to root if specified;
         - root (str, default: None): root where to save the file;
         - header (str, optional): string to be prepended to destination file;
         - verbose (bool, default: False): verbosity.
         """
 
+        if fname is None:
+            fname = self.default_name
+        if header is None:
+            header = self.default_header
         # Create root folder and join path
         if root is None:
-            io.Folder(os.path.dirname(path)).create()
+            path = fname
         else:
-            path = os.path.join(root, path)
-            io.Folder(root).create()
+            path = os.path.join(root, fname)
+        io.Folder(os.path.dirname(path)).create()
 
         if header:
             with open(path, 'w') as file:

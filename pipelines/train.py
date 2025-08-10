@@ -7,7 +7,6 @@
 """
 
 import os
-import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.emu import Emulator
 from emu_like.params import Params
@@ -35,8 +34,7 @@ def train_emu(args):
             io.info('Resuming from {}.'.format(params['output']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
         # Read params from output folder
-        params = Params().load(de.file_names['params']['name'],
-                               root=params['output'])
+        params = Params().load(root=params['output'])
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
@@ -67,9 +65,7 @@ def train_emu(args):
 
     # Save params
     params.save(
-        de.file_names['params']['name'],
         root=params['output'],
-        header=de.file_names['params']['header'],
         verbose=args.verbose)
 
     # Test datasets input paths

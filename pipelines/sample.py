@@ -6,7 +6,6 @@
 
 """
 
-import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.params import Params
 from emu_like.datasets import Dataset, DataCollection
@@ -38,8 +37,7 @@ def sample_emu(args):
         #     io.info('Resuming from {}.'.format(params['output']))
         #     io.print_level(1, 'Ignoring {}'.format(args.params_file))
         # # Read params from output folder
-        # params = Params().load(de.file_names['params']['name'],
-        #                        root=params['output'])
+        # params = Params().load(root=params['output'])
 
         # # Resume the dataset
         # data.resume(
@@ -48,7 +46,6 @@ def sample_emu(args):
         #     verbose=args.verbose)
     # Otherwise
     else:
-        # Generate dataset
         data.sample(
             params=params['params'],
             x_name=params['x_sampler']['name'],
@@ -58,5 +55,5 @@ def sample_emu(args):
             y_outputs=params['y_model']['outputs'],
             output=params['output'],
             verbose=args.verbose)
-        
+
     return
