@@ -33,31 +33,21 @@ def sample_emu(args):
 
     # If resume
     if args.resume:
-        if args.verbose:
-            io.info('Resuming from {}.'.format(params['output']['path']))
-            io.print_level(1, 'Ignoring {}'.format(args.params_file))
-        # Read params from output folder
-        params = Params().load(de.file_names['params']['name'],
-                               root=params['output']['path'])
+        print('not implemented yet')
+        # if args.verbose:
+        #     io.info('Resuming from {}.'.format(params['output']))
+        #     io.print_level(1, 'Ignoring {}'.format(args.params_file))
+        # # Read params from output folder
+        # params = Params().load(de.file_names['params']['name'],
+        #                        root=params['output'])
 
-        # Resume the dataset
-        data.resume(
-            params['output']['path'],
-            load_minimal=True,
-            save_incrementally=True,
-            verbose=args.verbose)
+        # # Resume the dataset
+        # data.resume(
+        #     params['output'],
+        #     load_minimal=True,
+        #     verbose=args.verbose)
     # Otherwise
     else:
-        # Check if output folder is empty, otherwise stop
-        if io.Folder(params['output']['path']).is_empty():
-            if args.verbose:
-                io.info("Writing output in {}".format(params['output']['path']))
-        else:
-            raise Exception(
-                'Output folder not empty! Exiting to avoid corruption of '
-                'precious data! If you want to resume a previous run use '
-                'the --resume (-r) option.')
-
         # Generate dataset
         data.sample(
             params=params['params'],
@@ -66,11 +56,7 @@ def sample_emu(args):
             y_name=params['y_model']['name'],
             y_args=params['y_model']['args'],
             y_outputs=params['y_model']['outputs'],
-            output=params['output']['path'],
-            save_incrementally=params['output']['save_incrementally'],
+            output=params['output'],
             verbose=args.verbose)
         
-        if params['output']['save_incrementally'] is False:
-            data.save(verbose=args.verbose)
-
     return

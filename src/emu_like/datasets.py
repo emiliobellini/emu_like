@@ -172,10 +172,6 @@ class Dataset(object):
         - params (Params): params object;
         """
         default_dict = {
-            'output': {
-                'path': None,
-                'save_incrementally': False,
-            },
             'x_sampler': {
                 'name': None,
                 'args': {},
@@ -1171,7 +1167,6 @@ class DataCollection(object):
             y_args=None,
             y_outputs=None,
             output=None,
-            save_incrementally=False,
             verbose=False):
         """
         Generate a dataset.
@@ -1188,27 +1183,29 @@ class DataCollection(object):
           arguments needed by the y_model;
         - y_outputs (dict, default: None): dictionary dealing
           with multiple y outputs for a single x (see class_spectra);
-        - output (str, default: None): if save_incrementally the output
-          path should be passed;
-        - save_incrementally (bool, default: False): save output incrementally
-          (not compatible with parallel computing, set num_processes=1);
+        - output (str, default: None): if None nothing is saved;
         - verbose (bool, default: False): verbosity.
         """
 
-        if verbose:
-            io.info('Generating dataset.')
-
-        # Create main folder
-        self.path = output
-        if save_incrementally:
-            io.Folder(self.path).create(verbose=verbose)
+        # Preliminary checks on output
+        save_it = False
+        if output is not None:
+            save_it = True
+            self.path = output
+            # fits = io.FitsFile(self.path)
+            fits = io.Folder(self.path)  # TODO: remove this line and uncomment previous
+            if fits.exists:
+                raise Exception(
+                    'Output file exists! Exiting to avoid corruption of precious '
+                    'data! If you want to resume a previous run use the '
+                    '--resume (-r) option.')
+            elif verbose:
+                io.info('Generating dataset.')
+                io.print_level(1, 'Writing output in {}'.format(output))
+                io.Folder(self.path).create(verbose=verbose)
 
         # Create settings dictionary
         self.settings = {
-            'output': {
-                'path': output,
-                'save_incrementally': save_incrementally,
-            },
             'x_sampler': {
                 'name': x_name,
                 'args': x_args,
@@ -1221,7 +1218,7 @@ class DataCollection(object):
             'params': params,
         }
         # Save settings
-        if save_incrementally:
+        if save_it:
             self._save_settings(verbose=verbose)
 
         # Init x sampler
@@ -1241,7 +1238,7 @@ class DataCollection(object):
         self.n_samples = x_sampler.get_n_samples()
 
         # Save x_array
-        if save_incrementally:
+        if save_it:
             self._save_x(verbose=verbose)
 
         # Init y_model
@@ -1254,7 +1251,7 @@ class DataCollection(object):
             verbose=verbose)
 
         # Save after init what has to be saved
-        if save_incrementally:
+        if save_it:
             y_model.save(
                 root=self.path,
                 verbose=verbose)
@@ -1265,7 +1262,7 @@ class DataCollection(object):
         self.y_headers = y_model.get_y_headers()
         self.y_fnames = y_model.get_y_fnames()
 
-        if save_incrementally:
+        if save_it:
             self._save_y(verbose=verbose)
     
         # Init self.y
@@ -1281,7 +1278,7 @@ class DataCollection(object):
                 io.warning(' Found nans with parameters {}'.format(x))
 
             # Save array
-            if save_incrementally:
+            if save_it:
                 self._append_y(y_one)
 
 
@@ -1294,7 +1291,7 @@ class DataCollection(object):
 
         return
 
-    def resume(self, path, load_minimal=False, save_incrementally=False, verbose=False):
+    def resume(self, path, load_minimal=False, verbose=False):
         """
         Resume a dataset previously loaded (use load method
         before resuming). Many settings are already loaded.
@@ -1302,7 +1299,6 @@ class DataCollection(object):
         - path (str): path pointing to the folder containing the dataset;
         - load_minimal (bool, default: False): do not load the array of
           already computed data to save time and memory;
-        - save_incrementally (bool, default: False): save output incrementally;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that both settings and the full x array
@@ -1330,8 +1326,7 @@ class DataCollection(object):
             self.counter_samples += 1
         
             # Save array
-            if save_incrementally:
-                self._append_y(y_one)
+            self._append_y(y_one)
 
         # Get remaining attributes
         self.y_ranges = self.y_model.get_y_ranges()

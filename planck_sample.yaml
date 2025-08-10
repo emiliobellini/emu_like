@@ -4,12 +4,8 @@
 # Usage:
 #   python main.py sample planck_sample.yaml -v
 
-output:
-  # Output folder (str)
-  path: output/planck/sample
-  # Save incrementally or at the end (bool)
-  # If True use num_processes: 1
-  save_incrementally: True
+# Output folder (str)
+output: output/planck/sample
 
 
 # Sampling method for x.

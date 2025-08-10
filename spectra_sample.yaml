@@ -2,12 +2,8 @@
 # Usage:
 #   python main.py sample spectra_sample.yaml -v
 
-output:
-  # Output folder (str)
-  path: output/spectra/sample
-  # Save incrementally or at the end (bool)
-  # If True use num_processes: 1
-  save_incrementally: True
+# Output folder (str)
+output: output/spectra/sample
 
 
 # Sampling method for x.
