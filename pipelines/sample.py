@@ -27,23 +27,17 @@ def sample_emu(args):
 
     # Read params
     params = Params().load(args.params_file)
-    # Fill missing entries
-    params = Dataset.fill_missing_params(params)
 
     # If resume
     if args.resume:
-        print('not implemented yet')
-        # if args.verbose:
-        #     io.info('Resuming from {}.'.format(params['output']))
-        #     io.print_level(1, 'Ignoring {}'.format(args.params_file))
-        # # Read params from output folder
-        # params = Params().load(root=params['output'])
+        if args.verbose:
+            io.info('Resuming from {}.'.format(params['output']))
+            io.print_level(1, 'Ignoring {}'.format(args.params_file))
 
-        # # Resume the dataset
-        # data.resume(
-        #     params['output'],
-        #     load_minimal=True,
-        #     verbose=args.verbose)
+        # Resume the dataset
+        data.resume(
+            params['output'],
+            verbose=args.verbose)
     # Otherwise
     else:
         data.sample(

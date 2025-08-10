@@ -615,6 +615,35 @@ class FitsFile(object):
             sys.stdout.flush()
         return
 
+    def get_header(self, name, unflat_dict=False):
+        """ Open a fits file and return the header from name.
+
+        Args:
+            name: name of the data we want to extract.
+
+        Returns:
+            header.
+
+        """
+        with fits.open(self.path) as fn:
+            if unflat_dict:
+                hd = self._unflatten_dict(fn[name].header)
+            else:
+                hd = fn[name].header
+        return hd
+
+    def get_data(self, name):
+        """ Open a fits file and return the header fromname.
+
+        Args:
+            name: name of the data we want to extract.
+
+        Returns:
+            header.
+
+        """
+        with fits.open(self.path) as fn:
+            return fn[name].data
 
 # ------------------- Scripts ------------------------------------------------#
 

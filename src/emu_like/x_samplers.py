@@ -108,17 +108,6 @@ class XSampler(object):
             seed = None
         return seed
 
-    def get_x_ranges(self):
-        """
-        Get x_ranges.
-        """
-        if self.x is None:
-            self.get_x()
-
-        self.x_ranges = np.array(list(zip(
-            np.min(self.x, axis=0), np.max(self.x, axis=0))))
-        return self.x_ranges
-
     def get_n_x(self):
         """
         Get n_x.
@@ -147,16 +136,6 @@ class XSampler(object):
                         if XSampler._is_varying(self.params, x)]
 
         return self.x_names
-
-    def get_x_header(self):
-        """
-        Get x_header.
-        """
-        if self.x_names is None:
-            self.get_x_names()
-        
-        self.x_header = '\t'.join(self.x_names)
-        return self.x_header
 
     def get_x(self):
         """

@@ -48,7 +48,6 @@ class Dataset(object):
             x=None,
             y=None,
             x_ranges=None,
-            y_ranges=None,
             n_x=None,
             n_y=None,
             n_samples=None,
@@ -77,7 +76,6 @@ class Dataset(object):
 
         # Ranges
         self.x_ranges = x_ranges  # x_ranges
-        self.y_ranges = y_ranges  # y_ranges
 
         # Data shapes
         self.n_x = n_x  # Number of x variables
@@ -163,34 +161,6 @@ class Dataset(object):
                 return None
         return names
 
-    @staticmethod
-    def fill_missing_params(params):
-        """
-        Fill params object with missing entries
-        Arguments:
-        - params (Params): params object;
-        """
-        default_dict = {
-            'x_sampler': {
-                'name': None,
-                'args': {},
-            },
-            'y_model': {
-                'name': None,
-                'args': {},
-                'outputs': None,
-            },
-            'params': None,
-        }
-        for key1 in default_dict:
-            if key1 not in params.content:
-                params.content[key1] = default_dict[key1]
-            if isinstance(default_dict[key1], dict):
-                for key2 in default_dict[key1]:
-                    if key2 not in params.content[key1]:
-                        params.content[key1][key2] = default_dict[key1][key2]
-        return params
-
     def slice(self, columns_x, columns_y, verbose=False):
         """
         Given a Dataset select the columns wanted, both for
@@ -236,7 +206,6 @@ class Dataset(object):
 
         # Ranges
         self.x_ranges = slice_list(self.x_ranges, columns_x)
-        self.y_ranges = slice_list(self.y_ranges, columns_y)
 
         # Adjust shapes
         self.n_samples, self.n_x = self.x.shape
@@ -274,9 +243,6 @@ class Dataset(object):
         self.x_ranges = np.array(list(zip(
             np.min(self.x, axis=0),
             np.max(self.x, axis=0))))
-        self.y_ranges = np.array(list(zip(
-            np.min(self.y, axis=0),
-            np.max(self.y, axis=0))))
 
         return self
 
@@ -321,8 +287,6 @@ class Dataset(object):
 
         # Load settings
         self.settings = Params().load(root=path)
-        # Fill missing entries
-        self.settings = Dataset.fill_missing_params(self.settings)
 
         # Main path
         self.path = path
@@ -340,11 +304,9 @@ class Dataset(object):
         self.x = x_sampler.x
 
         # Get remaining x attributes
-        self.x_ranges = x_sampler.get_x_ranges()
         self.n_x = x_sampler.get_n_x()
         self.n_samples = x_sampler.get_n_samples()
         self.x_names = x_sampler.get_x_names()
-        self.x_header = x_sampler.get_x_header()
 
         # Init y_model
         y_model = YModel.choose_one(
@@ -382,7 +344,6 @@ class Dataset(object):
 
         # Get remaining y attributes
         self.n_y = y_model.get_n_y()[0]
-        self.y_ranges = y_model.get_y_ranges()[0]
         if y_names is None:
             self.y_names = y_model.get_y_names()[0]
         else:
@@ -476,8 +437,6 @@ class Dataset(object):
         # Get ranges
         self.x_ranges = np.array(list(zip(np.min(self.x, axis=0),
                                           np.max(self.x, axis=0))))
-        self.y_ranges = np.array(list(zip(np.min(self.y, axis=0),
-                                          np.max(self.y, axis=0))))
         # Slice data
         self.slice(columns_x, columns_y, verbose=verbose)
 
@@ -536,9 +495,6 @@ class Dataset(object):
         # y array
         total = tuple([s.y for s in datasets])
         data.y = np.vstack(total)
-        data.y_ranges = np.stack((
-            np.min(data.y, axis=0),
-            np.max(data.y, axis=0))).T
 
         # x and y names
         data.x_names = datasets[0].x_names
@@ -730,7 +686,6 @@ class DataCollection(object):
 
         # Ranges
         self.x_ranges = None  # x_ranges
-        self.y_ranges = []  # y_ranges per file
 
         # Data shapes
         self.n_x = None  # Number of x variables
@@ -745,7 +700,6 @@ class DataCollection(object):
 
         # Paths
         self.path = None  # Path of the dataset
-        self.y_fnames = []  # File names of y data
 
         # Container for all the settings
         self.settings = None
@@ -757,55 +711,6 @@ class DataCollection(object):
         self.counter_samples = 0
 
         return
-
-    def _append_y(
-            self,
-            y_vals,
-            fnames=None,
-            roots=None):
-        """
-        Quick way to append rows to the y array in path.
-        Arguments:
-        - y_val (array): one line 2D y array;
-        - fname (str, default: None): file name for y_array;
-        - root (str, default: None): folder for y_array;
-        """
-        # Arguments or defaults
-        if fnames is None:
-            fnames = self.y_fnames
-        if roots is None:
-            roots = [self.path] * len(fnames)
-
-        for nf in range(len(fnames)):
-            with open(os.path.join(roots[nf], fnames[nf]), 'a') as fn:
-                np.savetxt(fn, y_vals[nf])
-        return
-
-    def _get_dims_from_file(self, fname):
-        '''
-        Fast way to get the dimensions of an array
-        saved into a file without loading it.
-        '''
-        def blocks(files, size=65536):
-            while True:
-                b = files.read(size)
-                if not b: break
-                yield b
-
-        # Infer all rows (including header)
-        with open(fname, 'r') as fn:
-            rows = sum(bl.count('\n') for bl in blocks(fn))
-        
-        # Remove header rows and get columns
-        with open(fname, 'r') as fn:
-            for line in fn:
-                if line.startswith('#'):
-                    rows -= 1
-                else:
-                    cols = len(line.split(' '))
-                    break
-
-        return rows, cols
 
     def get_one_y_dataset(self, name=None):
         """
@@ -819,9 +724,8 @@ class DataCollection(object):
         """
         # Get correct index
         if name is not None:
-            idx = self.y_fnames.index(
-                de.file_names['y_data']['name'].format(name))
-        elif len(self.y_fnames) == 1:
+            idx = self.y_model.spectra.names.index(name)
+        elif len(self.y_model.spectra.names) == 1:
             idx = 0
         else:
             raise Exception(
@@ -833,7 +737,6 @@ class DataCollection(object):
             x=self.x,
             y=self.y[idx],
             x_ranges=self.x_ranges,
-            y_ranges=self.y_ranges[idx],
             n_x=self.n_x,
             n_y=self.n_y[idx],
             n_samples=self.n_samples,
@@ -929,7 +832,6 @@ class DataCollection(object):
     def load(
             self,
             path,
-            minimal=False,
             verbose=False):
         """
         Load an existing data collection.
@@ -940,8 +842,6 @@ class DataCollection(object):
           or to a file containing both the x and y data or to a file
           containing only the x data. In this last case, 'path_y' should
           be specified. See discussion at the top of this class;
-        - minimal (bool, default: False): do not load the array of already
-          computed data to save time and memory;
         - verbose (bool, default: False): verbosity.
 
         NOTE: when generated by this code, the dataset files have specific
@@ -953,11 +853,12 @@ class DataCollection(object):
 
         if verbose:
             io.info('Loading data collection.')
+        
+        # Init fits file
+        fits = io.FitsFile(path)
 
         # Load settings
-        self.settings = Params().load(root=path)
-        # Fill missing entries
-        self.settings = Dataset.fill_missing_params(self.settings)
+        self.settings = fits.get_header(0, unflat_dict=True)
 
         # Main path
         self.path = path
@@ -970,16 +871,14 @@ class DataCollection(object):
             verbose=False)
 
         # Load x data.
-        x_sampler.x = Dataset._load_array(
-            os.path.join(self.path, x_sampler.x_key))
+        x_sampler.x = fits.get_data(x_sampler.x_key)
         self.x = x_sampler.x
 
         # Get remaining x attributes
-        self.x_ranges = x_sampler.get_x_ranges()
         self.n_x = x_sampler.get_n_x()
         self.n_samples = x_sampler.get_n_samples()
         self.x_names = x_sampler.get_x_names()
-        self.x_header = x_sampler.get_x_header()
+        self.x_key = x_sampler.x_key
 
         # Init y_model
         y_model = YModel.choose_one(
@@ -992,56 +891,36 @@ class DataCollection(object):
         
         # Load y_model
         y_model.load(
-            de.file_names['spectra_factor']['name'],
-            root=self.path,
+            self.path,
             verbose=False,
         )
 
-        # Get y file names
-        self.y_fnames = y_model.get_y_fnames()
-
         # Load y data.
-        if not minimal:
-            # 1) load y for each file.
-            y = [Dataset._load_array(
-                os.path.join(self.path, self.y_fnames[nf]))
-                for nf in range(len(self.y_fnames))]
-            # 2) Infer dimensions
-            n_rows = [y_one.shape[0] for y_one in y]
-            n_y = [y_one.shape[1] for y_one in y]
-        # Get array dimensions without loading it
-        else:
-            # 2) Infer dimensions
-            n_rows, n_y = zip(*[self._get_dims_from_file(
-                os.path.join(self.path, self.y_fnames[nf])) for nf in range(len(self.y_fnames))])
+        self.y_keys = y_model.spectra.names
+        # 1) load y for each file.
+        y = [fits.get_data(name) for name in self.y_keys]
+        # 2) Infer dimensions
+        n_rows = [y_one.shape[0] for y_one in y]
+        n_y = [y_one.shape[1] for y_one in y]
 
         # Check and init counter_samples
         if not all(row == n_rows[0] for row in n_rows):
             raise IOError('Not all the files have the same number of raws')
         self.counter_samples = n_rows[0]
 
-        # 3) Try to infer the names
-        y_names = [Dataset._try_to_load_names_array(
-            os.path.join(self.path, self.y_fnames[nf]), n_names=n_y[nf]) for nf in range(len(self.y_fnames))]
-
-        # 4) Initialize list of zeros arrays with full or remaining samples.
+        # 3) Initialize list of zeros arrays with full or remaining samples.
         y_model.y = [np.zeros((self.n_samples, n_y_one)) for n_y_one in n_y]
 
-        # 5) Assign values.
-        if not minimal:
-            for ny_gen, y_gen in enumerate(y_model.y):
-                y_gen[:self.counter_samples] = y[ny_gen]
+        # 4) Assign values.
+        for ny_gen, y_gen in enumerate(y_model.y):
+            y_gen[:self.counter_samples] = y[ny_gen]
 
         # 5) Synchronize with self.y.
         self.y = y_model.y
 
         # Get remaining y attributes
         self.n_y = y_model.get_n_y()
-        self.y_ranges = y_model.get_y_ranges()
-        if None in y_names:
-            self.y_names = y_model.get_y_names()
-        else:
-            y_model.y_names = self.y_names = y_names
+        self.y_names = y_model.get_y_names()
         self.y_headers = y_model.get_y_headers()
 
         # Propagate x_sampler and y_model
@@ -1182,23 +1061,18 @@ class DataCollection(object):
                         name=name,
                     )
 
-        # Get remaining attributes
-        self.y_ranges = y_model.get_y_ranges()
-
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
         self.y_model = y_model
 
         return
 
-    def resume(self, path, load_minimal=False, verbose=False):
+    def resume(self, path, verbose=False):
         """
         Resume a dataset previously loaded (use load method
         before resuming). Many settings are already loaded.
         Arguments:
         - path (str): path pointing to the folder containing the dataset;
-        - load_minimal (bool, default: False): do not load the array of
-          already computed data to save time and memory;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that both settings and the full x array
@@ -1207,7 +1081,7 @@ class DataCollection(object):
         """
 
         # Load the dataset
-        self.load(path, minimal=load_minimal, verbose=verbose)
+        self.load(path, verbose=verbose)
 
         if verbose:
             io.info('Resuming dataset computation.')
@@ -1220,16 +1094,18 @@ class DataCollection(object):
                 io.warning('Dataset complete, nothing to resume!')
             return
 
+        fits = io.FitsFile(fname=path)
         start = self.counter_samples
         for ns, x in enumerate(tqdm.tqdm(self.x[start:])):
             y_one = self.y_model.evaluate(x, start + ns)
             self.counter_samples += 1
         
             # Save array
-            self._append_y(y_one)
-
-        # Get remaining attributes
-        self.y_ranges = self.y_model.get_y_ranges()
+            for nname, name in enumerate(self.y_keys):
+                fits.append(
+                    data=y_one[nname],
+                    name=name,
+                )
 
         return
 

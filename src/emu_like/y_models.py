@@ -37,7 +37,6 @@ class YModel(object):
         self.n_samples = n_samples
         # Placeholders
         self.y = []  # y per file
-        self.y_ranges = []  # y_ranges per file
         self.n_y = []  # Number of y variables per file
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
@@ -96,18 +95,6 @@ class YModel(object):
                 name, params, n_samples, outputs, verbose=verbose, **kwargs)
         else:
             raise Exception('YModel not recognised!')
-
-    def get_y_ranges(self):
-        """
-        Get y_ranges.
-        """
-        if self.y == []:
-            raise Exception('Empty y arrays! Use get_y '
-                            'or evaluate to generate them first.')
-
-        self.y_ranges = [list(zip(np.min(y, axis=0), np.max(y, axis=0)))
-                            for y in self.y]
-        return self.y_ranges
 
     def get_n_y(self):
         """
@@ -579,7 +566,6 @@ class ClassSpectra(YModel):
         oneclassspectrum.y_fnames = [self.y_fnames[idx]]
         oneclassspectrum.y_headers = [self.y_headers[idx]]
         oneclassspectrum.y_names = [self.y_names[idx]]
-        oneclassspectrum.y_ranges = [self.y_ranges[idx]]
         oneclassspectrum.y_ref = [self.y_ref[idx]]
         oneclassspectrum.spectra = Spectra([self.spectra[idx]])
         if self.spectra[idx].is_pk:
@@ -686,7 +672,7 @@ class ClassSpectra(YModel):
 
         return y
 
-    def save(self, fname=None, root=None, verbose=False):
+    def save(self, fname, root=None, verbose=False):
         """
         Save reference spectra.
         """
@@ -700,8 +686,8 @@ class ClassSpectra(YModel):
         fits = io.FitsFile(path)
 
 
+        is_pk = False
         for nsp, sp in enumerate(self.spectra):
-            is_pk = False
             # Write spectra
             fits.write(
                 data=self.y_ref[nsp],
@@ -734,12 +720,10 @@ class ClassSpectra(YModel):
         
         return
 
-    def load(self, fname=None, root=None, verbose=False):
+    def load(self, fname, root=None, verbose=False):
         """
         Load reference spectra.
         """
-        if fname is None:
-            fname = de.file_names['spectra_factor']['name']
         if root is None:
             path = fname
         else:
@@ -747,22 +731,29 @@ class ClassSpectra(YModel):
         if verbose:
             io.print_level(1, 'Loading reference spectra from {}'.format(path))
 
-        fits = io.FitsFile(path=path)
+        fits = io.FitsFile(fname=path)
 
-        # Read spectra
-        self.y_ref = [fits.read_key(sp.name) for sp in self.spectra]
-
-        # Read z_array, k_ranges, ell_ranges
-        self.z_array = None
-        self.k_ranges = [None for sp in self.spectra]
-        self.ell_ranges = [None for sp in self.spectra]
-        for nsp, sp in enumerate(self.spectra):
+        is_pk = False
+        self.y_ref = []
+        self.k_ranges = []
+        self.ell_ranges = []
+        for sp in self.spectra:
+            # Read spectra
+            self.y_ref.append(fits.get_data('ref_{}'.format(sp.name)))
             if sp.is_pk:
-                self.z_array = fits.read_key('z_array')
-                self.k_ranges[nsp] = fits.read_key('k_range_{}'.format(sp.name))
+                # Read k_range
+                self.k_ranges.append(fits.get_data('k_range_{}'.format(sp.name)))
+                self.ell_ranges.append(None)
+                is_pk = True
             elif sp.is_cl:
-                self.ell_ranges[nsp] = fits.read_key('ell_range_{}'.format(sp.name))
+                # Read ell_range
+                self.k_ranges.append(None)
+                self.ell_ranges.append(fits.get_data('ell_range_{}'.format(sp.name)))
         
+        if is_pk:
+            # read z_array
+            self.z_array = fits.get_data('z_array')
+
         return
 
     def plot(self, emu, data, path=None):
