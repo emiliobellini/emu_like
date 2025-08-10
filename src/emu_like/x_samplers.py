@@ -30,6 +30,8 @@ class XSampler(object):
         # Default n_samples if not passed.
         self.n_samples_default = 10
 
+        # Defaults
+        self.x_key = 'x_data'
         # Placeholders
         self.x = None  # x
         self.x_ranges = None  # x_ranges
@@ -37,7 +39,6 @@ class XSampler(object):
         self.n_samples = None  # Number of samples
         self.x_names = None  # List of names of x data
         self.x_header = None  # Header for x file
-        self.x_fname = None  # File name of x data
         return
 
     @staticmethod
@@ -156,13 +157,6 @@ class XSampler(object):
         
         self.x_header = '\t'.join(self.x_names)
         return self.x_header
-
-    def get_x_fname(self):
-        """
-        Get x_fname.
-        """
-        self.x_fname = de.file_names['x_data']['name']
-        return self.x_fname
 
     def get_x(self):
         """

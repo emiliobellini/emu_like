@@ -5,9 +5,6 @@ values and names of the code.
 
 # File names
 file_names = {
-    'x_data': {
-        'name': 'x_data.txt',
-    },
     'y_data': {
         'name': 'y_data_{}.txt',
     },

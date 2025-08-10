@@ -334,12 +334,9 @@ class Dataset(object):
             **self.settings['x_sampler']['args'],
             verbose=False)
 
-        # Get x file name
-        self.x_fname = x_sampler.get_x_fname()
-
         # Load x data.
         x_sampler.x = Dataset._load_array(
-            os.path.join(self.path, self.x_fname))
+            os.path.join(self.path, x_sampler.x_key))
         self.x = x_sampler.x
 
         # Get remaining x attributes
@@ -748,7 +745,6 @@ class DataCollection(object):
 
         # Paths
         self.path = None  # Path of the dataset
-        self.x_fname = None  # File name of x data
         self.y_fnames = []  # File names of y data
 
         # Container for all the settings
@@ -764,7 +760,7 @@ class DataCollection(object):
 
     def _save_x(
             self,
-            fname=None,
+            fname,
             root=None,
             x_array=None,
             header=None,
@@ -779,8 +775,6 @@ class DataCollection(object):
         - verbose (bool, default: False): verbosity.
         """
         # Arguments or defaults
-        if fname is None:
-            fname = de.file_names['x_data']['name']
         if root is None:
             root = self.path
         if x_array is None:
@@ -1061,12 +1055,9 @@ class DataCollection(object):
             **self.settings['x_sampler']['args'],
             verbose=False)
 
-        # Get x file name
-        self.x_fname = x_sampler.get_x_fname()
-
         # Load x data.
         x_sampler.x = Dataset._load_array(
-            os.path.join(self.path, self.x_fname))
+            os.path.join(self.path, x_sampler.x_key))
         self.x = x_sampler.x
 
         # Get remaining x attributes
@@ -1225,12 +1216,11 @@ class DataCollection(object):
         self.n_x = x_sampler.get_n_x()
         self.x_names = x_sampler.get_x_names()
         self.x_header = x_sampler.get_x_header()
-        self.x_fname = x_sampler.get_x_fname()
         self.n_samples = x_sampler.get_n_samples()
 
         # Save x_array
         if save_it:
-            self._save_x(verbose=verbose)
+            self._save_x(x_sampler.x_key, verbose=verbose)
 
         # Init y_model
         y_model = YModel.choose_one(
