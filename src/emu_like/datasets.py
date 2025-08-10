@@ -1172,9 +1172,6 @@ class DataCollection(object):
             y_outputs=None,
             output=None,
             save_incrementally=False,
-            num_processes=1,
-            init_parallel_sampling=None,
-            do_parallel_sampling=None,
             verbose=False):
         """
         Generate a dataset.
@@ -1195,16 +1192,11 @@ class DataCollection(object):
           path should be passed;
         - save_incrementally (bool, default: False): save output incrementally
           (not compatible with parallel computing, set num_processes=1);
-        - num_processes (int, default: 1): parallelize sampling with this number of
-          processes (not compatible with save_incrementally);
         - verbose (bool, default: False): verbosity.
         """
 
         if verbose:
             io.info('Generating dataset.')
-
-        if save_incrementally and num_processes>1:
-            raise Exception('I can not save incrementally and parallelize the computation. Choose one!')
 
         # Create main folder
         self.path = output
@@ -1281,49 +1273,16 @@ class DataCollection(object):
         self.y = y_model.y
 
         # Start iteration in series
-        if num_processes==1:
+        for nx, x in enumerate(tqdm.tqdm(self.x)):
+            y_one = y_model.evaluate(x, nx)
+            self.counter_samples += 1
 
-            for nx, x in enumerate(tqdm.tqdm(self.x)):
-                y_one = y_model.evaluate(x, nx)
-                self.counter_samples += 1
+            if any([np.isnan(yy).any() for yy in y_one]):
+                io.warning(' Found nans with parameters {}'.format(x))
 
-                if any([np.isnan(yy).any() for yy in y_one]):
-                    io.warning(' Found nans with parameters {}'.format(x))
-
-                # Save array
-                if save_incrementally:
-                    self._append_y(y_one)
-
-        # Start iteration in parallel
-        else:
-
-            # Init pool
-            pool = multiprocessing.Pool(
-                initializer=init_parallel_sampling,
-                processes=num_processes,
-                initargs=(
-                    y_name,
-                    params,
-                    y_outputs,
-                    self.n_samples,
-                    y_args,
-                    )
-                )
-
-            # Process the data using the pool
-            y = pool.starmap(
-                do_parallel_sampling,
-                zip(self.x, np.arange(self.n_samples))
-                )
-
-            # Close the pool
-            pool.close()
-            pool.join()
-
-            # Stack the dataset
-            for n_out in range(len(self.n_y)):
-                for n_sample in range(self.n_samples):
-                    y_model.y[n_out][n_sample] = y[n_sample][n_out][0]
+            # Save array
+            if save_incrementally:
+                self._append_y(y_one)
 
 
         # Get remaining attributes
