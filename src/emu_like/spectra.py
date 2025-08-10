@@ -12,6 +12,7 @@ been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
 """
 
+import classy
 import numpy as np
 import scipy.interpolate as interp
 from . import defaults as de
@@ -35,7 +36,6 @@ class Spectra(object):
           of parameters for each spectrum, or a list of Spectrum objects.
         """
         # Init classy
-        import classy
         if isinstance(dict_or_list, dict):
             self.list = [Spectrum.choose_one(sp, dict_or_list[sp]) for sp in dict_or_list]
         elif isinstance(dict_or_list, list):
@@ -229,11 +229,11 @@ class Spectrum(object):
         elif spectrum_type == 'pk_weyl':
             return WeylPk(spectrum_type, params)
         # Growth rates
-        elif spectrum_type == 'f_m':
+        elif spectrum_type == 'fk_m':
             return MatterGrowthRate(spectrum_type, params)
-        elif spectrum_type == 'f_cb':
+        elif spectrum_type == 'fk_cb':
             return ColdBaryonGrowthRate(spectrum_type, params)
-        elif spectrum_type == 'f_weyl':
+        elif spectrum_type == 'fk_weyl':
             return WeylGrowthRate(spectrum_type, params)
         # Cl
         elif spectrum_type == 'cl_TT':
