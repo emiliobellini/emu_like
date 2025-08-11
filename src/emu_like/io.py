@@ -360,6 +360,9 @@ class FitsFile(object):
         return
 
     def append(self, data, name, header=None):
+        if isinstance(header, dict):
+            header = self._flatten_dict(header)
+            header = fits.Header(header)
         # If array already exists, append data to it,
         # otherwise create array.
         try:
@@ -368,17 +371,6 @@ class FitsFile(object):
         except KeyError:
             with fits.open(self.path, mode='append') as hdul:
                 hdul.append(fits.ImageHDU(data, name=name, header=header))
-        # try:
-        #     if hdul[name].data is None:
-        #         with fits.open(self.path, mode='update') as hdul:
-        #             hdul[name].data = data
-        #     else:
-        #         with fits.open(self.path, mode='update') as hdul:
-        #             hdul[name].data = np.vstack([hdul[name].data, data])
-        # except KeyError:
-        #     with fits.open(self.path, mode='append') as hdul:
-        #         hdul.append(fits.ImageHDU(data, name=name, header=header))
-        
         return
 
     def print_info(self):
@@ -397,7 +389,7 @@ class FitsFile(object):
             sys.stdout.flush()
         return
 
-    def get_header(self, name, unflat_dict=False):
+    def get_header(self, name, unflat_dict=True):
         """ Open a fits file and return the header from name.
 
         Args:

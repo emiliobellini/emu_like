@@ -1035,7 +1035,7 @@ class DataCollection(object):
                     fits.append(
                         data=y_one[nname],
                         name=name,
-                        header=self.y_headers
+                        header=self.y_headers[nname]
                     )
 
         # Propagate x_sampler and y_model

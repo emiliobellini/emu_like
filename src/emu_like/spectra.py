@@ -333,22 +333,17 @@ class Pk(Spectrum):
         Default header for the Pk.
         Format example: {Matter, 1.e-3, 1., log, 600}
         """
-        if self.ratio:
-            hd = 'Ratio of the {} power spectrum P(k) w.r.t. the reference P(k) '
-        else:
-            hd = '{} power spectrum P(k) in units (Mpc/h)^3 '
-        hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
-        hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
-        hd += 'of k_modes of {}.\n'
-        # hd += '\t'.join(self.get_y_names())
-
-        hd = hd.format(
-            self.hd_name,
-            self.k_min,
-            self.k_max,
-            self.k_space,
-            self.k_num
-        )
+        hd = {
+            'name': self.hd_name,
+            'ratio': self.ratio,
+            'dimensions_k': 'h/Mpc',
+            'dimensions_Pk': '(Mpc/h)^3',
+            'k_min': self.k_min,
+            'k_max': self.k_max,
+            'spacing': self.k_space,
+            'number_of_k': self.k_num,
+            'formula': 'P(k,z)',
+        }
         return hd
 
 
@@ -438,18 +433,15 @@ class Cell(Spectrum):
         Default header for the Cell.
         Format example: {TT, lensed, 2, 2500}
         """
-        if self.ratio:
-            hd = 'Ratio of the {} C_l for ell={} to {}.\n'
-        else:
-            hd ='dimensionless {} [l(l+1)/2pi] C_l for ell={} to {}.\n'
-        # hd += '\t'.join(self.get_y_names())
-
-        # Cl specific settings
-        hd = hd.format(
-            self.hd_name,
-            self.ell_min,
-            self.ell_max,
-        )
+        hd = {
+            'name': self.hd_name,
+            'ratio': self.ratio,
+            'dimensions_ell': None,
+            'dimensions_Cell': None,
+            'ell_min': self.ell_min,
+            'ell_max': self.ell_max,
+            'formula': '[ell*(ell+1)/2*pi] C_ell(ell)',
+        }
         return hd
 
 
@@ -473,22 +465,17 @@ class GrowthRate(Pk):
         """
         Header for the growth rate.
         """
-        if self.ratio:
-            hd = 'Ratio of the {} growth rate f(k) w.r.t. the reference f(k) '
-        else:
-            hd = '{} growth rate f(k) '
-        hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
-        hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
-        hd += 'of k_modes of {}.\n'
-        # hd += '\t'.join(self.get_y_names())
-
-        hd = hd.format(
-            self.hd_name,
-            self.k_min,
-            self.k_max,
-            self.k_space,
-            self.k_num
-        )
+        hd = {
+            'name': self.hd_name,
+            'ratio': self.ratio,
+            'dimensions_k': 'h/Mpc',
+            'dimensions_fk': None,
+            'k_min': self.k_min,
+            'k_max': self.k_max,
+            'spacing': self.k_space,
+            'number_of_k': self.k_num,
+            'formula': 'f(k,z)',
+        }
         return hd
 
     def get(self, cosmo, z=None):
