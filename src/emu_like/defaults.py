@@ -43,27 +43,3 @@ file_names = {
         'name': 'spectra_factor.fits',
     },
 }
-
-# Cosmo (Planck 2018 bestfit, Table 1 of https://arxiv.org/pdf/1807.06209)
-cosmo_params = {
-    'h': 0.6732,
-    'Omega_m': 0.3158,
-    'Omega_b': 0.0494,
-    'A_s': 2.1e-9,
-    'n_s': 0.966,
-    'tau_reio': 0.0543,
-    # Precision parameters
-    'k_per_decade_for_pk': 40,
-    'k_per_decade_for_bao': 80,
-    'l_logstep': 1.026,
-    'l_linstep': 25,
-    'perturbations_sampling_stepsize': 0.02,
-    'l_switch_limber': 20,
-    'accurate_lensing': 1,
-    'delta_l_max': 1000,
-    'output': 'tCl, dTk, pCl, lCl, mPk',
-    'l_max_scalars': 3000,
-    'lensing': 'yes',
-    'P_k_max_h/Mpc': 50.0,
-    'modes': 's',
-}

@@ -46,7 +46,6 @@ class Dataset(object):
             name=None,
             x=None,
             y=None,
-            x_ranges=None,
             n_x=None,
             n_y=None,
             n_samples=None,
@@ -72,9 +71,6 @@ class Dataset(object):
         self.y_train = None  # y_train
         self.x_test = None  # x_test
         self.y_test = None  # y_test
-
-        # Ranges
-        self.x_ranges = x_ranges  # x_ranges
 
         # Data shapes
         self.n_x = n_x  # Number of x variables
@@ -203,9 +199,6 @@ class Dataset(object):
         self.x_names = slice_list(self.x_names, columns_x)
         self.y_names = slice_list(self.y_names, columns_y)
 
-        # Ranges
-        self.x_ranges = slice_list(self.x_ranges, columns_x)
-
         # Adjust shapes
         self.n_samples, self.n_x = self.x.shape
         _, self.n_y = self.y.shape
@@ -237,11 +230,6 @@ class Dataset(object):
 
         # Adjust n_samples
         self.n_samples = self.x.shape[0]
-
-        # Adjust ranges
-        self.x_ranges = np.array(list(zip(
-            np.min(self.x, axis=0),
-            np.max(self.x, axis=0))))
 
         return self
 
@@ -433,9 +421,6 @@ class Dataset(object):
         self.x_names = Dataset._try_to_load_names_array(path_x, n_names=self.n_y)
         self.y_names = Dataset._try_to_load_names_array(path_y, n_names=self.n_y)
 
-        # Get ranges
-        self.x_ranges = np.array(list(zip(np.min(self.x, axis=0),
-                                          np.max(self.x, axis=0))))
         # Slice data
         self.slice(columns_x, columns_y, verbose=verbose)
 
@@ -487,9 +472,6 @@ class Dataset(object):
         # x array
         total = tuple([s.x for s in datasets])
         data.x = np.vstack(total)
-        data.x_ranges = np.stack((
-            np.min(data.x, axis=0),
-            np.max(data.x, axis=0))).T
 
         # y array
         total = tuple([s.y for s in datasets])
@@ -683,9 +665,6 @@ class DataCollection(object):
         self.x = None  # x
         self.y = []  # y per file
 
-        # Ranges
-        self.x_ranges = None  # x_ranges
-
         # Data shapes
         self.n_x = None  # Number of x variables
         self.n_y = []  # Number of y variables per file
@@ -694,7 +673,6 @@ class DataCollection(object):
         # Labels
         self.x_names = None  # List of names of x data
         self.y_names = []  # List of names of y data per file
-        self.x_header = None  # Header for x file
         self.y_headers = []  # Headers for y files
 
         # Paths
@@ -735,7 +713,6 @@ class DataCollection(object):
             name=name,
             x=self.x,
             y=self.y[idx],
-            x_ranges=self.x_ranges,
             n_x=self.n_x,
             n_y=self.n_y[idx],
             n_samples=self.n_samples,
@@ -1058,6 +1035,7 @@ class DataCollection(object):
                     fits.append(
                         data=y_one[nname],
                         name=name,
+                        header=self.y_headers
                     )
 
         # Propagate x_sampler and y_model

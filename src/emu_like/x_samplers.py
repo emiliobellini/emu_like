@@ -34,11 +34,9 @@ class XSampler(object):
         self.x_key = 'x_data'
         # Placeholders
         self.x = None  # x
-        self.x_ranges = None  # x_ranges
         self.n_x = None  # Number of x variables
         self.n_samples = None  # Number of samples
         self.x_names = None  # List of names of x data
-        self.x_header = None  # Header for x file
         return
 
     @staticmethod
