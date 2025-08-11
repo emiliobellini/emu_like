@@ -500,7 +500,7 @@ class FitsFile(object):
         if root is None:
             self.path = fname
         else:
-            self.path = os.path.join(root, fname)
+            self.path = os.path.abspath(os.path.join(root, fname))
         # Check existence
         self.exists = os.path.isfile(self.path)
         # Check is fits
@@ -559,6 +559,9 @@ class FitsFile(object):
         return nested_dict
 
     def write(self, data, header, name, verbose=False):
+        # Create parent folder
+        if not Folder(os.path.dirname(self.path)).exists:
+            Folder(os.path.dirname(self.path)).create()
         # We assume that header is either a dictionary, or a fits.Header
         if isinstance(header, dict):
             header = self._flatten_dict(header)
