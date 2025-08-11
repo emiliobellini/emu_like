@@ -9,8 +9,7 @@
 import os
 import emu_like.io as io
 from emu_like.emu import Emulator
-from emu_like.params import Params
-from emu_like.datasets import DataCollection, Dataset
+from emu_like.datasets import Dataset
 
 
 def train_emu(args):
@@ -26,7 +25,7 @@ def train_emu(args):
         io.print_level(0, "\nStarted training emulator\n")
 
     # Read params
-    params = Params().load(args.params_file)
+    params = io.YamlFile(args.params_file).read()
 
     # If resume load parameters from output folder
     if args.resume:
@@ -34,7 +33,7 @@ def train_emu(args):
             io.info('Resuming from {}.'.format(params['output']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
         # Read params from output folder
-        params = Params().load(root=params['output'])
+        params = io.YamlFile(root=params['output']).read()
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
@@ -54,9 +53,6 @@ def train_emu(args):
         params['emulator']['name'],
         verbose=args.verbose)
 
-    # Fill missing entries
-    params = emu.fill_missing_params(params)
-
     # Update parameters with input
     params = emu.update_params(
         params,
@@ -64,7 +60,7 @@ def train_emu(args):
         learning_rate=args.learning_rate)
 
     # Save params
-    params.save(
+    params.write(
         root=params['output'],
         verbose=args.verbose)
 

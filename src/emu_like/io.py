@@ -11,6 +11,7 @@ import numpy as np
 import os
 import re
 import sys
+import yaml
 from astropy.io import fits
 
 
@@ -105,71 +106,6 @@ def argument_parser():
         action='store_true')
 
     return parser.parse_args()
-
-
-# ------------------- Folder -------------------------------------------------#
-
-class Path(object):
-    """
-    Generic class for paths.
-    """
-    def __init__(self, path=None, exists=False, check_is_folder=False):
-        # Store location
-        if path:
-            self.path = os.path.abspath(path)
-            self.parent_folder, self.fname = os.path.split(self.path)
-            self.name, self.ext = os.path.splitext(self.fname)
-            if self.ext:
-                self.isfile = True
-                self.isfolder = False
-            else:
-                self.isfile = False
-                self.isfolder = True
-        else:
-            self.path = None
-            self.parent_folder = None
-            self.fname = None
-            self.name = None
-            self.ext = None
-            self.isfile = None
-            self.isfolder = None
-        # Check existence
-        self.exists = os.path.exists(self.path)
-        if exists:
-            if path:
-                self.exists_or_error()
-            else:
-                raise ValueError('Can not check existence of Path. Argument '
-                                 'exists=True but path to the file '
-                                 'not provided!')
-        if check_is_folder:
-            if not self.isfolder:
-                raise ValueError('This should be a folder but it is not!')
-        return
-
-    def exists_or_error(self):
-        """
-        Check if a path exists, otherwise raise an error.
-        """
-        assert self.exists, 'File {} does not exist!'.format(self.path)
-        return
-
-    def exists_or_create(self):
-        """
-        Check if a path exists, otherwise create it.
-        If the path is a file creates an empty file,
-        if it is a folder create the folder.
-        """
-        if not os.path.exists(self.path):
-            if self.isfile:
-                if not os.path.exists(self.parent_folder):
-                    parent = Path(path=self.parent_folder)
-                    parent.exists_or_create()
-                f = open(self.path, 'w')
-                f.close()
-            elif self.isfolder:
-                os.makedirs(self.path)
-        return
 
 
 # ------------------- Folder -------------------------------------------------#
@@ -331,163 +267,6 @@ class Folder(object):
         return path
 
 
-# ------------------- Files --------------------------------------------------#
-
-class File(Path):
-    """
-    Generic class for files.
-    """
-
-    def __init__(self, path=None, exists=False):
-        Path.__init__(self, path, exists)
-        # Check existence
-        self.exists = os.path.isfile(path)
-        # Placeholder for content
-        self.content = None
-        return
-
-    def head(self, lines=1):
-        """
-        Imitates the bash head command
-        """
-        # Check
-        self.exists_or_error()
-        # Main body
-        with open(self.path, 'r') as f:
-            f.seek(0, 2)     # go to end of file
-            total_bytes = f.tell()
-            lines_found, total_bytes_scanned = 0, 0
-            while (lines+1 > lines_found and
-                    total_bytes > total_bytes_scanned):
-                byte_block = min(1024, total_bytes-total_bytes_scanned)
-                f.seek(total_bytes_scanned, 0)
-                total_bytes_scanned += byte_block
-                lines_found += f.read(byte_block).count('\n')
-            f.seek(0, 0)
-            line_list = list(f.readlines(total_bytes_scanned))
-            line_list = [x.rstrip() for x in line_list[:lines]]
-        return line_list
-
-    def tail(self, lines=1):
-        """
-        Imitates the bash tail command
-        """
-        # Check
-        self.exists_or_error()
-        # Main body
-        with open(self.path, 'r') as f:
-            f.seek(0, 2)     # go to end of file
-            total_bytes = f.tell()
-            lines_found, total_bytes_scanned = 0, 0
-            while (lines+1 > lines_found and
-                    total_bytes > total_bytes_scanned):
-                byte_block = min(1024, total_bytes-total_bytes_scanned)
-                f.seek(total_bytes-total_bytes_scanned-byte_block, 0)
-                lines_found += f.read(byte_block).count('\n')
-                total_bytes_scanned += byte_block
-            f.seek(total_bytes-total_bytes_scanned, 0)
-            line_list = list(f.readlines())
-            line_list = [x.rstrip() for x in line_list[-lines:]]
-        return line_list
-
-    def read(self, size=-1):
-        """
-        Read the file.
-        """
-        # Check
-        self.exists_or_error()
-        # Main body
-        with open(self.path, 'r') as f:
-            content = f.read(size)
-        self.content = content
-        return content
-
-    def readlines(self, size=-1):
-        """
-        Read each line of the file.
-        """
-        with open(self.path, 'r') as f:
-            lines = f.readlines(size)
-        return lines
-
-    def read_header(self, comments='#'):
-        """
-        Read the header of a file, i.e. from the beginning of the file
-        all lines that start with the comments symbol.
-        """
-        # Check
-        self.exists_or_error()
-        # Comment string
-        if type(comments) is str:
-            comments = [comments]
-        assert type(comments) is list, 'Wrong format for comments '\
-            'in File.read_header(). It should be a list, got {}!'\
-            ''.format(type(comments))
-        # Main body
-        is_head = True
-        head = []
-        f = open(self.path, 'r')
-        ln = f.readline()
-        while ln and is_head:
-            if any([re.match('{}.*'.format(x), ln) for x in comments]):
-                head.append(ln)
-            else:
-                is_head = False
-            ln = f.readline()
-        f.close()
-        head = ''.join(head)
-        return head
-
-    def write(self, content=None, path=None, overwrite=False):
-        """
-        Write the string 'content' into the file.
-        """
-        if not path:
-            path = self.path
-        if not content:
-            content = self.content
-        # Check
-        assert path, 'To write a file you should specify a path'
-        assert content, 'No content to write'
-        if not overwrite and self.exists:
-            raise IOError('File {} exists, if you really want to overwrite '
-                          'it, use overwrite argument.'.format(path))
-        # Main body
-        with open(path, 'w') as f:
-            f.write(content)
-        print_level(1, 'File saved at {}!'.format(path))
-        return
-
-    def append(self, content=None, path=None):
-        """
-        Append the string 'content' into the file.
-        """
-        if not path:
-            path = self.path
-        if not content:
-            content = self.content
-        # Check
-        assert path, 'To write a file you should specify a path'
-        assert content, 'No content to write'
-        if not self.exists:
-            raise IOError('Can not append to file {}, since it does not '
-                          'exists. Use write if you want to create it.'
-                          ''.format(path))
-        # Main body
-        with open(path, 'a') as f:
-            f.write(content)
-        print_level(1, 'Content appended to file at {}!'.format(path))
-        return
-
-    def remove(self):
-        """
-        Remove file and reinitialize the class
-        """
-        os.remove(self.path)
-        self.__init__(self.path)
-        return
-
-
 # ------------------- Fits Files ---------------------------------------------#
 
 class FitsFile(object):
@@ -495,7 +274,7 @@ class FitsFile(object):
     Class for fits files.
     """
 
-    def __init__(self, fname=None, root=None, exists=False):
+    def __init__(self, fname=None, root=None):
         # Define path
         if root is None:
             self.path = fname
@@ -647,6 +426,113 @@ class FitsFile(object):
         """
         with fits.open(self.path) as fn:
             return fn[name].data
+
+
+# ------------------- Yaml Files ---------------------------------------------#
+
+class YamlFile(object):
+    """
+    Class for yaml files.
+    """
+
+    def __init__(self, fname=None, root=None):
+        # Define path
+        if root is None:
+            self.path = fname
+        else:
+            self.path = os.path.abspath(os.path.join(root, fname))
+        # Check existence
+        self.exists = os.path.isfile(self.path)
+        # Check is yaml
+        is_yaml = self.path.endswith('.yaml')
+        if not is_yaml:
+            raise Exception('Expected .yaml file, found {}'.format(self.path))
+        # Defaults
+        self.default_name = 'params.yaml'
+        self.default_header = (
+            '# This is an automatically generated file. Do not modify it!\n'
+            '# It is used to resume training instead of the input one.\n\n')
+        return
+
+    def __setitem__(self, item, value):
+        self.content[item] = value
+
+    def __getitem__(self, item):
+        return self.content[item]
+
+    def __repr__(self):
+        return self.content
+
+    def __str__(self):
+        return str(self.content)
+
+    def keys(self):
+        return self.content.keys()
+
+    def read(self, fname=None, root=None):
+        """
+        Read .yaml file and store it into a dictionary.
+        Arguments:
+        - fname (str): path to the parameters file;
+        - root (str, default: None): root of the file;
+          blocks with default structure.
+        """
+        # Define path
+        if fname is not None:
+            if root is None:
+                self.path = fname
+            else:
+                self.path = os.path.abspath(os.path.join(root, fname))
+        # Check existence
+        self.exists = os.path.isfile(self.path)
+
+        if not self.exists:
+            raise FileNotFoundError(
+                'The file you want to read ({}) does not exists!'.format(self.path))
+
+        with open(self.path) as file:
+            self.content = yaml.safe_load(file)
+        
+        return self
+
+    def write(self, fname=None, root=None, header=None, overwrite=False, verbose=False):
+        """
+        Save parameter to path, with the header if specified.
+        Arguments:
+        - fname (str): destination file name, relative to root if specified;
+        - root (str, default: None): root where to save the file;
+        - header (str, optional): string to be prepended to destination file;
+        - overwrite (bool, default: False): overwrite already existing file;
+        - verbose (bool, default: False): verbosity.
+        """
+
+        # Define path
+        if root is None:
+            self.path = fname
+        else:
+            self.path = os.path.abspath(os.path.join(root, fname))
+        # Check existence
+        self.exists = os.path.isfile(self.path)
+
+        if self.exists and not overwrite:
+            raise FileNotFoundError(
+                'The file you want to read ({}) already exists!'.format(self.path))
+
+        if header is None:
+            header = self.default_header
+        # Create root folder and join path
+        Folder(os.path.dirname(self.path)).create()
+
+        if header:
+            with open(self.path, 'w') as file:
+                file.write(header)
+        with open(self.path, 'a') as file:
+            yaml.safe_dump(self.content, file, sort_keys=False)
+        if verbose:
+            print_level(1, 'Saved parameters at: {}'.format(self.path))
+        return
+
+
 
 # ------------------- Scripts ------------------------------------------------#
 

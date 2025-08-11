@@ -14,7 +14,6 @@ from tensorflow import keras
 from . import defaults as de
 from . import io as io
 from .emu import Emulator
-from .params import Params
 from .pca import PCA
 from .scalers import Scaler
 from .y_models import YModel
@@ -66,7 +65,7 @@ class FFNNEmu(Emulator):
         In particular, it updates the learning rate
         and the number of epochs to run.
         Arguments:
-        - params (src.emu_like.params.Params class):
+        - params (src.emu_like.io.YamlFile class):
           the params class that should be updated;
         - epochs (int, default: None): epochs that
           should be run;
@@ -98,43 +97,6 @@ class FFNNEmu(Emulator):
         params['emulator']['args']['epochs'] = old_epochs
         params['emulator']['args']['learning_rate'] = old_learning_rate
 
-        return params
-
-    @staticmethod
-    def fill_missing_params(params):
-        """
-        Fill params object with missing entries
-        Arguments:
-        - params (Params): params object;
-        """
-
-        default_dict = {
-            'output': None,
-            'emulator': {
-                'name': None,
-                'args': {},
-            },
-            'datasets': {
-                'paths': [],
-                'paths_x': None,
-                'paths_y': None,
-                'columns_x': None,
-                'columns_y': None,
-                'name': None,
-                'remove_non_finite': False,
-                'frac_train': None,
-                'train_test_random_seed': None,
-                'rescale_x': None,
-                'rescale_y': None,
-            },
-        }
-        for key1 in default_dict:
-            if key1 not in params.content:
-                params.content[key1] = default_dict[key1]
-            if isinstance(default_dict[key1], dict):
-                for key2 in default_dict[key1]:
-                    if key2 not in params.content[key1]:
-                        params.content[key1][key2] = default_dict[key1][key2]
         return params
 
     def _callbacks(self, path=None, patience=100, verbose=False):
@@ -269,7 +231,7 @@ class FFNNEmu(Emulator):
 
         # Load dataset details
         fname = os.path.join(path, de.file_names['dataset_details']['name'])
-        details = Params().load(fname)
+        details = io.YamlFile().read(fname)
         self.x_names = details['x_names']
         self.y_names = details['y_names']
         self.x_ranges = details['x_ranges']
@@ -356,7 +318,8 @@ class FFNNEmu(Emulator):
             save_y = self.y_names
         except AttributeError:
             save_y = None
-        details = Params({
+        details = io.YamlFile()
+        details.content = {
             'x_names': save_x,
             'y_names': save_y,
             'x_ranges': self.x_ranges.tolist(),
@@ -367,9 +330,9 @@ class FFNNEmu(Emulator):
                 'n_samples': self.y_model.n_samples,
                 'args': self.y_model.args,
             }
-        })
+        }
         fname = os.path.join(path, de.file_names['dataset_details']['name'])
-        details.save(fname, header=de.file_names['dataset_details']['header'])
+        details.write(fname, header=de.file_names['dataset_details']['header'])
 
         # Save y_model
         self.y_model.save(root=path, verbose=verbose)

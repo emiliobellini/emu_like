@@ -7,8 +7,7 @@
 """
 
 import emu_like.io as io
-from emu_like.params import Params
-from emu_like.datasets import Dataset, DataCollection
+from emu_like.datasets import DataCollection
 
 def sample_emu(args):
     """ Generate the dataset for the emulator.
@@ -26,7 +25,7 @@ def sample_emu(args):
     data = DataCollection()
 
     # Read params
-    params = Params().load(args.params_file)
+    params = io.YamlFile(args.params_file).read()
 
     # If resume
     if args.resume:

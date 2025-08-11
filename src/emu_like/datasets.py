@@ -15,7 +15,6 @@ from . import io as io
 from . import defaults as de
 from . import scalers as sc
 from . import pca
-from .params import Params
 from .x_samplers import XSampler
 from .y_models import YModel
 
@@ -286,7 +285,7 @@ class Dataset(object):
         self.name = name
 
         # Load settings
-        self.settings = Params().load(root=path)
+        self.settings = io.YamlFile(root=path).read()
 
         # Main path
         self.path = path

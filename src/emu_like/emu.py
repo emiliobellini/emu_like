@@ -6,7 +6,7 @@
 
 """
 
-from .params import Params
+from . import io as io
 
 
 class Emulator(object):
@@ -49,7 +49,7 @@ class Emulator(object):
 
         This method redirects to the correct emulator.
         """
-        params = Params().load(root=path)
+        params = io.YamlFile(root=path).load()
         if params['emulator']['type'] == 'ffnn_emu':
             from .ffnn_emu import FFNNEmu
             emu = FFNNEmu(verbose=verbose)
