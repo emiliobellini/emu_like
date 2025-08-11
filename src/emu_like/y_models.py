@@ -503,7 +503,7 @@ class ClassSpectra(YModel):
 
         # Build parameter dictionary
         var = {nm: None for nm in self.x_names}
-        self.class_params = self.args | self.spectra.get_class_params() | var
+        self.class_params = self.args | var
 
         # Fix known properties of the function
         self.n_y = self.get_n_y()
@@ -517,7 +517,7 @@ class ClassSpectra(YModel):
             z_max = {}
         # 2) Compute Class
         cosmo_ref = self.classy.Class()
-        cosmo_ref.set(de.cosmo_params | self.spectra.get_class_params() | z_max)
+        cosmo_ref.set(de.cosmo_params | z_max)
         cosmo_ref.compute()
         # 3) Compute all the spectra
         self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]
@@ -634,13 +634,15 @@ class ClassSpectra(YModel):
             self.class_params[par] = x[npar]
 
         # Update z_max_pk if needed and get z
-        self.class_params['z_max_pk'] = 0.1
-        try:
-            self.class_params['z_max_pk'] = max(
-                self.class_params['z_pk'], self.class_params['z_max_pk'])
-            z = self.class_params['z_pk']
-        except KeyError:
-            z = 0.
+        z = 0
+        if any([sp.is_pk for sp in self.spectra]):
+            self.class_params['z_max_pk'] = 0.1
+            try:
+                self.class_params['z_max_pk'] = max(
+                    self.class_params['z_pk'], self.class_params['z_max_pk'])
+                z = self.class_params['z_pk']
+            except KeyError:
+                z = 0.
 
         try:
             # Compute class

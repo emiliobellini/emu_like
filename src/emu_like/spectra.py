@@ -130,35 +130,6 @@ class Spectra(object):
             self.want_lensing = False
         return self.want_lensing
 
-    def get_class_params(self):
-        """
-        Build a dictionary of parameters needed by Class
-        to properly compute the spectra requested.
-        """
-        class_params = {}
-
-        # Output spectra
-        class_output = [x.class_spectra for x in self]
-        class_output = [x for xs in class_output for x in xs]
-        class_output = list(set(class_output))
-        if class_output:
-            class_params['output'] = ', '.join(class_output)
-
-        # k max Pk
-        if self.get_k_max():
-            class_params['P_k_max_h/Mpc'] = self.k_max
-
-        # ell max Cell
-        if self.get_ell_max():
-            class_params['l_max_scalars'] = self.ell_max
-
-        # lensing
-        if self.get_want_lensing():
-            class_params['lensing'] = 'yes'
-            class_params['modes'] = 's'
-
-        return class_params
-
     def get_n_vecs(self):
         """
         Get a list of the size of the data

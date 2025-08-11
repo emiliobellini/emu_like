@@ -59,6 +59,11 @@ y_model:
     l_switch_limber: 20
     accurate_lensing: 1
     delta_l_max: 1000
+    output: 'tCl, dTk, pCl, lCl, mPk'
+    l_max_scalars: 3000
+    lensing: 'yes'
+    P_k_max_h/Mpc: 50.0
+    modes: 's'
 
   # List of output files (only for class_spectra)
   outputs:
@@ -140,7 +145,7 @@ params:
       max: 0.9
   Omega_m:
     prior:
-      min: 0.1
+      min: 0.12
       max: 0.7
   Omega_b:
     prior:
@@ -160,5 +165,5 @@ params:
       max: 1.2
   Omega_k:
     prior:
-      min: -0.5
-      max: 0.5
+      min: -0.2
+      max: 0.1

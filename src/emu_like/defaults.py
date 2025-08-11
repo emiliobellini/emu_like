@@ -61,4 +61,9 @@ cosmo_params = {
     'l_switch_limber': 20,
     'accurate_lensing': 1,
     'delta_l_max': 1000,
+    'output': 'tCl, dTk, pCl, lCl, mPk',
+    'l_max_scalars': 3000,
+    'lensing': 'yes',
+    'P_k_max_h/Mpc': 50.0,
+    'modes': 's',
 }
