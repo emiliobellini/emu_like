@@ -499,6 +499,7 @@ class ClassSpectra(YModel):
             'l_max_scalars': 3000,
             'lensing': 'yes',
             'P_k_max_h/Mpc': 50.0,
+            'k_pivot': 0.05,
             'modes': 's',
         }
 
