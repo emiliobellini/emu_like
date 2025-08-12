@@ -339,8 +339,10 @@ class FitsFile(object):
 
     def write(self, data, header, name, verbose=False):
         # Create parent folder
-        if not Folder(os.path.dirname(self.path)).exists:
+        try:
             Folder(os.path.dirname(self.path)).create()
+        except FileExistsError:
+            pass
         # We assume that header is either a dictionary, or a fits.Header
         if isinstance(header, dict):
             header = self._flatten_dict(header)
@@ -513,7 +515,10 @@ class YamlFile(object):
         if header is None:
             header = self.default_header
         # Create root folder and join path
-        Folder(os.path.dirname(self.path)).create()
+        try:
+            Folder(os.path.dirname(self.path)).create()
+        except FileExistsError:
+            pass
 
         if header:
             with open(self.path, 'w') as file:
