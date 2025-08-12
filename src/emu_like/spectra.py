@@ -15,7 +15,6 @@ in src/emu_like/y_models.py.
 import classy
 import numpy as np
 import scipy.interpolate as interp
-from . import defaults as de
 
 
 # ----------------- Generic Spectra ------------------------------------------#

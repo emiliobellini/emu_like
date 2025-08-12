@@ -482,6 +482,10 @@ class ClassSpectra(YModel):
             'A_s': 2.1e-9,
             'n_s': 0.966,
             'tau_reio': 0.0543,
+            'N_ur': 0.,
+            'N_ncdm': 1,
+            'deg_ncdm': 3,
+            'm_ncdm': 0.2,
             # Precision parameters
             'k_per_decade_for_pk': 40,
             'k_per_decade_for_bao': 80,
