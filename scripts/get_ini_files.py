@@ -1,8 +1,7 @@
 import os
 import yaml
 
-template_sh = """
-#!/bin/bash
+template_sh = """#!/bin/bash
 
 # ---- Metadata configuration ----
 #SBATCH --job-name=TODO
@@ -163,7 +162,7 @@ args = {
     'N_ur': 0.,
     'N_ncdm': 1,
     'deg_ncdm': 3,
-    'm_ncdm': 0.2,
+    'm_ncdm': 0.02,
     'k_per_decade_for_pk': 40,
     'k_per_decade_for_bao': 80,
     'l_logstep': 1.026,
@@ -184,73 +183,75 @@ args = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm_nu_k'
-    spectrum = 'cl'
-    n_samples_1000 = 100
-    parameter_space = 'ext'
-    output_folder = 'init_files'
+    model = 'lcdm'
 
-    k_min = 1.e-5
-    k_max = 50.
-    k_space = 'log'
-    k_num = 600
-    ell_min = 2
-    ell_max = 3000
+    for spectrum in ['pk', 'cl']:
+        for parameter_space in ['thin', 'std', 'ext']:
+
+            n_samples_1000 = 100
+            output_folder = 'init_files'
+
+            k_min = 1.e-5
+            k_max = 50.
+            k_space = 'log'
+            k_num = 600
+            ell_min = 2
+            ell_max = 3000
 
 
-    name = 'sample_{}_{}_{}_{}'.format(model, spectrum, n_samples_1000, parameter_space)
+            name = 'sample_{}_{}_{}_{}'.format(model, spectrum, n_samples_1000, parameter_space)
 
-    # sh
-    with open(os.path.join(output_folder, 'run_'+name+'.sh'), 'w') as fn:
-        fn.write(template_sh.replace('TODO', name))
+            # sh
+            with open(os.path.join(output_folder, 'run_'+name+'.sh'), 'w') as fn:
+                fn.write(template_sh.replace('TODO', name))
 
-    # yaml
-    template_yaml['output'] = '/ceph/hpc/data/s25r06-05-users/{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space)
-    template_yaml['x_sampler']['args']['n_samples'] = 1000*n_samples_1000
+            # yaml
+            template_yaml['output'] = '/ceph/hpc/data/s25r06-05-users/{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space)
+            template_yaml['x_sampler']['args']['n_samples'] = 1000*n_samples_1000
 
-    # Get list of varied parameters
-    parameters = []
-    for submodel in parameters_list.keys():
-        if submodel in model:
-            for par in parameters_list[submodel]:
-                parameters.append(par)
-    # Exclude based on spectra
-    for par in exclude_parameters[spectrum]:
-        parameters.remove(par)
+            # Get list of varied parameters
+            parameters = []
+            for submodel in parameters_list.keys():
+                if submodel in model:
+                    for par in parameters_list[submodel]:
+                        parameters.append(par)
+            # Exclude based on spectra
+            for par in exclude_parameters[spectrum]:
+                parameters.remove(par)
 
-    # Get dictionary of varied parameters
-    template_yaml['params'] = {}
-    for par in parameters:
-        template_yaml['params'][par] = {
-            'prior': {
-                'min': parameters_ranges[par][parameter_space][0],
-                'max': parameters_ranges[par][parameter_space][1],
-            }
-        }
-    
-    # Get args
-    for var in template_yaml['params']:
-        try:
-            args.pop(var)
-        except KeyError:
-            pass
-    template_yaml['y_model']['args'] = args
+            # Get dictionary of varied parameters
+            template_yaml['params'] = {}
+            for par in parameters:
+                template_yaml['params'][par] = {
+                    'prior': {
+                        'min': parameters_ranges[par][parameter_space][0],
+                        'max': parameters_ranges[par][parameter_space][1],
+                    }
+                }
+            
+            # Get args
+            for var in template_yaml['params']:
+                try:
+                    args.pop(var)
+                except KeyError:
+                    pass
+            template_yaml['y_model']['args'] = args
 
-    # Get outputs
-    template_yaml['y_model']['outputs'] = {}
-    for sp, ratio in spectra_list[spectrum]:
-        template_yaml['y_model']['outputs'][sp] = {}
-        if spectrum == 'pk':
-            template_yaml['y_model']['outputs'][sp]['k_min'] = k_min
-            template_yaml['y_model']['outputs'][sp]['k_max'] = k_max
-            template_yaml['y_model']['outputs'][sp]['k_space'] = k_space
-            template_yaml['y_model']['outputs'][sp]['k_num'] = k_num
-        if spectrum == 'cl':
-            template_yaml['y_model']['outputs'][sp]['ell_min'] = ell_min
-            template_yaml['y_model']['outputs'][sp]['ell_max'] = ell_max
-        if ratio is True:
-            template_yaml['y_model']['outputs'][sp]['ratio'] = True
+            # Get outputs
+            template_yaml['y_model']['outputs'] = {}
+            for sp, ratio in spectra_list[spectrum]:
+                template_yaml['y_model']['outputs'][sp] = {}
+                if spectrum == 'pk':
+                    template_yaml['y_model']['outputs'][sp]['k_min'] = k_min
+                    template_yaml['y_model']['outputs'][sp]['k_max'] = k_max
+                    template_yaml['y_model']['outputs'][sp]['k_space'] = k_space
+                    template_yaml['y_model']['outputs'][sp]['k_num'] = k_num
+                if spectrum == 'cl':
+                    template_yaml['y_model']['outputs'][sp]['ell_min'] = ell_min
+                    template_yaml['y_model']['outputs'][sp]['ell_max'] = ell_max
+                if ratio is True:
+                    template_yaml['y_model']['outputs'][sp]['ratio'] = True
 
-    with open(os.path.join(output_folder, name+'.yaml'), 'w') as fn:
-        yaml.safe_dump(template_yaml, fn, sort_keys=False)
+            with open(os.path.join(output_folder, name+'.yaml'), 'w') as fn:
+                yaml.safe_dump(template_yaml, fn, sort_keys=False)
 
