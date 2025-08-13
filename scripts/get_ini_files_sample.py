@@ -185,6 +185,7 @@ if __name__ == '__main__':
 
     # Settings
     model = 'lcdm'
+    root = '/ceph/hpc/data/s25r06-05-users/'
 
     for spectrum in ['pk', 'cl']:
         for parameter_space in ['thin', 'std', 'ext']:
@@ -207,7 +208,7 @@ if __name__ == '__main__':
                 fn.write(template_sh.replace('TODO', name))
 
             # yaml
-            template_yaml['output'] = '/ceph/hpc/data/s25r06-05-users/{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space)
+            template_yaml['output'] = os.path.join(root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space))
             template_yaml['x_sampler']['args']['n_samples'] = 1000*n_samples_1000
 
             # Get list of varied parameters
