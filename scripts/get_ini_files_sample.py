@@ -190,7 +190,7 @@ if __name__ == '__main__':
         for parameter_space in ['thin', 'std', 'ext']:
 
             n_samples_1000 = 100
-            output_folder = 'init_files'
+            output_folder = 'init_files/sample'
 
             k_min = 1.e-5
             k_max = 50.
