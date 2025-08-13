@@ -191,7 +191,7 @@ class FFNNEmu(Emulator):
         Arguments:
         - path (str): emulator path;
         - model_to_load (str or int, default: best): which
-          model shall I load? Options: 'last', 'best' or an
+          model shall I load? Options: 'best' or an
           integer number specifying the epoch to load;
         - verbose (bool, default: False): verbosity.
 
@@ -239,12 +239,16 @@ class FFNNEmu(Emulator):
         fname = os.path.join(path, self.y_pca_fname)
         self.y_pca = PCA.load(fname, verbose=verbose)
 
-        # Load dataset details
-        fname = os.path.join(path, de.file_names['dataset_details']['name'])
-        details = io.YamlFile().read(fname)
-        self.x_names = details['x_names']
-        self.y_names = details['y_names']
-        self.x_ranges = details['x_ranges']
+        # Init fits file
+        fits = io.FitsFile(self.data_fname, root=path)
+
+        # Load parameters
+        params = fits.get_header(0, unflat_dict=True)
+
+        # Dataset details
+        self.x_names = params['x_names']
+        self.y_names = params['y_names']
+        self.x_ranges = params['x_ranges']
 
         # Load history
         try:
@@ -258,14 +262,14 @@ class FFNNEmu(Emulator):
 
         # Init y_model
         self.y_model = YModel.choose_one(
-            details['y_model']['name'],
-            details['y_model']['params'],
-            details['y_model']['outputs'],
-            details['y_model']['n_samples'],
-            **details['y_model']['args'],
+            params['y_model']['name'],
+            params['y_model']['params'],
+            params['y_model']['outputs'],
+            params['y_model']['n_samples'],
+            **params['y_model']['args'],
             verbose=False)
         # Load y_model
-        self.y_model.load(root=path, verbose=verbose)
+        self.y_model.load(self.data_fname, root=path, verbose=verbose)
 
         return self
 
@@ -328,7 +332,7 @@ class FFNNEmu(Emulator):
         )
         params = {
             'x_names': self.x_names,
-            'y_names': self.x_ranges,
+            'y_names': self.y_names,
             'x_ranges': self.x_ranges,
             'y_model': {
                 'name': self.y_model.name,
@@ -345,51 +349,9 @@ class FFNNEmu(Emulator):
             name=None,
             verbose=verbose,
         )
-        print(path)
-        print(self.data_fname)
-        print(params)
-        exit()
 
-        if settings is None:
-            settings = self.settings
-        print(self.data)
-        exit()
-
-        # # TODO: move this to emu.load and emu.build
-        # # Save params
-        # params.write(
-        #     root=params['output'],
-        #     verbose=args.verbose)
-
-
-
-        # Save dataset details
-        # We do not always have names for 'x' and 'y'
-        # In case we do not have them, just store None.
-        try:
-            save_x = self.x_names
-        except AttributeError:
-            save_x = None
-        try:
-            save_y = self.y_names
-        except AttributeError:
-            save_y = None
-        details = io.YamlFile()
-        details.content = {
-            'x_names': save_x,
-            'y_names': save_y,
-            'x_ranges': self.x_ranges.tolist(),
-            'y_model': {
-                'name': self.y_model.name,
-                'params': self.y_model.params,
-                'outputs': self.y_model.outputs,
-                'n_samples': self.y_model.n_samples,
-                'args': self.y_model.args,
-            }
-        }
-
-        # Save y_model
-        self.y_model.save(root=path, verbose=verbose)
+        # Save y_model to the same file
+        self.y_model.save(self.data_fname, root=path, verbose=verbose)
 
         return
 

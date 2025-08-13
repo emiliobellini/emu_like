@@ -312,11 +312,11 @@ class Dataset(object):
         self.x_key = x_sampler.x_key
 
         if self.settings is None:
-            self.x_ranges = [(m, M) for m, M in zip(self.x.min(axis=0), self.x.max(axis=0))]
+            self.x_ranges = [[m, M] for m, M in zip(self.x.min(axis=0), self.x.max(axis=0))]
         else:
-            self.x_ranges = [(
+            self.x_ranges = [[
                 self.settings['params'][name]['prior']['min'],
-                self.settings['params'][name]['prior']['max']) for name in self.x_names]
+                self.settings['params'][name]['prior']['max']] for name in self.x_names]
 
         # Init y_model
         y_model = YModel.choose_one(
@@ -498,9 +498,16 @@ class Dataset(object):
         data.x_ranges = []
         for nname, _ in enumerate(data.x_names):
             data.x_ranges.append(
-                (min([dat.x_ranges[nname][0] for dat in datasets]),
-                max([dat.x_ranges[nname][1] for dat in datasets]))
+                [min([dat.x_ranges[nname][0] for dat in datasets]),
+                max([dat.x_ranges[nname][1] for dat in datasets])]
             )
+
+        # Adjust params
+        for var in datasets[0].y_model.params:
+            mins = [dat.y_model.params[var]['prior']['min'] for dat in datasets]
+            maxs = [dat.y_model.params[var]['prior']['max'] for dat in datasets]
+            data.y_model.params[var]['prior']['min'] = min(mins)
+            data.y_model.params[var]['prior']['max'] = max(maxs)
 
         return data
 

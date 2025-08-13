@@ -334,6 +334,63 @@ class FitsFile(object):
             d[parts[-1]] = value
         return result
 
+    def _delistify(self, flat_dict, delimiter='_*_'):
+        # fits header do not accept lists as values.
+        # here we convert them into strings, assuming
+        # ndim <= 2.
+        delimiter2 = 2*delimiter
+        for key, val1 in flat_dict.items():
+            if isinstance(val1, list):
+                if all([isinstance(x, str) for x in val1]):
+                    val1 = delimiter2.join(val1)
+                    flat_dict[key] = val1
+                if all([isinstance(x, list) for x in val1]):
+                    tmp = []
+                    for val2 in val1:
+                        tmp.append(delimiter.join([str(x) for x in val2]))
+                    flat_dict[key] = delimiter2.join(tmp)
+        return flat_dict
+
+    def _listify(self, flat_dict, delimiter='_*_'):
+        # fits header do not accept lists as values.
+        # here we convert back delistified lists,
+        # assuming ndim <= 2.
+        current_dict = {}
+        delimiter2 = 2*delimiter
+        for key, val1 in flat_dict.items():
+            if isinstance(val1, str) and delimiter2 in val1:
+                current_dict[key] = val1.split(delimiter2)
+            else:
+                current_dict[key] = val1
+        for key, val1 in current_dict.items():
+            if isinstance(val1, str) and delimiter in val1:
+                current_dict[key] = val1.split(delimiter)
+            elif isinstance(val1, list):
+                for nval2, val2 in enumerate(val1):
+                    if isinstance(val2, str) and delimiter in val2:
+                        current_dict[key][nval2] = val2.split(delimiter)
+                    else:
+                        current_dict[key][nval2] = val2
+        for key, val1 in current_dict.items():
+            if isinstance(val1, str):
+                current_dict[key] = self._floatify(val1)
+            elif isinstance(val1, list):
+                for nval2, val2 in enumerate(val1):
+                    if isinstance(val2, str):
+                        current_dict[key][nval2] = self._floatify(val2)
+                    elif isinstance(val2, list):
+                        current_dict[key][nval2] = [self._floatify(x) for x in val2]
+                    else:
+                        current_dict[key][nval2] = val2
+        return current_dict
+
+    def _floatify(self, val_string):
+        try:
+            val = float(val_string)
+        except ValueError:
+            val = val_string
+        return val
+
     def write(self, data, header, name, verbose=False):
         # Create parent folder
         try:
@@ -343,6 +400,7 @@ class FitsFile(object):
         # We assume that header is either a dictionary, or a fits.Header
         if isinstance(header, dict):
             header = self._flatten_dict(header)
+            header = self._delistify(header)
             header = fits.Header(header)
         # Create first HDU
         if not self.exists:
@@ -361,6 +419,7 @@ class FitsFile(object):
     def append(self, data, name, header=None):
         if isinstance(header, dict):
             header = self._flatten_dict(header)
+            header = self._delistify(header)
             header = fits.Header(header)
         # If array already exists, append data to it,
         # otherwise create array.
@@ -400,7 +459,8 @@ class FitsFile(object):
         """
         with fits.open(self.path) as fn:
             if unflat_dict:
-                hd = self._unflatten_dict(fn[name].header)
+                hd = self._listify(fn[name].header)
+                hd = self._unflatten_dict(hd)
             else:
                 hd = fn[name].header
         return hd
