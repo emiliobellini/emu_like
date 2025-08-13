@@ -13,6 +13,7 @@ import re
 import sys
 import yaml
 from astropy.io import fits
+from collections import OrderedDict
 
 
 # ------------------- Parser -------------------------------------------------#
@@ -285,34 +286,32 @@ class FitsFile(object):
         # Check is fits
         is_fits = self.path.endswith('.fits') or self.path.endswith('.fits.gz')
         if not is_fits:
-            raise Exception('Expected .fits file, found {}'.format(self.path))
+            raise ValueError('Expected .fits file, found {}'.format(self.path))
         return
 
     def _flatten_dict(self, nested_dict, delimiter='__'):
-        # Create a tuple with (key, val), where key is a string
-        # with all the nested keys separated by delimiter
-        flat_dict = {}
-        stack =[(nested_dict, '')]
-        list_key_val = []
-        while stack:
-            mid_dict, mid_key = stack.pop()
-            
-            for key, val in mid_dict.items():
-                new_key = f'{mid_key}{delimiter}{key}' if mid_key else key
-                
-                if isinstance(val, dict):
-                    stack.append((val, new_key))  # Push the nested dictionary onto the stack
-                else:
-                    list_key_val.append((new_key, val))
+        split_dict = {}
+        flat_dict = self._flatten_dict_recursive(nested_dict, delimiter=delimiter)
         # In astropy, keys can not be longer than 8 characters. We then create a flat
         # dict where both keys and values are values. This dictionary will have keys
         # starting with two delimiters for the keys of the previous step dictionary,
         # and keys starting with one delimiter for the values of the previous dictionary.
         # To fix the correspondence each key ends with a different integer,
-        for nkey, (key, val)in enumerate(list_key_val):
-            flat_dict['{}{}{}'.format(delimiter, delimiter, nkey)] = key
-            flat_dict['{}{}'.format(delimiter, nkey)] = val
-        return flat_dict
+        for nkey, (key, val) in enumerate(flat_dict.items()):
+            split_dict['{}{}{}'.format(delimiter, delimiter, nkey)] = key
+            split_dict['{}{}'.format(delimiter, nkey)] = val
+        return split_dict
+
+    def _flatten_dict_recursive(self, nested_dict, parent_key='', delimiter='__'):
+        """Flatten a nested dictionary, preserving key order."""
+        items = []
+        for key, value in nested_dict.items():
+            new_key = f"{parent_key}{delimiter}{key}" if parent_key else key
+            if isinstance(value, dict):
+                items.extend(self._flatten_dict_recursive(value, new_key, delimiter).items())
+            else:
+                items.append((new_key, value))
+        return OrderedDict(items)
 
     def _unflatten_dict(self, flat_dict, delimiter='__'):
         current_dict = {}
@@ -323,19 +322,17 @@ class FitsFile(object):
                 key = flat_dict[key_flat]
                 val = flat_dict[key_flat[len(delimiter):]]
                 current_dict[key] = val
-        # We now create the nested dict.
-        nested_dict = {}
-        items_list = [(key.split(delimiter), val) for key, val in current_dict.items()]
-        for keys, value in items_list:
-            current_level = nested_dict
-            # Traverse the dictionary, creating levels as needed
-            for key in keys[:-1]:  # All keys except the last
-                if key not in current_level:
-                    current_level[key] = {}
-                current_level = current_level[key]
-            # Assign the value to the innermost key
-            current_level[keys[-1]] = value
-        return nested_dict
+        """Reconstruct a nested dictionary from flattened keys, preserving order."""
+        result = OrderedDict()
+        for key, value in current_dict.items():
+            parts = key.split(delimiter)
+            d = result
+            for part in parts[:-1]:
+                if part not in d:
+                    d[part] = OrderedDict()
+                d = d[part]
+            d[parts[-1]] = value
+        return result
 
     def write(self, data, header, name, verbose=False):
         # Create parent folder
