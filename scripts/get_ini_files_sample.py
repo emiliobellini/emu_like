@@ -57,7 +57,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py sample /ceph/hpc/home/bellinie/emu_like/init_files/TODO.yaml -v
+python /ceph/hpc/home/bellinie/emu_like/main.py sample /ceph/hpc/home/bellinie/emu_like/init_files/sample/TODO.yaml -v
 
 
 # ==== END OF JOB COMMANDS ===== #
