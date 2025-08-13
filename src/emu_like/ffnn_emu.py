@@ -19,7 +19,6 @@ from .scalers import Scaler
 from .y_models import YModel
 # TODO: something is not working here
 from . import loss_functions as lf  # noqa:F401
-# from tensorflow import keras
 
 
 class FFNNEmu(Emulator):
@@ -56,6 +55,16 @@ class FFNNEmu(Emulator):
         self.epochs = []  # List of the epochs run
         self.loss = []  # List of the losses per epoch
         self.val_loss = []  # List of the validation losses per epoch
+        # Defaults
+        self.x_scaler_fname = 'x_scaler.save'
+        self.y_scaler_fname = 'y_scaler.save'
+        self.x_pca_fname = 'x_pca.save'
+        self.y_pca_fname = 'y_pca.save'
+        self.model_fname = 'model.keras'
+        self.checkpoint_folder = 'checkpoints'
+        self.checkpoint_fname = 'checkpoint_epoch{epoch:04d}.weights.h5'
+        self.log_fname = 'history_log.cvs'
+        self.data_fname = 'data.fits'
         return
 
     @staticmethod
@@ -120,9 +129,10 @@ class FFNNEmu(Emulator):
         # Checkpoint
         if path:
             checkpoint_folder = io.Folder(path).subfolder(
-                de.file_names['checkpoint']['folder']).create(verbose=verbose)
-            fname = os.path.join(checkpoint_folder.path,
-                                 de.file_names['checkpoint']['name'])
+                self.checkpoint_folder).create(verbose=verbose)
+            fname = os.path.join(
+                checkpoint_folder.path,
+                self.checkpoint_fname)
             # TODO: understand what should be passed by the user
             checkpoint = keras.callbacks.ModelCheckpoint(
                 fname,
@@ -135,7 +145,7 @@ class FFNNEmu(Emulator):
 
         # Logfile
         if path:
-            fname = os.path.join(path, de.file_names['log']['name'])
+            fname = os.path.join(path, self.log_fname)
             csv_logger = keras.callbacks.CSVLogger(fname, append=True)
 
         # Early Stopping
@@ -196,16 +206,16 @@ class FFNNEmu(Emulator):
 
         # Load last model
         if model_to_load == 'best':
-            fname = os.path.join(path, de.file_names['model']['name'])
+            fname = os.path.join(path, self.model_fname)
             self.model = keras.models.load_model(fname)
         elif isinstance(model_to_load, int):
-            fname = os.path.join(path, de.file_names['model']['name'])
+            fname = os.path.join(path, self.model_fname)
             self.model = keras.models.load_model(fname)
             epoch = {'epoch': model_to_load}
             fname = os.path.join(
                 path,
-                de.file_names['checkpoint']['folder'],
-                de.file_names['checkpoint']['name'].format(**epoch))
+                self.checkpoint_folder,
+                self.checkpoint_fname.format(**epoch))
             self.model.load_weights(fname)
         else:
             raise Exception('Model not recognised!')
@@ -218,15 +228,15 @@ class FFNNEmu(Emulator):
         self.batch_size = self.model.inputs[0].shape[0]
 
         # Load scalers
-        fname = os.path.join(path, de.file_names['x_scaler']['name'])
+        fname = os.path.join(path, self.x_scaler_fname)
         self.x_scaler = Scaler.load(fname, verbose=verbose)
-        fname = os.path.join(path, de.file_names['y_scaler']['name'])
+        fname = os.path.join(path, self.y_scaler_fname)
         self.y_scaler = Scaler.load(fname, verbose=verbose)
 
         # Load PCA
-        fname = os.path.join(path, de.file_names['x_pca']['name'])
+        fname = os.path.join(path, self.x_pca_fname)
         self.x_pca = PCA.load(fname, verbose=verbose)
-        fname = os.path.join(path, de.file_names['y_pca']['name'])
+        fname = os.path.join(path, self.y_pca_fname)
         self.y_pca = PCA.load(fname, verbose=verbose)
 
         # Load dataset details
@@ -238,7 +248,7 @@ class FFNNEmu(Emulator):
 
         # Load history
         try:
-            fname = os.path.join(path, de.file_names['log']['name'])
+            fname = os.path.join(path, self.log_fname)
             history = np.genfromtxt(fname, delimiter=",", skip_header=1)
             self.epochs = [int(x) for x in history[:, 0]]
             self.loss = list(history[:, 1])
@@ -273,39 +283,85 @@ class FFNNEmu(Emulator):
         # Create main folder
         io.Folder(path).create(verbose=verbose)
 
+
         # Save scalers
         try:
-            self.x_scaler.save(de.file_names['x_scaler']['name'],
-                               root=path,
-                               verbose=verbose)
+            self.x_scaler.save(
+                self.x_scaler_fname,
+                root=path,
+                verbose=verbose)
         except AttributeError:
             io.warning('x_scaler not loaded yet, impossible to save it!')
         try:
-            self.y_scaler.save(de.file_names['y_scaler']['name'],
-                               root=path,
-                               verbose=verbose)
+            self.y_scaler.save(
+                self.y_scaler_fname,
+                root=path,
+                verbose=verbose)
         except AttributeError:
             io.warning('y_scaler not loaded yet, impossible to save it!')
 
         # Save PCA
         try:
-            self.x_pca.save(de.file_names['x_pca']['name'],
-                               root=path,
-                               verbose=verbose)
+            self.x_pca.save(
+                self.x_pca_fname,
+                root=path,
+                verbose=verbose)
         except AttributeError:
             io.warning('x_pca not loaded yet, impossible to save it!')
         try:
-            self.y_pca.save(de.file_names['y_pca']['name'],
-                               root=path,
-                               verbose=verbose)
+            self.y_pca.save(
+                self.y_pca_fname,
+                root=path,
+                verbose=verbose)
         except AttributeError:
             io.warning('y_pca not loaded yet, impossible to save it!')
 
         # Save last model
-        fname = os.path.join(path, de.file_names['model']['name'])
+        fname = os.path.join(path, self.model_fname)
         if verbose:
             io.info('Saving model at {}'.format(fname))
         self.model.save(fname, overwrite=True)
+
+        fits = io.FitsFile(
+            fname=self.data_fname,
+            root=path,
+        )
+        params = {
+            'x_names': self.x_names,
+            'y_names': self.x_ranges,
+            'x_ranges': self.x_ranges,
+            'y_model': {
+                'name': self.y_model.name,
+                'params': self.y_model.params,
+                'outputs': self.y_model.outputs,
+                'n_samples': self.y_model.n_samples,
+                'args': self.y_model.args,
+            }
+        }
+
+        fits.write(
+            data=None,
+            header=params,
+            name=None,
+            verbose=verbose,
+        )
+        print(path)
+        print(self.data_fname)
+        print(params)
+        exit()
+
+        if settings is None:
+            settings = self.settings
+        print(self.data)
+        exit()
+
+        # # TODO: move this to emu.load and emu.build
+        # # Save params
+        # params.write(
+        #     root=params['output'],
+        #     verbose=args.verbose)
+
+
 
         # Save dataset details
         # We do not always have names for 'x' and 'y'
@@ -331,8 +387,6 @@ class FFNNEmu(Emulator):
                 'args': self.y_model.args,
             }
         }
-        fname = os.path.join(path, de.file_names['dataset_details']['name'])
-        details.write(fname, header=de.file_names['dataset_details']['header'])
 
         # Save y_model
         self.y_model.save(root=path, verbose=verbose)
@@ -444,7 +498,11 @@ class FFNNEmu(Emulator):
         - verbose (bool, default: False): verbosity.
         """
 
-        # Store dataset details as attributes
+        # Create output folder
+        if path is not None:
+            io.Folder(path).create(verbose)
+    
+         # Store dataset details as attributes
         self.x_scaler = data.x_scaler
         self.y_scaler = data.y_scaler
         self.x_pca = data.x_pca

@@ -19,7 +19,6 @@ import numpy as np
 import os
 import scipy.interpolate as interp
 from . import io as io
-from . import defaults as de
 from .spectra import Spectra
 from .x_samplers import XSampler
 
@@ -40,7 +39,6 @@ class YModel(object):
         self.n_y = []  # Number of y variables per file
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
-        self.y_fnames = []  # File names of y data
         self.outputs = None
 
         # Derive varying parameters
@@ -125,13 +123,6 @@ class YModel(object):
         
         self.y_headers = ['\t'.join(y_names) for y_names in self.y_names]
         return self.y_headers
-
-    def get_y_fnames(self):
-        """
-        Get y_fnames.
-        """
-        self.y_fnames = [de.file_names['y_data']['name'].format('')]
-        return self.y_fnames
 
     def get_y(self, x, **kwargs):
         """
@@ -592,7 +583,6 @@ class ClassSpectra(YModel):
         oneclassspectrum.outputs = {name: self.outputs[name]}
         oneclassspectrum.x_names = self.x_names
         oneclassspectrum.y = [self.y[idx]]
-        oneclassspectrum.y_fnames = [self.y_fnames[idx]]
         oneclassspectrum.y_headers = [self.y_headers[idx]]
         oneclassspectrum.y_names = [self.y_names[idx]]
         oneclassspectrum.y_ref = [self.y_ref[idx]]

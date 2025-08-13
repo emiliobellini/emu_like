@@ -6,7 +6,6 @@
 
 """
 
-import os
 import emu_like.io as io
 from emu_like.emu import Emulator
 from emu_like.datasets import Dataset
@@ -45,8 +44,6 @@ def train_emu(args):
                 'Output folder not empty! Exiting to avoid corruption of '
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
-        # Create output folder
-        io.Folder(params['output']).create(args.verbose)
 
     # Call the right emulator
     emu = Emulator.choose_one(
@@ -59,51 +56,20 @@ def train_emu(args):
         epochs=args.additional_epochs,
         learning_rate=args.learning_rate)
 
-    # Save params
-    params.write(
-        root=params['output'],
-        verbose=args.verbose)
-
     # Test datasets input paths
     has_paths = params['datasets']['paths'] is not None
-    has_paths_x = params['datasets']['paths_x'] is not None
-    has_paths_y = params['datasets']['paths_y'] is not None
     if has_paths:
-        paths_is_dir = all([
-            os.path.isdir(p) for p in params['datasets']['paths']])
-        paths_is_file = all([
-            os.path.isfile(p) for p in params['datasets']['paths']])
+        try:
+            all([io.FitsFile(p) for p in params['datasets']['paths']])
+            paths_is_fits = True
+        except ValueError:
+            paths_is_fits = False
     else:
-        paths_is_dir = False
-        paths_is_file = False
-    if has_paths_x:
-        paths_x_is_file = all([
-            os.path.isfile(p) for p in params['datasets']['paths_x']])
-    else:
-        paths_x_is_file = False
-    if has_paths_y:
-        paths_y_is_file = all([
-            os.path.isfile(p) for p in params['datasets']['paths_y']])
-    else:
-        paths_y_is_file = False
+        paths_is_fits = False
 
     # Load datasets
-    # 1) folders created by this code
-    if paths_is_dir:
-        # import time
-        # start = time.time()
-        # data = [DataCollection().load(
-        #     path=path,
-        #     verbose=False)
-        #     for path in params['datasets']['paths']]
-        # # Get Dataset from DataCollection
-        # data = [d.get_one_y_dataset(params['datasets']['name']) for d in data]
-        # # Slice data
-        # data = [d.slice(params['datasets']['columns_x'],
-        #                 params['datasets']['columns_y'],
-        #                 verbose=False) for d in data]
-        # print('{}'.format(time.time()-start))
-        # start = time.time()
+    # 1) fits files created by this code
+    if has_paths and paths_is_fits:
         data = [Dataset().load(
             path=path,
             name=params['datasets']['name'],
@@ -111,17 +77,16 @@ def train_emu(args):
             columns_y=params['datasets']['columns_y'],
             verbose=False)
         for path in params['datasets']['paths']]
-        # print('{}'.format(time.time()-start))
-    # 2) unique files for both x and y
-    elif paths_is_file:
+    # 2) unique text files for x and y
+    elif has_paths:
         data = [Dataset().load_external(
             path=path,
             columns_x=params['datasets']['columns_x'],
             columns_y=params['datasets']['columns_y'],
             verbose=False)
             for path in params['datasets']['paths']]
-    # 3) separate files for both x and y
-    elif paths_x_is_file and paths_y_is_file:
+    # 3) separate text files for x and y
+    else:
         data = [Dataset().load_external(
             path=path_x,
             path_y=path_y,
@@ -130,9 +95,6 @@ def train_emu(args):
             verbose=False)
             for path_x, path_y in zip(
                 params['datasets']['paths_x'], params['datasets']['paths_y'])]
-    else:
-        raise Exception('Something is wrong with the paths you specified!')
-
 
     # Remove non finite "y"
     if params['datasets']['remove_non_finite']:
@@ -176,6 +138,7 @@ def train_emu(args):
         emu.load(params['output'], model_to_load='best', verbose=args.verbose)
     # Otherwise
     else:
+        # Get dimensions of x and y for emulator
         params['emulator']['args']['data_n_x'] = data.x_train.shape[1]
         params['emulator']['args']['data_n_y'] = data.y_train.shape[1]
         # Build architecture
@@ -190,8 +153,5 @@ def train_emu(args):
         path=params['output'],
         get_plots=True,
         verbose=args.verbose)
-
-    # Save emulator
-    emu.save(params['output'], verbose=args.verbose)
 
     return

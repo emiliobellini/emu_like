@@ -16,7 +16,6 @@ and attributes to your needs.
 
 import numpy as np
 import scipy
-from . import defaults as de
 from . import io as io
 
 
