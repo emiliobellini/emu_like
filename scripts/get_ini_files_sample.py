@@ -1,10 +1,11 @@
 import os
 import yaml
+import emu_like.io as io
 
 template_sh = """#!/bin/bash
 
 # ---- Metadata configuration ----
-#SBATCH --job-name=TODO
+#SBATCH --job-name=TODO_NAME
 #SBATCH --mail-type=END
 #SBATCH --mail-user=emilio.bellini@ung.si
 
@@ -57,7 +58,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py sample /ceph/hpc/home/bellinie/emu_like/init_files/sample/TODO.yaml -v
+python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -184,31 +185,35 @@ args = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm'
-    root = '/ceph/hpc/data/s25r06-05-users/'
+    model = 'lcdm_nu_k'
+    n_samples_1000 = 100
+    data_root = '/ceph/hpc/data/s25r06-05-users/'
+
+    k_min = 1.e-5
+    k_max = 50.
+    k_space = 'log'
+    k_num = 600
+    ell_min = 2
+    ell_max = 3000
+
+    ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/sample/{}'.format(model)
+    io.Folder(ini_folder).create()
 
     for spectrum in ['pk', 'cl']:
         for parameter_space in ['thin', 'std', 'ext']:
 
-            n_samples_1000 = 100
-            output_folder = 'init_files/sample'
 
-            k_min = 1.e-5
-            k_max = 50.
-            k_space = 'log'
-            k_num = 600
-            ell_min = 2
-            ell_max = 3000
+            full_name = 'sample_{}_{}_{}_{}'.format(model, spectrum, n_samples_1000, parameter_space)
+            file_name = '{}_{}_{}'.format(spectrum, n_samples_1000, parameter_space)
 
+            # sh file
+            with open(os.path.join(ini_folder, 'run_'+file_name+'.sh'), 'w') as fn:
+                template_sh_local = template_sh.replace('TODO_NAME', full_name)
+                template_sh_local = template_sh_local.replace('TODO_PATH_YAML', os.path.join(ini_folder, file_name+'.yaml'))
+                fn.write(template_sh_local)
 
-            name = 'sample_{}_{}_{}_{}'.format(model, spectrum, n_samples_1000, parameter_space)
-
-            # sh
-            with open(os.path.join(output_folder, 'run_'+name+'.sh'), 'w') as fn:
-                fn.write(template_sh.replace('TODO', name))
-
-            # yaml
-            template_yaml['output'] = os.path.join(root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space))
+            # yaml file
+            template_yaml['output'] = os.path.join(data_root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space))
             template_yaml['x_sampler']['args']['n_samples'] = 1000*n_samples_1000
 
             # Get list of varied parameters
@@ -254,6 +259,6 @@ if __name__ == '__main__':
                 if ratio is True:
                     template_yaml['y_model']['outputs'][sp]['ratio'] = True
 
-            with open(os.path.join(output_folder, name+'.yaml'), 'w') as fn:
+            with open(os.path.join(ini_folder, file_name+'.yaml'), 'w') as fn:
                 yaml.safe_dump(template_yaml, fn, sort_keys=False)
 

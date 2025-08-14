@@ -1,10 +1,11 @@
 import os
 import yaml
+import emu_like.io as io
 
 template_sh = """#!/bin/bash
 
 # ---- Metadata configuration ----
-#SBATCH --job-name=TODO
+#SBATCH --job-name=TODO_NAME
 #SBATCH --mail-type=END
 #SBATCH --mail-user=emilio.bellini@ung.si
 
@@ -57,7 +58,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py train /ceph/hpc/home/bellinie/emu_like/init_files/train/TODO.yaml -v
+python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -120,27 +121,32 @@ if __name__ == '__main__':
     num_y_pca = 64
 
     n_samples_1000 = 100
-    root = '/ceph/hpc/data/s25r06-05-users/'
+    data_root = '/ceph/hpc/data/s25r06-05-users/'
+
+    ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/train/{}'.format(model)
+    io.Folder(ini_folder).create()
 
     for spectrum_type in ['pk', 'cl']:
         for spectrum, _ in spectra_list[spectrum_type]:
 
-            name = 'train_{}_{}_{}'.format(model, spectrum, learning_rate)
-            output_folder = 'init_files/train'
+            full_name = 'train_{}_{}_{:.1e}'.format(model, spectrum, learning_rate)
+            file_name = '{}_{:.1e}'.format(spectrum, learning_rate)
 
             # sh
-            with open(os.path.join(output_folder, 'run_'+name+'.sh'), 'w') as fn:
-                fn.write(template_sh.replace('TODO', name))
+            with open(os.path.join(ini_folder, 'run_'+file_name+'.sh'), 'w') as fn:
+                template_sh_local = template_sh.replace('TODO_NAME', full_name)
+                template_sh_local = template_sh_local.replace('TODO_PATH_YAML', os.path.join(ini_folder, file_name+'.yaml'))
+                fn.write(template_sh_local)
 
             # yaml
-            template_yaml['output'] = os.path.join(root, '{}/train/{}/'.format(model, spectrum))
+            template_yaml['output'] = os.path.join(data_root, '{}/train/{}/'.format(model, spectrum))
             template_yaml['emulator']['args']['learning_rate'] = learning_rate
             template_yaml['datasets']['name'] = spectrum
             template_yaml['datasets']['paths'] = [
-                os.path.join(root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum_type, n_samples_1000, x))
+                os.path.join(data_root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum_type, n_samples_1000, x))
                 for x in ['thin', 'std', 'ext']]
             template_yaml['datasets']['num_x_pca'] = num_x_pca
             template_yaml['datasets']['num_y_pca'] = num_y_pca
 
-            with open(os.path.join(output_folder, name+'.yaml'), 'w') as fn:
+            with open(os.path.join(ini_folder, file_name+'.yaml'), 'w') as fn:
                 yaml.safe_dump(template_yaml, fn, sort_keys=False)
