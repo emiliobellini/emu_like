@@ -466,11 +466,11 @@ class ClassSpectra(YModel):
             **kwargs):
 
         # Cosmo (Planck 2018 bestfit, Table 1 of https://arxiv.org/pdf/1807.06209)
-        ref_params = {
+        self.ref_params = {
             'h': 0.6732,
             'Omega_m': 0.3158,
             'Omega_b': 0.0494,
-            'A_s': 2.1e-9,
+            'ln_A_s_1e10': 3.044,
             'n_s': 0.966,
             'tau_reio': 0.0543,
             'N_ur': 0.,
@@ -537,7 +537,8 @@ class ClassSpectra(YModel):
             z_max = {}
         # 2) Compute Class
         cosmo_ref = self.classy.Class()
-        cosmo_ref.set(ref_params | z_max)
+        self.ref_params = self.ref_params | z_max
+        cosmo_ref.set(self.ref_params)
         cosmo_ref.compute()
         # 3) Compute all the spectra
         self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]
@@ -712,7 +713,7 @@ class ClassSpectra(YModel):
             # Write spectra
             fits.write(
                 data=self.y_ref[nsp],
-                header=None,
+                header=self.ref_params,
                 name='ref_{}'.format(sp.name),
             )
             if sp.is_pk:
