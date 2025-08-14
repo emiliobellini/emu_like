@@ -4,7 +4,6 @@ import numpy as np
 import os
 import scipy.interpolate as interp
 import emu_like.io as io
-import emu_like.defaults as de
 from emu_like.params import Params
 from emu_like.spectra import Spectra
 
@@ -12,54 +11,53 @@ from emu_like.spectra import Spectra
 # -----------------MAIN-CALL-----------------------------------------
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('sample_folder', type=str)
+    parser.add_argument('sample_file', type=str)
     args = parser.parse_args()
 
+    fits = io.FitsFile(args.sample_file)
+    if 'pk' in args.sample_file:
+        spectrum_type = 'pk'
+    elif 'cl' in args.sample_file:
+        spectrum_type = 'cl'
+
+    params = fits.get_header(0)
+    class_args = params['y_model']['args']
+    x_names = list(params['params'].keys())
+
+    spectra_list = {
+        'pk': ['pk_m', 'pk_cb', 'pk_weyl', 'fk_m', 'fk_cb', 'fk_weyl'],
+        'cl': ['cl_TT_lensed', 'cl_TE_lensed', 'cl_EE_lensed', 'cl_pp_lensed', 'cl_Tp_lensed', 'cl_BB_lensed'],
+    }
+
     io.info('Getting nan indices')
-    for file in io.Folder(args.sample_folder).list_files():
-        if os.path.split(file)[-1].startswith('x_data'):
-            x = np.genfromtxt(file)
-        if os.path.split(file)[-1].startswith('y_data_pk_m'):
-            y_ref = np.genfromtxt(file)
-    
-    is_nan = np.any(np.isnan(y_ref), axis=1)
-    x_nan = x[is_nan]
-    idxs_nan = np.where(is_nan)[0]
-    io.print_level(1, 'Found {} nans'.format(len(x_nan)))
-    if len(x_nan) == 0:
+    x_data = fits.get_data('x_data')
+    idxs_nan = []
+    data = {}
+    hd = {}
+    ref = {}
+    for spectrum in spectra_list[spectrum_type]:
+        data[spectrum] = fits.get_data(spectrum)
+        ref[spectrum] = fits.get_data('ref_'+spectrum)[0]
+        is_nan = np.any(np.isnan(data[spectrum]), axis=1)
+        idxs_nan.append(np.where(is_nan)[0])
+    if all([all(x==idxs_nan[0]) for x in idxs_nan]):
+        idxs_nan = idxs_nan[0]
+    else:
+        raise Exception('This is strange!')
+    for idx in idxs_nan:
+        io.print_level(1, 'Found nans at x = {}'.format(x_data[idx]))
+
+    if len(idxs_nan) == 0:
         io.info('Nothing to do.')
     else:
-
-        spectra_params = Params().load(os.path.join(args.sample_folder, 'params.yaml'))
-        spectra = Spectra(spectra_params['y_model']['outputs'])
-        x_names = list(spectra_params['params'].keys())
-
-        io.info('Computing reference spectra')
-        # Get params ref
-        z_max = {'z_max_pk': spectra_params['params']['z_pk']['prior']['max']}
-        cosmo_params_ref = de.cosmo_params | spectra.get_class_params() | z_max
-        # Compute ref
-        cosmo_ref = classy.Class()
-        cosmo_ref.set(cosmo_params_ref)
-        cosmo_ref.compute()
-        # Iterate over spectra ref
-        array_ref = {sp.name: sp.get(cosmo_ref) for sp in spectra}
-        for sp in spectra:
-            if array_ref[sp.name].ndim == 2:
-                array_ref[sp.name] = interp.make_splrep(sp.z_array, array_ref[sp.name].T, s=0)
-
+        spectra = Spectra(params['y_model']['outputs'])
 
         io.info('Computing new y')
         new_y = {}
-        for idx_one, x_one in zip(idxs_nan, x_nan):
-            new_y[idx_one] = {}
-            # Get params
-            cosmo_params = {name: value for name, value in zip(x_names, x_one)}
-            cosmo_params = cosmo_params | spectra_params['y_model']['args']
-            for key in de.cosmo_params:
-                if key not in cosmo_params.keys():
-                    cosmo_params[key] = de.cosmo_params[key]
-            cosmo_params = cosmo_params | spectra.get_class_params() | {'recombination': 'recfast'}
+        for idx in idxs_nan:
+            new_y[idx] = {}
+            var_params = {name: val for name, val in zip(x_names, x_data[idx])}
+            cosmo_params = class_args | var_params | {'recombination': 'recfast'}
 
             # Compute
             failed = False
@@ -76,27 +74,25 @@ if __name__ == '__main__':
             if failed:
                 io.warning('Class failed for parameters {}'.format(cosmo_params))
                 for sp in spectra:
-                    new_y[idx_one][sp.name] = None
+                    new_y[idx][sp.name] = None
             else:
                 # Iterate over spectra
                 for sp in spectra:
-                    array = sp.get(cosmo, z=cosmo_params['z_pk'])
+                    if sp.is_pk:
+                        z = cosmo_params['z_pk']
+                    else:
+                        z = None
+                    array = sp.get(cosmo, z=z)
                     if sp.ratio:
                         if sp.is_pk:
-                            array = array/array_ref[sp.name](cosmo_params['z_pk'])
+                            array = array/ref[sp.name](cosmo_params['z_pk'])
                         elif sp.is_cl:
-                            array = array/array_ref[sp.name]
-                    new_y[idx_one][sp.name] = array
+                            array = array/ref[sp.name]
+                    new_y[idx][sp.name] = array
 
-
-        io.info('Loading files and replacing values')
+        io.info('Replacing values')
         for sp in spectra:
-            # Open file
-            path = os.path.join(args.sample_folder, 'y_data_{}.txt').format(sp.name)
-            header = io.File(path).read_header()
-            old_array = np.genfromtxt(path)
-            for idx_one, x_one in zip(idxs_nan, x_nan):
-                if new_y[idx_one][sp.name] is not None:
-                    old_array[idx_one] = new_y[idx_one][sp.name]
-            np.savetxt(path, old_array, header=header)
-            io.print_level(1, 'Saved spectrum {}!'.format(sp.name))
+            for idx in idxs_nan:
+                data[sp.name][idx] = new_y[idx][sp.name]
+
+            fits.update(data[sp.name], sp.name)

@@ -431,6 +431,15 @@ class FitsFile(object):
                 hdul.append(fits.ImageHDU(data, name=name, header=header))
         return
 
+    def update(self, data, name, header=None):
+        if isinstance(header, dict):
+            header = self._flatten_dict(header)
+            header = self._delistify(header)
+            header = fits.Header(header)
+        with fits.open(self.path, mode='update') as hdul:
+            hdul[name].data = data
+        return
+
     def print_info(self):
         """ Print on screen fits file info.
 
