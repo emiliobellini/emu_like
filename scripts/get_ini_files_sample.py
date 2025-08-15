@@ -58,7 +58,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v
+python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v -r
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -185,7 +185,7 @@ args = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm_nu_k'
+    model = 'lcdm'
     n_samples_1000 = 100
     data_root = '/ceph/hpc/data/s25r06-05-users/'
 
