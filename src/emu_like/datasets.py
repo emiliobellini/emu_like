@@ -770,9 +770,9 @@ class DataCollection(object):
         if settings is None:
             settings = self.settings
         fits.write(
+            name=None,
             data=None,
             header=self.settings,
-            name=None,
             verbose=verbose,
         )
 
@@ -782,9 +782,9 @@ class DataCollection(object):
         if name_x is None:
             name_x = self.x_key
         fits.write(
+            name=name_x,
             data=data_x,
             header=hd_x,
-            name=name_x,
             verbose=verbose,
         )
 
@@ -797,9 +797,9 @@ class DataCollection(object):
             hd_ys = [None for _ in range(len(data_ys))]
         for idx in range(len(data_ys)):
             fits.write(
+                name=name_ys[idx],
                 data=data_ys[idx],
                 header=hd_ys[idx],
-                name=name_ys[idx],
                 verbose=verbose,
             )
         
@@ -973,9 +973,9 @@ class DataCollection(object):
         # Save settings
         if save_it:
             fits.write(
+                name=None,
                 data=None,
                 header=self.settings,
-                name=None,
             )
 
         # Init x sampler
@@ -995,9 +995,9 @@ class DataCollection(object):
         # Save x_array
         if save_it:
             fits.write(
+                name=x_sampler.x_key,
                 data=self.x,
                 header=None,
-                name=x_sampler.x_key,
             )
 
         # Init y_model
@@ -1036,11 +1036,19 @@ class DataCollection(object):
             # Save array
             if save_it:
                 for nname, name in enumerate(self.y_keys):
-                    fits.append(
-                        data=y_one[nname],
-                        name=name,
-                        header=self.y_headers[nname]
-                    )
+                    try:
+                        data = fits.get_data(name)
+                        data = np.vstack([data, y_one[nname]])
+                        fits.update(
+                            name=name,
+                            data=data,
+                        )
+                    except KeyError:
+                        fits.write(
+                            name=name,
+                            data=y_one[nname],
+                            header=self.y_headers[nname]
+                        )
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -1083,9 +1091,11 @@ class DataCollection(object):
         
             # Save array
             for nname, name in enumerate(self.y_keys):
-                fits.append(
-                    data=y_one[nname],
+                data = fits.get_data(name)
+                data = np.vstack([data, y_one[nname]])
+                fits.update(
                     name=name,
+                    data=data,
                 )
 
         return

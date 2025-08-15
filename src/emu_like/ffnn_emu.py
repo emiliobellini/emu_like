@@ -11,7 +11,6 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow import keras
-from . import defaults as de
 from . import io as io
 from .emu import Emulator
 from .pca import PCA
@@ -344,9 +343,9 @@ class FFNNEmu(Emulator):
         }
 
         fits.write(
+            name=None,
             data=None,
             header=params,
-            name=None,
             verbose=verbose,
         )
 

@@ -712,32 +712,32 @@ class ClassSpectra(YModel):
         for nsp, sp in enumerate(self.spectra):
             # Write spectra
             fits.write(
+                name='ref_{}'.format(sp.name),
                 data=self.y_ref[nsp],
                 header=self.ref_params,
-                name='ref_{}'.format(sp.name),
             )
             if sp.is_pk:
                 # Write k_range
                 fits.write(
+                    name='k_range_{}'.format(sp.name),
                     data=self.k_ranges[nsp],
                     header=None,
-                    name='k_range_{}'.format(sp.name),
                 )
                 is_pk = True
             elif sp.is_cl:
                 # Write ell_range
                 fits.write(
+                    name='ell_range_{}'.format(sp.name),
                     data=self.ell_ranges[nsp],
                     header=None,
-                    name='ell_range_{}'.format(sp.name),
                 )
         
         if is_pk:
             # Write z_array
             fits.write(
+                name='z_array',
                 data=self.z_array,
                 header=None,
-                name='z_array',
             )
         
         return

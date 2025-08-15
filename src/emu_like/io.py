@@ -10,7 +10,6 @@ import argparse
 import numpy as np
 import os
 import re
-import sys
 import yaml
 from astropy.io import fits
 from collections import OrderedDict
@@ -272,7 +271,19 @@ class Folder(object):
 
 class FitsFile(object):
     """
-    Class for fits files.
+    Class to manage fits files.
+
+    NOTE: the only fine tuned part here is how we manage headers.
+    We accept dictionary as headers, manipulating them to make
+    them acceptable as headers by astropy.fits. In particular:
+    1) we flatten the dictionary with _flatten_dict
+      (_unflatten_dict is used to reverse it). In the same function
+      we split keys and values of the flattened dict, making both
+      of them values (astropy accepts keys with less than 8 chars);
+    2) we convert (nested) lists to strings with _delistify (_listify
+      is used to reverse it), because astropy does not accept lists.
+      For nested arrays or lists we accept up to 2 dimensions.
+
     """
 
     def __init__(self, fname=None, root=None):
@@ -391,7 +402,20 @@ class FitsFile(object):
             val = val_string
         return val
 
-    def write(self, data, header, name, verbose=False):
+    def write(self, name=None, data=None, header=None, verbose=False):
+        """
+        Write an HDU to a fits file. If the file does not
+        exists, it creates with the content stored in the
+        PrimaryHDU, otherwise it appends and ImageHDU to it.
+        Arguments:
+        - name (str, default: None): name of the HDU;
+        - data (array, default: None): data to be stored;
+        - header (dict or fits.Header): header to be stored.
+          If the input is a dictionary, it is manually
+          converted so it can be accepted by astropy.fits
+          as header (see NOTE at the beginning of the class);
+        - verbose (bool, default: False): verbosity.
+        """
         # Create parent folder
         try:
             Folder(os.path.dirname(self.path)).create()
@@ -413,58 +437,48 @@ class FitsFile(object):
                 hdul.append(fits.ImageHDU(data, name=name, header=header))
         if verbose:
             print_level(1, 'Appended {} to {}'.format(name.upper(), os.path.relpath(self.path)))
-            sys.stdout.flush()
         return
 
-    def append(self, data, name, header=None):
-        if isinstance(header, dict):
-            header = self._flatten_dict(header)
-            header = self._delistify(header)
-            header = fits.Header(header)
-        # If array already exists, append data to it,
-        # otherwise create array.
-        try:
-            with fits.open(self.path, mode='update') as hdul:
-                hdul[name].data = np.vstack([hdul[name].data, data])
-        except KeyError:
-            with fits.open(self.path, mode='append') as hdul:
-                hdul.append(fits.ImageHDU(data, name=name, header=header))
-        return
-
-    def update(self, data, name, header=None):
+    def update(self, name=None, data=None, header=None):
+        """
+        Update an HDU of a fits file. The HDU should already
+        exists (otherwise use the .write method).
+        Arguments:
+        - name (str, default: None): name of the HDU;
+        - data (array, default: None): data to be updated;
+        - header (dict or fits.Header): header to be updated.
+          If the input is a dictionary, it is manually
+          converted so it can be accepted by astropy.fits
+          as header (see NOTE at the beginning of the class).
+        - verbose (bool, default: False): verbosity.
+        """
         if isinstance(header, dict):
             header = self._flatten_dict(header)
             header = self._delistify(header)
             header = fits.Header(header)
         with fits.open(self.path, mode='update') as hdul:
             hdul[name].data = data
+            if header is not None:
+                hdul[name].header = header
         return
 
     def print_info(self):
-        """ Print on screen fits file info.
-
-        Args:
-            fname: path of the input file.
-
-        Returns:
-            None
-
         """
-
+        Print on screen fits file info.
+        """
         with fits.open(self.path) as hdul:
             print(hdul.info())
-            sys.stdout.flush()
         return
 
     def get_header(self, name, unflat_dict=True):
-        """ Open a fits file and return the header from name.
-
-        Args:
-            name: name of the data we want to extract.
-
-        Returns:
-            header.
-
+        """
+        Open a fits file and return the header of an HDU.
+        Arguments:
+        - name (str): name of the HDU;
+        - unflat_dict (bool, default: True): if False return just the
+          header, otherwise try to reconstruct the nested dictionary.
+        Return:
+        - header.
         """
         with fits.open(self.path) as fn:
             if unflat_dict:
@@ -475,14 +489,12 @@ class FitsFile(object):
         return hd
 
     def get_data(self, name):
-        """ Open a fits file and return the header fromname.
-
-        Args:
-            name: name of the data we want to extract.
-
-        Returns:
-            header.
-
+        """
+        Open a fits file and return the data of an HDU.
+        Arguments:
+        - name (str): name of the HDU.
+        Return:
+        - data array.
         """
         with fits.open(self.path) as fn:
             return fn[name].data
