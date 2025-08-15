@@ -9,7 +9,6 @@ import emcee
 import numpy as np
 import os
 import sys
-from . import defaults as de
 from . import io as io
 from .emu import Emulator
 
@@ -149,7 +148,7 @@ class EmceeMCMC(MCMC):
 
         # Create chains file
         self.chains_path = os.path.join(
-            self.output, de.file_names['chains']['name'])
+            self.output, 'chain.txt')
         with open(self.chains_path, 'w') as fn:
             fn.write(header)
             if verbose:

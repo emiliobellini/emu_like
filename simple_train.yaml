@@ -62,7 +62,7 @@ datasets:
   # - list of files: if a single file contains both x and y use "paths".
   #   If x and y are stored in separate files use "paths_x" and "paths_y".
   paths:
-    - output/simple/sample
+    - output/simple/sample.fits
   # In alternative, one can use different paths for x and y (list of str)
   paths_x:
   paths_y:

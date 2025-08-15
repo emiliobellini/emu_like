@@ -16,7 +16,6 @@ and attributes to your needs.
 
 import numpy as np
 import scipy
-from . import defaults as de
 from . import io as io
 
 
@@ -30,14 +29,13 @@ class XSampler(object):
         # Default n_samples if not passed.
         self.n_samples_default = 10
 
+        # Defaults
+        self.x_key = 'x_data'
         # Placeholders
         self.x = None  # x
-        self.x_ranges = None  # x_ranges
         self.n_x = None  # Number of x variables
         self.n_samples = None  # Number of samples
         self.x_names = None  # List of names of x data
-        self.x_header = None  # Header for x file
-        self.x_fname = None  # File name of x data
         return
 
     @staticmethod
@@ -107,17 +105,6 @@ class XSampler(object):
             seed = None
         return seed
 
-    def get_x_ranges(self):
-        """
-        Get x_ranges.
-        """
-        if self.x is None:
-            self.get_x()
-
-        self.x_ranges = np.array(list(zip(
-            np.min(self.x, axis=0), np.max(self.x, axis=0))))
-        return self.x_ranges
-
     def get_n_x(self):
         """
         Get n_x.
@@ -146,23 +133,6 @@ class XSampler(object):
                         if XSampler._is_varying(self.params, x)]
 
         return self.x_names
-
-    def get_x_header(self):
-        """
-        Get x_header.
-        """
-        if self.x_names is None:
-            self.get_x_names()
-        
-        self.x_header = '\t'.join(self.x_names)
-        return self.x_header
-
-    def get_x_fname(self):
-        """
-        Get x_fname.
-        """
-        self.x_fname = de.file_names['x_data']['name']
-        return self.x_fname
 
     def get_x(self):
         """

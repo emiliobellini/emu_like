@@ -2,15 +2,8 @@
 # Usage:
 #   python main.py sample spectra_sample.yaml -v
 
-output:
-  # Output folder (str)
-  path: output/spectra/sample
-  # Save incrementally or at the end (bool)
-  # If True use num_processes: 1
-  save_incrementally: True
-  # Number of processes to sample in parallel (int)
-  # If > 1 use save_incrementally: False
-  num_processes: 1
+# Output fits file (str)
+output: output/spectra/sample.fits
 
 
 # Sampling method for x.
@@ -66,6 +59,11 @@ y_model:
     l_switch_limber: 20
     accurate_lensing: 1
     delta_l_max: 1000
+    output: 'tCl, dTk, pCl, lCl, mPk'
+    l_max_scalars: 3000
+    lensing: 'yes'
+    P_k_max_h/Mpc: 50.0
+    modes: 's'
 
   # List of output files (only for class_spectra)
   outputs:
@@ -88,17 +86,17 @@ y_model:
       k_space: 'log'
       k_num: 600
       ratio: True
-    f_m:
+    fk_m:
       k_min: 1.e-5
       k_max: 50.
       k_space: 'log'
       k_num: 600
-    f_cb:
+    fk_cb:
       k_min: 1.e-5
       k_max: 50.
       k_space: 'log'
       k_num: 600
-    f_weyl:
+    fk_weyl:
       k_min: 1.e-5
       k_max: 50.
       k_space: 'log'
@@ -147,7 +145,7 @@ params:
       max: 0.9
   Omega_m:
     prior:
-      min: 0.1
+      min: 0.12
       max: 0.7
   Omega_b:
     prior:
@@ -167,5 +165,5 @@ params:
       max: 1.2
   Omega_k:
     prior:
-      min: -0.5
-      max: 0.5
+      min: -0.2
+      max: 0.1

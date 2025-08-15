@@ -19,7 +19,6 @@ import numpy as np
 import os
 import scipy.interpolate as interp
 from . import io as io
-from . import defaults as de
 from .spectra import Spectra
 from .x_samplers import XSampler
 
@@ -37,11 +36,9 @@ class YModel(object):
         self.n_samples = n_samples
         # Placeholders
         self.y = []  # y per file
-        self.y_ranges = []  # y_ranges per file
         self.n_y = []  # Number of y variables per file
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
-        self.y_fnames = []  # File names of y data
         self.outputs = None
 
         # Derive varying parameters
@@ -97,18 +94,6 @@ class YModel(object):
         else:
             raise Exception('YModel not recognised!')
 
-    def get_y_ranges(self):
-        """
-        Get y_ranges.
-        """
-        if self.y == []:
-            raise Exception('Empty y arrays! Use get_y '
-                            'or evaluate to generate them first.')
-
-        self.y_ranges = [list(zip(np.min(y, axis=0), np.max(y, axis=0)))
-                            for y in self.y]
-        return self.y_ranges
-
     def get_n_y(self):
         """
         Get n_y.
@@ -138,13 +123,6 @@ class YModel(object):
         
         self.y_headers = ['\t'.join(y_names) for y_names in self.y_names]
         return self.y_headers
-
-    def get_y_fnames(self):
-        """
-        Get y_fnames.
-        """
-        self.y_fnames = [de.file_names['y_data']['name'].format('')]
-        return self.y_fnames
 
     def get_y(self, x, **kwargs):
         """
@@ -487,6 +465,35 @@ class ClassSpectra(YModel):
             verbose=False,
             **kwargs):
 
+        # Cosmo (Planck 2018 bestfit, Table 1 of https://arxiv.org/pdf/1807.06209)
+        self.ref_params = {
+            'h': 0.6732,
+            'Omega_m': 0.3158,
+            'Omega_b': 0.0494,
+            'ln_A_s_1e10': 3.044,
+            'n_s': 0.966,
+            'tau_reio': 0.0543,
+            'N_ur': 0.,
+            'N_ncdm': 1,
+            'deg_ncdm': 3,
+            'm_ncdm': 0.2,
+            # Precision parameters
+            'k_per_decade_for_pk': 40,
+            'k_per_decade_for_bao': 80,
+            'l_logstep': 1.026,
+            'l_linstep': 25,
+            'perturbations_sampling_stepsize': 0.02,
+            'l_switch_limber': 20,
+            'accurate_lensing': 1,
+            'delta_l_max': 1000,
+            'output': 'tCl, dTk, pCl, lCl, mPk',
+            'l_max_scalars': 3000,
+            'lensing': 'yes',
+            'P_k_max_h/Mpc': 50.0,
+            'k_pivot': 0.05,
+            'modes': 's',
+        }
+
         # Decide wether to fully initialize (it calls Class to
         # compute the reference spectra, which takes some time) or not.        
         skip_init = False
@@ -516,7 +523,7 @@ class ClassSpectra(YModel):
 
         # Build parameter dictionary
         var = {nm: None for nm in self.x_names}
-        self.class_params = self.args | self.spectra.get_class_params() | var
+        self.class_params = self.args | var
 
         # Fix known properties of the function
         self.n_y = self.get_n_y()
@@ -530,7 +537,8 @@ class ClassSpectra(YModel):
             z_max = {}
         # 2) Compute Class
         cosmo_ref = self.classy.Class()
-        cosmo_ref.set(de.cosmo_params | self.spectra.get_class_params() | z_max)
+        self.ref_params = self.ref_params | z_max
+        cosmo_ref.set(self.ref_params)
         cosmo_ref.compute()
         # 3) Compute all the spectra
         self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]
@@ -576,10 +584,8 @@ class ClassSpectra(YModel):
         oneclassspectrum.outputs = {name: self.outputs[name]}
         oneclassspectrum.x_names = self.x_names
         oneclassspectrum.y = [self.y[idx]]
-        oneclassspectrum.y_fnames = [self.y_fnames[idx]]
         oneclassspectrum.y_headers = [self.y_headers[idx]]
         oneclassspectrum.y_names = [self.y_names[idx]]
-        oneclassspectrum.y_ranges = [self.y_ranges[idx]]
         oneclassspectrum.y_ref = [self.y_ref[idx]]
         oneclassspectrum.spectra = Spectra([self.spectra[idx]])
         if self.spectra[idx].is_pk:
@@ -633,13 +639,6 @@ class ClassSpectra(YModel):
         self.y_headers = self.spectra.get_headers()
         return self.y_headers
 
-    def get_y_fnames(self):
-        """
-        Get y_fnames.
-        """
-        self.y_fnames = self.spectra.get_fnames()
-        return self.y_fnames
-
     def evaluate(self, x, idx, **kwargs):
         """
         Arguments:
@@ -655,13 +654,15 @@ class ClassSpectra(YModel):
             self.class_params[par] = x[npar]
 
         # Update z_max_pk if needed and get z
-        self.class_params['z_max_pk'] = 0.1
-        try:
-            self.class_params['z_max_pk'] = max(
-                self.class_params['z_pk'], self.class_params['z_max_pk'])
-            z = self.class_params['z_pk']
-        except KeyError:
-            z = 0.
+        z = 0
+        if any([sp.is_pk for sp in self.spectra]):
+            self.class_params['z_max_pk'] = 0.1
+            try:
+                self.class_params['z_max_pk'] = max(
+                    self.class_params['z_pk'], self.class_params['z_max_pk'])
+                z = self.class_params['z_pk']
+            except KeyError:
+                z = 0.
 
         try:
             # Compute class
@@ -693,43 +694,58 @@ class ClassSpectra(YModel):
 
         return y
 
-    def save(self, fname=None, root=None, verbose=False):
+    def save(self, fname, root=None, verbose=False):
         """
         Save reference spectra.
         """
-        if fname is None:
-            fname = de.file_names['spectra_factor']['name']
         if root is None:
             path = fname
         else:
             path = os.path.join(root, fname)
         if verbose:
             io.info('Saving reference spectra to {}'.format(path))
-        io.Folder(os.path.dirname(path)).create()
 
-        fits = io.FitsFile(path=path)
+        fits = io.FitsFile(path)
 
 
+        is_pk = False
         for nsp, sp in enumerate(self.spectra):
             # Write spectra
-            fits.write(self.y_ref[nsp], sp.name, type='image')
+            fits.write(
+                name='ref_{}'.format(sp.name),
+                data=self.y_ref[nsp],
+                header=self.ref_params,
+            )
             if sp.is_pk:
-                # Write z_array
-                fits.write(self.z_array, 'z_array', type='image')
                 # Write k_range
-                fits.write(self.k_ranges[nsp], 'k_range_{}'.format(sp.name), type='image')
+                fits.write(
+                    name='k_range_{}'.format(sp.name),
+                    data=self.k_ranges[nsp],
+                    header=None,
+                )
+                is_pk = True
             elif sp.is_cl:
                 # Write ell_range
-                fits.write(self.ell_ranges[nsp], 'ell_range_{}'.format(sp.name), type='image')
+                fits.write(
+                    name='ell_range_{}'.format(sp.name),
+                    data=self.ell_ranges[nsp],
+                    header=None,
+                )
+        
+        if is_pk:
+            # Write z_array
+            fits.write(
+                name='z_array',
+                data=self.z_array,
+                header=None,
+            )
         
         return
 
-    def load(self, fname=None, root=None, verbose=False):
+    def load(self, fname, root=None, verbose=False):
         """
         Load reference spectra.
         """
-        if fname is None:
-            fname = de.file_names['spectra_factor']['name']
         if root is None:
             path = fname
         else:
@@ -737,22 +753,29 @@ class ClassSpectra(YModel):
         if verbose:
             io.print_level(1, 'Loading reference spectra from {}'.format(path))
 
-        fits = io.FitsFile(path=path)
+        fits = io.FitsFile(fname=path)
 
-        # Read spectra
-        self.y_ref = [fits.read_key(sp.name) for sp in self.spectra]
-
-        # Read z_array, k_ranges, ell_ranges
-        self.z_array = None
-        self.k_ranges = [None for sp in self.spectra]
-        self.ell_ranges = [None for sp in self.spectra]
-        for nsp, sp in enumerate(self.spectra):
+        is_pk = False
+        self.y_ref = []
+        self.k_ranges = []
+        self.ell_ranges = []
+        for sp in self.spectra:
+            # Read spectra
+            self.y_ref.append(fits.get_data('ref_{}'.format(sp.name)))
             if sp.is_pk:
-                self.z_array = fits.read_key('z_array')
-                self.k_ranges[nsp] = fits.read_key('k_range_{}'.format(sp.name))
+                # Read k_range
+                self.k_ranges.append(fits.get_data('k_range_{}'.format(sp.name)))
+                self.ell_ranges.append(None)
+                is_pk = True
             elif sp.is_cl:
-                self.ell_ranges[nsp] = fits.read_key('ell_range_{}'.format(sp.name))
+                # Read ell_range
+                self.k_ranges.append(None)
+                self.ell_ranges.append(fits.get_data('ell_range_{}'.format(sp.name)))
         
+        if is_pk:
+            # read z_array
+            self.z_array = fits.get_data('z_array')
+
         return
 
     def plot(self, emu, data, path=None):

@@ -10,8 +10,7 @@ import joblib
 import os
 import emu_like.io as io
 from emu_like.emu import Emulator
-# from emu_like.params import Params
-# from emu_like.datasets import Dataset, DataCollection
+
 
 def export_emu(args):
     """ Export spectra emulators to a given folder.

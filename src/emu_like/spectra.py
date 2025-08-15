@@ -12,9 +12,9 @@ been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
 """
 
+import classy
 import numpy as np
 import scipy.interpolate as interp
-from . import defaults as de
 
 
 # ----------------- Generic Spectra ------------------------------------------#
@@ -35,7 +35,6 @@ class Spectra(object):
           of parameters for each spectrum, or a list of Spectrum objects.
         """
         # Init classy
-        import classy
         if isinstance(dict_or_list, dict):
             self.list = [Spectrum.choose_one(sp, dict_or_list[sp]) for sp in dict_or_list]
         elif isinstance(dict_or_list, list):
@@ -76,8 +75,7 @@ class Spectra(object):
         From the name (str) of the Spectrum,
         it returns its position (int) in Spectra.
         """
-        idx = self.get_fnames().index(
-            de.file_names['y_data']['name'].format(name))
+        idx = self.names.index(name)
         return idx
 
     def _get_name_from_idx(self, idx):
@@ -131,35 +129,6 @@ class Spectra(object):
             self.want_lensing = False
         return self.want_lensing
 
-    def get_class_params(self):
-        """
-        Build a dictionary of parameters needed by Class
-        to properly compute the spectra requested.
-        """
-        class_params = {}
-
-        # Output spectra
-        class_output = [x.class_spectra for x in self]
-        class_output = [x for xs in class_output for x in xs]
-        class_output = list(set(class_output))
-        if class_output:
-            class_params['output'] = ', '.join(class_output)
-
-        # k max Pk
-        if self.get_k_max():
-            class_params['P_k_max_h/Mpc'] = self.k_max
-
-        # ell max Cell
-        if self.get_ell_max():
-            class_params['l_max_scalars'] = self.ell_max
-
-        # lensing
-        if self.get_want_lensing():
-            class_params['lensing'] = 'yes'
-            class_params['modes'] = 's'
-
-        return class_params
-
     def get_n_vecs(self):
         """
         Get a list of the size of the data
@@ -188,13 +157,6 @@ class Spectra(object):
         """
         headers = [sp.get_header() for sp in self.list]
         return headers
-
-    def get_fnames(self):
-        """
-        Get a list of the y file names of each spectrum computed.
-        """
-        fnames = [sp.get_fname() for sp in self.list]
-        return fnames
 
 
 class Spectrum(object):
@@ -237,11 +199,11 @@ class Spectrum(object):
         elif spectrum_type == 'pk_weyl':
             return WeylPk(spectrum_type, params)
         # Growth rates
-        elif spectrum_type == 'f_m':
+        elif spectrum_type == 'fk_m':
             return MatterGrowthRate(spectrum_type, params)
-        elif spectrum_type == 'f_cb':
+        elif spectrum_type == 'fk_cb':
             return ColdBaryonGrowthRate(spectrum_type, params)
-        elif spectrum_type == 'f_weyl':
+        elif spectrum_type == 'fk_weyl':
             return WeylGrowthRate(spectrum_type, params)
         # Cl
         elif spectrum_type == 'cl_TT':
@@ -272,14 +234,6 @@ class Spectrum(object):
         else:
             raise ValueError(
                 'Spectrum {} not recognized!'.format(spectrum_type))
-
-    def get_fname(self):
-        """
-        Get the default file name for each spectrum.
-        It appends the name of the spectrum to the default name.
-        """
-        fname = de.file_names['y_data']['name'].format(self.name)
-        return fname
 
     def _get_range(self, min, max, num, space):
         """
@@ -378,22 +332,17 @@ class Pk(Spectrum):
         Default header for the Pk.
         Format example: {Matter, 1.e-3, 1., log, 600}
         """
-        if self.ratio:
-            hd = 'Ratio of the {} power spectrum P(k) w.r.t. the reference P(k) '
-        else:
-            hd = '{} power spectrum P(k) in units (Mpc/h)^3 '
-        hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
-        hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
-        hd += 'of k_modes of {}.\n'
-        # hd += '\t'.join(self.get_y_names())
-
-        hd = hd.format(
-            self.hd_name,
-            self.k_min,
-            self.k_max,
-            self.k_space,
-            self.k_num
-        )
+        hd = {
+            'name': self.hd_name,
+            'ratio': self.ratio,
+            'dimensions_k': 'h/Mpc',
+            'dimensions_Pk': '(Mpc/h)^3',
+            'k_min': self.k_min,
+            'k_max': self.k_max,
+            'spacing': self.k_space,
+            'number_of_k': self.k_num,
+            'formula': 'P(k,z)',
+        }
         return hd
 
 
@@ -483,18 +432,15 @@ class Cell(Spectrum):
         Default header for the Cell.
         Format example: {TT, lensed, 2, 2500}
         """
-        if self.ratio:
-            hd = 'Ratio of the {} C_l for ell={} to {}.\n'
-        else:
-            hd ='dimensionless {} [l(l+1)/2pi] C_l for ell={} to {}.\n'
-        # hd += '\t'.join(self.get_y_names())
-
-        # Cl specific settings
-        hd = hd.format(
-            self.hd_name,
-            self.ell_min,
-            self.ell_max,
-        )
+        hd = {
+            'name': self.hd_name,
+            'ratio': self.ratio,
+            'dimensions_ell': None,
+            'dimensions_Cell': None,
+            'ell_min': self.ell_min,
+            'ell_max': self.ell_max,
+            'formula': '[ell*(ell+1)/2*pi] C_ell(ell)',
+        }
         return hd
 
 
@@ -518,22 +464,17 @@ class GrowthRate(Pk):
         """
         Header for the growth rate.
         """
-        if self.ratio:
-            hd = 'Ratio of the {} growth rate f(k) w.r.t. the reference f(k) '
-        else:
-            hd = '{} growth rate f(k) '
-        hd += 'as a function of k (h/Mpc).\nk_min (h/Mpc) = {}, '
-        hd += 'k_max (h/Mpc) = {}, {}-sampled, for a total number '
-        hd += 'of k_modes of {}.\n'
-        # hd += '\t'.join(self.get_y_names())
-
-        hd = hd.format(
-            self.hd_name,
-            self.k_min,
-            self.k_max,
-            self.k_space,
-            self.k_num
-        )
+        hd = {
+            'name': self.hd_name,
+            'ratio': self.ratio,
+            'dimensions_k': 'h/Mpc',
+            'dimensions_fk': None,
+            'k_min': self.k_min,
+            'k_max': self.k_max,
+            'spacing': self.k_space,
+            'number_of_k': self.k_num,
+            'formula': 'f(k,z)',
+        }
         return hd
 
     def get(self, cosmo, z=None):

@@ -2,15 +2,8 @@
 # Usage:
 #   python main.py sample simple_sample.yaml -v
 
-output:
-  # Output folder (str)
-  path: output/simple/sample
-  # Save incrementally or at the end (bool)
-  # If True use num_processes: 1
-  save_incrementally: True
-  # Number of processes to sample in parallel (int)
-  # If > 1 use save_incrementally: False
-  num_processes: 1
+# Output fits file (str)
+output: output/simple/sample.fits
 
 
 # Sampling method for x.
