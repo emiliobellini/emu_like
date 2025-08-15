@@ -1,11 +1,9 @@
-# Explanatory file for Planck likelihood. The bounds are
-# 4*sigma range of parameters (wrt Planck18)
-
+# Explanatory file.
 # Usage:
-#   python main.py sample planck_sample.yaml -v
+#   python main.py sample spectra_sample.yaml -v
 
 # Output fits file (str)
-output: output/planck/sample.fits
+output: output/spectra/sample.fits
 
 
 # Sampling method for x.
@@ -45,21 +43,86 @@ x_sampler:
 # For a list of all available options look at src/emu_like/y_models.py.
 y_model:
   # Name of the y_model (str).
-  name: cobaya_loglike
+  name: class_spectra
   # Arguments
   args:
-    theory:
-      classy:
-        extra_args:
-          non_linear: hmcode
-          N_ur: 2.0308
-          N_ncdm: 1
-          m_ncdm: 0.06
-    likelihood:
-      planck_2018_lowl.TT: null
-      planck_2018_lowl.EE: null
+    A_s: 2.1e-9
+    n_s: 0.966
+    N_ncdm: 1
+    YHe: 0.24
+    # Precision parameters (this should be a good compromise, check for more general models)
+    k_per_decade_for_pk: 40
+    k_per_decade_for_bao: 80
+    l_logstep: 1.026
+    l_linstep: 25
+    perturbations_sampling_stepsize: 0.02
+    l_switch_limber: 20
+    accurate_lensing: 1
+    delta_l_max: 1000
+    output: 'tCl, dTk, pCl, lCl, mPk'
+    l_max_scalars: 3000
+    lensing: 'yes'
+    P_k_max_h/Mpc: 50.0
+    modes: 's'
+
   # List of output files (only for class_spectra)
   outputs:
+    # Each spectrum is saved in a different file
+    pk_m:
+      k_min: 1.e-5
+      k_max: 50.
+      k_space: 'log'
+      k_num: 600
+      ratio: True
+    pk_cb:
+      k_min: 1.e-5
+      k_max: 50.
+      k_space: 'log'
+      k_num: 600
+      ratio: True
+    pk_weyl:
+      k_min: 1.e-5
+      k_max: 50.
+      k_space: 'log'
+      k_num: 600
+      ratio: True
+    fk_m:
+      k_min: 1.e-5
+      k_max: 50.
+      k_space: 'log'
+      k_num: 600
+    fk_cb:
+      k_min: 1.e-5
+      k_max: 50.
+      k_space: 'log'
+      k_num: 600
+    fk_weyl:
+      k_min: 1.e-5
+      k_max: 50.
+      k_space: 'log'
+      k_num: 600
+    cl_TT_lensed:
+      ell_min: 2
+      ell_max: 3000
+      ratio: True
+    cl_EE_lensed:
+      ell_min: 2
+      ell_max: 3000
+      ratio: True
+    cl_TE_lensed:
+      ell_min: 2
+      ell_max: 3000
+    cl_pp_lensed:
+      ell_min: 2
+      ell_max: 3000
+      ratio: True
+    cl_Tp_lensed:
+      ell_min: 2
+      ell_max: 3000
+    cl_BB_lensed:
+      ell_min: 2
+      ell_max: 3000
+      ratio: True
 
 
 # List of parameters.
@@ -72,53 +135,35 @@ params:
   # - cobaya_loglike: write here parameters as in the cobaya 'params' block
   # - all the others: write here only the parameters that are varying
   #   (the fixed ones should go in 'train_generator:args')
-  logA: # sampled parameter
+  z_pk:
     prior:
-      min: 2.988
-      max: 3.1
-    ref: 3.0297862
-    latex: \log(10^{10} A_\mathrm{s})
-    drop: true
-  A_s: # internal Class parameter
-    value: 'lambda logA: 1e-10*np.exp(logA)'
-    latex: A_\mathrm{s}
-    derived: false
-  n_s:
+      min: 0.
+      max: 10.
+  h:
     prior:
-      min: 0.9481
-      max: 0.9817
-    ref: 0.97084247
-    latex: n_\mathrm{s}
-  theta_s_1e2:
+      min: 0.5
+      max: 0.9
+  Omega_m:
     prior:
-      min: 1.03968
-      max: 1.04216
-    ref: 1.0410781
-    latex: 100\theta_\mathrm{MC}
-    drop: true
-  100*theta_s:
-    value: 'lambda theta_s_1e2: theta_s_1e2'
-    derived: false
-  omega_b:
+      min: 0.12
+      max: 0.7
+  Omega_b:
     prior:
-      min: 0.02177
-      max: 0.02297
-    ref: 0.022438922
-    latex: \Omega_\mathrm{b} h^2
-  omega_cdm:
-    prior:
-      min: 0.1152
-      max: 0.1248
-    ref: 0.11825479
-    latex: \Omega_\mathrm{c} h^2
+      min: 0.03
+      max: 0.08
   tau_reio:
     prior:
-      min: 0.0252
-      max: 0.0836
-    ref: 0.053234614
-    latex: \tau_\mathrm{reio}
-  A_planck:
+      min: 0.02
+      max: 0.08
+  N_ur:
     prior:
-      min: 0.990839
-      max: 1.0104
-    ref: 1.0020416
+      min: 1.
+      max: 4.
+  m_ncdm:
+    prior:
+      min: 0.
+      max: 1.2
+  Omega_k:
+    prior:
+      min: -0.2
+      max: 0.1

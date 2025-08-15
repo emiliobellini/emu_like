@@ -9,6 +9,7 @@ authors = [{name="Emilio Bellini"}]
 description = "TODO"
 requires-python = ">=3.8.0"
 dependencies = [
+    "astropy",
     "cobaya>=3.0",
     "emcee>=3.1",
     "numpy>=1.26",
@@ -16,7 +17,7 @@ dependencies = [
     "matplotlib>=3.8",
     "pyyaml>=6.0.1",
     "scikit-learn>=1.3",
-    "scipy>=1.11",
+    "scipy>=1.15",
     "tensorflow>=2.15",
     "tqdm>=4.66",
 ]

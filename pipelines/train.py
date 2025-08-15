@@ -6,11 +6,9 @@
 
 """
 
-import emu_like.defaults as de
 import emu_like.io as io
 from emu_like.emu import Emulator
-from emu_like.params import Params
-from emu_like.sample import Sample
+from emu_like.datasets import Dataset
 
 
 def train_emu(args):
@@ -26,7 +24,7 @@ def train_emu(args):
         io.print_level(0, "\nStarted training emulator\n")
 
     # Read params
-    params = Params().load(args.params_file)
+    params = io.YamlFile(args.params_file).read()
 
     # If resume load parameters from output folder
     if args.resume:
@@ -34,8 +32,7 @@ def train_emu(args):
             io.info('Resuming from {}.'.format(params['output']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
         # Read params from output folder
-        params = Params().load(de.file_names['params']['name'],
-                               root=params['output'])
+        params = io.YamlFile(root=params['output']).read()
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
@@ -47,77 +44,93 @@ def train_emu(args):
                 'Output folder not empty! Exiting to avoid corruption of '
                 'precious data! If you want to resume a previous run use '
                 'the --resume (-r) option.')
-        # Create output folder
-        io.Folder(params['output']).create(args.verbose)
 
     # Call the right emulator
     emu = Emulator.choose_one(
-        params['emulator']['type'],
+        params['emulator']['name'],
         verbose=args.verbose)
 
     # Update parameters with input
-    params = emu._update_params(
+    params = emu.update_params(
         params,
         epochs=args.additional_epochs,
         learning_rate=args.learning_rate)
 
-    # Save params
-    params.save(
-        de.file_names['params']['name'],
-        root=params['output'],
-        header=de.file_names['params']['header'],
-        verbose=args.verbose)
+    # Test datasets input paths
+    has_paths = params['datasets']['paths'] is not None
+    if has_paths:
+        try:
+            all([io.FitsFile(p) for p in params['datasets']['paths']])
+            paths_is_fits = True
+        except ValueError:
+            paths_is_fits = False
+    else:
+        paths_is_fits = False
 
-    # Get default values
-    try:
-        columns_x = params['training_sample']['columns_x']
-    except KeyError:
-        columns_x = slice(None)
-    try:
-        columns_y = params['training_sample']['columns_y']
-    except KeyError:
-        columns_y = slice(None)
-    try:
-        remove_non_finite = params['training_sample']['remove_non_finite']
-    except KeyError:
-        remove_non_finite = False
+    # Load datasets
+    # 1) fits files created by this code
+    if has_paths and paths_is_fits:
+        data = [Dataset().load(
+            path=path,
+            name=params['datasets']['name'],
+            columns_x=params['datasets']['columns_x'],
+            columns_y=params['datasets']['columns_y'],
+            verbose=False)
+        for path in params['datasets']['paths']]
+    # 2) unique text files for x and y
+    elif has_paths:
+        data = [Dataset().load_external(
+            path=path,
+            columns_x=params['datasets']['columns_x'],
+            columns_y=params['datasets']['columns_y'],
+            verbose=False)
+            for path in params['datasets']['paths']]
+    # 3) separate text files for x and y
+    else:
+        data = [Dataset().load_external(
+            path=path_x,
+            path_y=path_y,
+            columns_x=params['datasets']['columns_x'],
+            columns_y=params['datasets']['columns_y'],
+            verbose=False)
+            for path_x, path_y in zip(
+                params['datasets']['paths_x'], params['datasets']['paths_y'])]
 
-    # Load all Samples in a single list
-    try:
-        sample_paths = params['training_sample']['paths_x']
-        sample_paths_y = params['training_sample']['paths_y']
-    except KeyError:
-        sample_paths = params['training_sample']['paths']
-        sample_paths_y = [None for x in params['training_sample']['paths']]
-    samples = [Sample().load(
-                    path=path,
-                    path_y=path_y,
-                    columns_x=columns_x,
-                    columns_y=columns_y,
-                    remove_non_finite=remove_non_finite,
-                    verbose=False)
-               for path, path_y in zip(sample_paths, sample_paths_y)]
-    # Join all samples
-    sample = Sample.join(samples, verbose=args.verbose)
+    # Remove non finite "y"
+    if params['datasets']['remove_non_finite']:
+        data = [d.remove_non_finite(verbose=False) for d in data]
+
+    # Print info
+    if args.verbose:
+        io.info('Datasets arguments')
+        io.print_level(1, 'Name: {}.'.format(params['datasets']['name']))
+        io.print_level(1, 'Sliced x data with columns: {}.'.format(
+            params['datasets']['columns_x']))
+        io.print_level(1, 'Sliced y data with columns: {}.'.format(
+            params['datasets']['columns_y']))
+        if params['datasets']['remove_non_finite']:
+            io.print_level(1, 'Removing non finite y from dataset.')
+
+    # Join all datasets
+    data = Dataset.join(data, verbose=args.verbose)
 
     # Split training and testing samples
-    sample.train_test_split(
-        params['training_sample']['frac_train'],
-        params['training_sample']['train_test_random_seed'],
+    data.train_test_split(
+        params['datasets']['frac_train'],
+        params['datasets']['train_test_random_seed'],
         verbose=args.verbose)
 
     # If requested, rescale training and testing samples
-    sample.rescale(
-        params['training_sample']['rescale_x'],
-        params['training_sample']['rescale_y'],
+    data.rescale(
+        params['datasets']['rescale_x'],
+        params['datasets']['rescale_y'],
         verbose=args.verbose)
-    # Save scalers
-    sample.x_scaler.save(de.file_names['x_scaler']['name'],
-                         root=params['output'],
-                         verbose=args.verbose)
-    sample.y_scaler.save(de.file_names['y_scaler']['name'],
-                         root=params['output'],
-                         verbose=args.verbose)
+    
+    # If requested apply PCA on x and/or y
+    data.apply_pca(
+        params['datasets']['num_x_pca'],
+        params['datasets']['num_y_pca'],
+        verbose=args.verbose)
 
     # If resume
     if args.resume:
@@ -125,21 +138,20 @@ def train_emu(args):
         emu.load(params['output'], model_to_load='best', verbose=args.verbose)
     # Otherwise
     else:
-        params['emulator']['params']['sample_n_x'] = sample.n_x
-        params['emulator']['params']['sample_n_y'] = sample.n_y
+        # Get dimensions of x and y for emulator
+        params['emulator']['args']['data_n_x'] = data.x_train.shape[1]
+        params['emulator']['args']['data_n_y'] = data.y_train.shape[1]
         # Build architecture
-        emu.build(params['emulator']['params'], verbose=args.verbose)
+        emu.build(params['emulator']['args'], verbose=args.verbose)
 
     # Train the emulator
     emu.train(
-        sample,
-        params['emulator']['params']['epochs'],
-        params['emulator']['params']['learning_rate'],
+        data,
+        params['emulator']['args']['epochs'],
+        params['emulator']['args']['learning_rate'],
+        patience=params['emulator']['args']['patience'],
         path=params['output'],
-        get_plot=True,
+        get_plots=True,
         verbose=args.verbose)
-
-    # Save emulator
-    emu.save(params['output'], verbose=args.verbose)
 
     return

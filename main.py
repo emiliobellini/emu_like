@@ -30,3 +30,6 @@ if __name__ == '__main__':
     if args.mode == 'mcmc':
         from pipelines.mcmc import mcmc_emu
         sys.exit(mcmc_emu(args))
+    if args.mode == 'export':
+        from pipelines.export import export_emu
+        sys.exit(export_emu(args))

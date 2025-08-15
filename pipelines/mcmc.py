@@ -8,7 +8,6 @@
 
 import emu_like.io as io
 from emu_like.mcmc import MCMC
-from emu_like.params import Params
 
 
 def mcmc_emu(args):
@@ -24,7 +23,7 @@ def mcmc_emu(args):
         io.print_level(0, "\nStarted mcmc\n")
 
     # Read params
-    params = Params().load(args.params_file)
+    params = io.YamlFile(args.params_file).read()
 
     # Call mcmc sampler
     sampler = MCMC.choose_one(params, args.verbose)
