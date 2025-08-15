@@ -4,7 +4,6 @@ import numpy as np
 import os
 import scipy.interpolate as interp
 import emu_like.io as io
-from emu_like.params import Params
 from emu_like.spectra import Spectra
 
 
