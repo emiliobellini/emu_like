@@ -1053,7 +1053,6 @@ class DataCollection(object):
                             header=self.y_headers[nname]
                         )
             end_time = time.time()
-            print(end_time-start_time)
             if (end_time-start_time)/60/60 > time_in_hours:
                 print('Reached maximum time!')
                 return
@@ -1093,6 +1092,8 @@ class DataCollection(object):
 
         fits = io.FitsFile(fname=path)
         start = self.counter_samples
+        time_in_hours = 24
+        start_time = time.time()
         for ns, x in enumerate(tqdm.tqdm(self.x[start:])):
             y_one = self.y_model.evaluate(x, start + ns)
             self.counter_samples += 1
@@ -1105,6 +1106,10 @@ class DataCollection(object):
                     name=name,
                     data=data,
                 )
+            end_time = time.time()
+            if (end_time-start_time)/60/60 > time_in_hours:
+                print('Reached maximum time!')
+                return
 
         return
 
