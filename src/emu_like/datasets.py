@@ -10,6 +10,7 @@ import numpy as np
 import os
 import re
 import sklearn.model_selection as skl_ms
+import time
 import tqdm
 from . import io as io
 from . import scalers as sc
@@ -1026,6 +1027,8 @@ class DataCollection(object):
         self.y = y_model.y
 
         # Start iteration in series
+        time_in_hours = 24
+        start_time = time.time()
         for nx, x in enumerate(tqdm.tqdm(self.x)):
             y_one = y_model.evaluate(x, nx)
             self.counter_samples += 1
@@ -1049,6 +1052,11 @@ class DataCollection(object):
                             data=y_one[nname],
                             header=self.y_headers[nname]
                         )
+            end_time = time.time()
+            print(end_time-start_time)
+            if (end_time-start_time)/60/60 > time_in_hours:
+                print('Reached maximum time!')
+                return
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
