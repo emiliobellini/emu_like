@@ -27,6 +27,13 @@ def sample_emu(args):
     # Read params
     params = io.YamlFile(args.params_file).read()
 
+    try:
+        max_execution_time = params['max_execution_time']
+        if args.verbose:
+            io.info('Time limit for execution is {} hours'.format(max_execution_time))
+    except KeyError:
+        max_execution_time = None
+
     # If resume
     if args.resume:
         if args.verbose:
@@ -36,6 +43,7 @@ def sample_emu(args):
         # Resume the dataset
         data.resume(
             params['output'],
+            max_execution_time=max_execution_time,
             verbose=args.verbose)
     # Otherwise
     else:
@@ -47,6 +55,7 @@ def sample_emu(args):
             y_args=params['y_model']['args'],
             y_outputs=params['y_model']['outputs'],
             output=params['output'],
+            max_execution_time=max_execution_time,
             verbose=args.verbose)
 
     return

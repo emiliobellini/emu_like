@@ -4,6 +4,9 @@
 
 # Output fits file (str)
 output: output/spectra/sample.fits
+# Maximum execution time (float, default: None) in hours
+# after which the sampling will exit.
+max_execution_time: 24
 
 
 # Sampling method for x.

@@ -72,6 +72,7 @@ wait
 
 template_yaml = {
     'output': None,
+    'max_execution_time': None,
     'x_sampler': {
         'name': 'latin_hypercube',
         'args': {
@@ -187,8 +188,9 @@ if __name__ == '__main__':
     # Settings
     model = 'lcdm'
     n_samples_1000 = 100
-    data_root = '/ceph/hpc/data/s25r06-05-users/'
+    max_execution_time = 24
 
+    data_root = '/ceph/hpc/data/s25r06-05-users/'
     k_min = 1.e-5
     k_max = 50.
     k_space = 'log'
@@ -214,6 +216,7 @@ if __name__ == '__main__':
 
             # yaml file
             template_yaml['output'] = os.path.join(data_root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space))
+            template_yaml['max_execution_time'] = max_execution_time
             template_yaml['x_sampler']['args']['n_samples'] = 1000*n_samples_1000
 
             # Get list of varied parameters

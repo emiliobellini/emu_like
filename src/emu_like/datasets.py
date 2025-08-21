@@ -923,6 +923,7 @@ class DataCollection(object):
             y_args=None,
             y_outputs=None,
             output=None,
+            max_execution_time=None,
             verbose=False):
         """
         Generate a dataset.
@@ -940,6 +941,8 @@ class DataCollection(object):
         - y_outputs (dict, default: None): dictionary dealing
           with multiple y outputs for a single x (see class_spectra);
         - output (str, default: None): if None nothing is saved;
+        - max_execution_time (float, default None): after this time (in hours)
+          stop the loop;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -1027,8 +1030,8 @@ class DataCollection(object):
         self.y = y_model.y
 
         # Start iteration in series
-        time_in_hours = 24
-        start_time = time.time()
+        if max_execution_time is not None:
+            start_time = time.time()
         for nx, x in enumerate(tqdm.tqdm(self.x)):
             y_one = y_model.evaluate(x, nx)
             self.counter_samples += 1
@@ -1052,10 +1055,12 @@ class DataCollection(object):
                             data=y_one[nname],
                             header=self.y_headers[nname]
                         )
-            end_time = time.time()
-            if (end_time-start_time)/60/60 > time_in_hours:
-                print('Reached maximum time!')
-                return
+            if max_execution_time is not None:
+                end_time = time.time()
+            if max_execution_time is not None:
+                if (end_time-start_time)/60/60 > max_execution_time:
+                    print('Reached maximum time!')
+                    return
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -1063,12 +1068,14 @@ class DataCollection(object):
 
         return
 
-    def resume(self, path, verbose=False):
+    def resume(self, path, max_execution_time=None, verbose=False):
         """
         Resume a dataset previously loaded (use load method
         before resuming). Many settings are already loaded.
         Arguments:
         - path (str): path pointing to the folder containing the dataset;
+        - max_execution_time (float, default None): after this time (in hours)
+          stop the loop;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that both settings and the full x array
@@ -1092,8 +1099,8 @@ class DataCollection(object):
 
         fits = io.FitsFile(fname=path)
         start = self.counter_samples
-        time_in_hours = 24
-        start_time = time.time()
+        if max_execution_time is not None:
+            start_time = time.time()
         for ns, x in enumerate(tqdm.tqdm(self.x[start:])):
             y_one = self.y_model.evaluate(x, start + ns)
             self.counter_samples += 1
@@ -1106,10 +1113,12 @@ class DataCollection(object):
                     name=name,
                     data=data,
                 )
-            end_time = time.time()
-            if (end_time-start_time)/60/60 > time_in_hours:
-                print('Reached maximum time!')
-                return
+            if max_execution_time is not None:
+                end_time = time.time()
+            if max_execution_time is not None:
+                if (end_time-start_time)/60/60 > max_execution_time:
+                    print('Reached maximum time!')
+                    return
 
         return
 
