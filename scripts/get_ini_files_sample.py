@@ -1,3 +1,4 @@
+import numpy as np
 import os
 import yaml
 import emu_like.io as io
@@ -13,7 +14,7 @@ template_sh = """#!/bin/bash
 # ---- Resources configuration  ----
 #SBATCH --partition=cpu
 #SBATCH --mem=30G
-#SBATCH --time=2-00:00:00
+#SBATCH --time=TODO_TIME
 #SBATCH --output=logs/o%j.%x
 #SBATCH --error=logs/e%j.%x
 #SBATCH --nodes=1
@@ -198,6 +199,9 @@ if __name__ == '__main__':
     ell_min = 2
     ell_max = 3000
 
+
+    time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(max_execution_time+1, 24))
+
     ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/sample/{}'.format(model)
     io.Folder(ini_folder).create()
 
@@ -212,6 +216,7 @@ if __name__ == '__main__':
             with open(os.path.join(ini_folder, 'run_'+file_name+'.sh'), 'w') as fn:
                 template_sh_local = template_sh.replace('TODO_NAME', full_name)
                 template_sh_local = template_sh_local.replace('TODO_PATH_YAML', os.path.join(ini_folder, file_name+'.yaml'))
+                template_sh_local = template_sh_local.replace('TODO_TIME', time_string)
                 fn.write(template_sh_local)
 
             # yaml file

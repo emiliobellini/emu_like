@@ -5,7 +5,7 @@ spectra_list = {
     'cl': ['cl_TT_lensed', 'cl_TE_lensed', 'cl_EE_lensed', 'cl_pp_lensed', 'cl_Tp_lensed', 'cl_BB_lensed'],
 }
 
-model = 'lcdm_nu_k'
+model = 'lcdm'
 
 for spectrum_type in ['cl', 'pk']:
     for parameter_space in ['thin', 'std', 'ext']:
