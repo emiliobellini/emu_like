@@ -72,8 +72,11 @@ wait
 """
 
 template_yaml = {
-    'output': None,
-    'max_execution_time': None,
+    'output': {
+        'path': None,
+        'timeout': None,
+        'save_interval': None,
+    },
     'x_sampler': {
         'name': 'latin_hypercube',
         'args': {
@@ -189,7 +192,8 @@ if __name__ == '__main__':
     # Settings
     model = 'lcdm'
     n_samples_1000 = 100
-    max_execution_time = 24
+    timeout = 47
+    save_interval = 1000
 
     data_root = '/ceph/hpc/data/s25r06-05-users/'
     k_min = 1.e-5
@@ -200,7 +204,7 @@ if __name__ == '__main__':
     ell_max = 3000
 
 
-    time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(max_execution_time+1, 24))
+    time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
 
     ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/sample/{}'.format(model)
     io.Folder(ini_folder).create()
@@ -220,8 +224,9 @@ if __name__ == '__main__':
                 fn.write(template_sh_local)
 
             # yaml file
-            template_yaml['output'] = os.path.join(data_root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space))
-            template_yaml['max_execution_time'] = max_execution_time
+            template_yaml['output']['path'] = os.path.join(data_root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space))
+            template_yaml['output']['timeout'] = timeout
+            template_yaml['output']['save_interval'] = save_interval
             template_yaml['x_sampler']['args']['n_samples'] = 1000*n_samples_1000
 
             # Get list of varied parameters

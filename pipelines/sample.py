@@ -27,23 +27,31 @@ def sample_emu(args):
     # Read params
     params = io.YamlFile(args.params_file).read()
 
+    # Default output parameters
     try:
-        max_execution_time = params['max_execution_time']
+        timeout = params['output']['timeout']
         if args.verbose:
-            io.info('Time limit for execution is {} hours'.format(max_execution_time))
+            io.info('Time limit for execution is {} hours'.format(timeout))
     except KeyError:
-        max_execution_time = None
+        timeout = None
+    try:
+        save_interval = params['output']['save_interval']
+        if args.verbose:
+            io.info('Saving every {} steps'.format(save_interval))
+    except KeyError:
+        save_interval = None
 
     # If resume
     if args.resume:
         if args.verbose:
-            io.info('Resuming from {}.'.format(params['output']))
+            io.info('Resuming from {}.'.format(params['output']['path']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
 
         # Resume the dataset
         data.resume(
-            params['output'],
-            max_execution_time=max_execution_time,
+            params['output']['path'],
+            timeout=timeout,
+            save_interval=save_interval,
             verbose=args.verbose)
     # Otherwise
     else:
@@ -54,8 +62,9 @@ def sample_emu(args):
             y_name=params['y_model']['name'],
             y_args=params['y_model']['args'],
             y_outputs=params['y_model']['outputs'],
-            output=params['output'],
-            max_execution_time=max_execution_time,
+            output=params['output']['path'],
+            timeout=timeout,
+            save_interval=save_interval,
             verbose=args.verbose)
 
     return

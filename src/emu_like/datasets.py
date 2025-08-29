@@ -923,7 +923,9 @@ class DataCollection(object):
             y_args=None,
             y_outputs=None,
             output=None,
-            max_execution_time=None,
+            timeout=None,
+            save_interval=None,
+            debug=False,
             verbose=False):
         """
         Generate a dataset.
@@ -941,8 +943,10 @@ class DataCollection(object):
         - y_outputs (dict, default: None): dictionary dealing
           with multiple y outputs for a single x (see class_spectra);
         - output (str, default: None): if None nothing is saved;
-        - max_execution_time (float, default None): after this time (in hours)
-          stop the loop;
+        - timeout (float, default None): after this time (in hours) stop the loop;
+        - save_interval (int, default=None): save every n steps. If None, it
+          saves only at the end;
+        - debug (bool, default=False): if True print additional messages;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -1030,37 +1034,84 @@ class DataCollection(object):
         self.y = y_model.y
 
         # Start iteration in series
-        if max_execution_time is not None:
+        if timeout is not None:
             start_time = time.time()
+        data_part = None
         for nx, x in enumerate(tqdm.tqdm(self.x)):
-            y_one = y_model.evaluate(x, nx)
+            # Evaluate model
+            if debug:
+                start_time_loop = time.time()
+                start_time_part = time.time()
+                io.print_level(0, 'Starting loop number {}'.format(nx))
+            y_one_line = y_model.evaluate(x, nx)
+            if debug:
+                io.print_level(1, 'Class executed in {:.2f} seconds'.format(time.time()-start_time_part))
             self.counter_samples += 1
 
-            if any([np.isnan(yy).any() for yy in y_one]):
+            if any([np.isnan(yy).any() for yy in y_one_line]):
                 io.warning(' Found nans with parameters {}'.format(x))
 
+            # Append to array
+            if debug:
+                start_time_part = time.time()
+            if data_part is None:
+                data_part = y_one_line
+            else:
+                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(data_part, y_one_line)]
+            if debug:
+                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(time.time()-start_time_part))
+
             # Save array
-            if save_it:
-                for nname, name in enumerate(self.y_keys):
-                    try:
-                        data = fits.get_data(name)
-                        data = np.vstack([data, y_one[nname]])
-                        fits.update(
-                            name=name,
-                            data=data,
-                        )
-                    except KeyError:
-                        fits.write(
-                            name=name,
-                            data=y_one[nname],
-                            header=self.y_headers[nname]
-                        )
-            if max_execution_time is not None:
-                end_time = time.time()
-            if max_execution_time is not None:
-                if (end_time-start_time)/60/60 > max_execution_time:
+            if save_it and isinstance(save_interval, int):
+                if np.mod(nx+1, save_interval) == 0:
+                    if debug:
+                        start_time_part = time.time()
+                    for nname, name in enumerate(self.y_keys):
+                        try:
+                            data = fits.get_data(name)
+                            data = np.vstack([data, data_part[nname]])
+                            fits.update(
+                                name=name,
+                                data=data,
+                            )
+                        except KeyError:
+                            fits.write(
+                                name=name,
+                                data=data_part[nname],
+                                header=self.y_headers[nname]
+                            )
+                    data_part = None
+                    if debug:
+                        io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
+
+            # Break in case
+            if timeout is not None:
+                if (time.time()-start_time)/60/60 > timeout:
                     print('Reached maximum time!')
-                    return
+                    break
+            if debug:
+                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(time.time()-start_time_loop))
+        
+        # Final save in case
+        if save_it and data_part is not None:
+            if debug:
+                start_time_part = time.time()
+            for nname, name in enumerate(self.y_keys):
+                try:
+                    data = fits.get_data(name)
+                    data = np.vstack([data, data_part[nname]])
+                    fits.update(
+                        name=name,
+                        data=data,
+                    )
+                except KeyError:
+                    fits.write(
+                        name=name,
+                        data=data_part[nname],
+                        header=self.y_headers[nname]
+                    )
+            if debug:
+                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -1068,14 +1119,22 @@ class DataCollection(object):
 
         return
 
-    def resume(self, path, max_execution_time=None, verbose=False):
+    def resume(
+            self,
+            path,
+            timeout=None,
+            save_interval=None,
+            debug=False,
+            verbose=False):
         """
         Resume a dataset previously loaded (use load method
         before resuming). Many settings are already loaded.
         Arguments:
         - path (str): path pointing to the folder containing the dataset;
-        - max_execution_time (float, default None): after this time (in hours)
-          stop the loop;
+        - timeout (float, default None): after this time (in hours) stop the loop;
+        - save_interval (int, default=None): save every n steps. If None, it
+          saves only at the end;
+        - debug (bool, default=False): if True print additional messages;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that both settings and the full x array
@@ -1097,28 +1156,74 @@ class DataCollection(object):
                 io.warning('Dataset complete, nothing to resume!')
             return
 
-        fits = io.FitsFile(fname=path)
-        start = self.counter_samples
-        if max_execution_time is not None:
+        if timeout is not None:
             start_time = time.time()
-        for ns, x in enumerate(tqdm.tqdm(self.x[start:])):
-            y_one = self.y_model.evaluate(x, start + ns)
+
+        data_part = None
+        start = self.counter_samples
+        for nx, x in enumerate(tqdm.tqdm(self.x[start:])):
+            # Evaluate model
+            if debug:
+                start_time_loop = time.time()
+                start_time_part = time.time()
+                io.print_level(0, 'Starting loop number {}'.format(nx))
+            y_one_line = self.y_model.evaluate(x, start + nx)
+            if debug:
+                io.print_level(1, 'Class executed in {:.2f} seconds'.format(time.time()-start_time_part))
             self.counter_samples += 1
-        
+
+            if any([np.isnan(yy).any() for yy in y_one_line]):
+                io.warning(' Found nans with parameters {}'.format(x))
+
+            # Append to array
+            if debug:
+                start_time_part = time.time()
+            if data_part is None:
+                data_part = y_one_line
+            else:
+                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(data_part, y_one_line)]
+            if debug:
+                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(time.time()-start_time_part))
+
             # Save array
+            if isinstance(save_interval, int):
+                if np.mod(nx+1, save_interval) == 0:
+                    if debug:
+                        start_time_part = time.time()
+                    fits = io.FitsFile(fname=path)
+                    data = [fits.get_data(name) for name in self.y_keys]
+                    data = [np.vstack([x1, x2]) for x1, x2 in zip(data, data_part)]
+                    for nname, name in enumerate(self.y_keys):
+                        fits.update(
+                            name=name,
+                            data=data[nname],
+                        )
+                    data_part = None
+                    if debug:
+                        io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
+
+            # Break in case
+            if timeout is not None:
+                if (time.time()-start_time)/60/60 > timeout:
+                    print('Reached maximum time!')
+                    break
+            if debug:
+                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(time.time()-start_time_loop))
+        
+        # Final save in case
+        if data_part is not None:
+            if debug:
+                start_time_part = time.time()
+            fits = io.FitsFile(fname=path)
+            data = [fits.get_data(name) for name in self.y_keys]
+            data = [np.vstack([x1, x2]) for x1, x2 in zip(data, data_part)]
             for nname, name in enumerate(self.y_keys):
-                data = fits.get_data(name)
-                data = np.vstack([data, y_one[nname]])
                 fits.update(
                     name=name,
-                    data=data,
+                    data=data[nname],
                 )
-            if max_execution_time is not None:
-                end_time = time.time()
-            if max_execution_time is not None:
-                if (end_time-start_time)/60/60 > max_execution_time:
-                    print('Reached maximum time!')
-                    return
+            if debug:
+                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
 
         return
 
