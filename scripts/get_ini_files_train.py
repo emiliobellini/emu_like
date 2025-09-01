@@ -12,7 +12,7 @@ template_sh = """#!/bin/bash
 
 # ---- Resources configuration  ----
 #SBATCH --partition=cpu
-#SBATCH --mem=30G
+#SBATCH --mem=62G
 #SBATCH --time=2-00:00:00
 #SBATCH --output=logs/o%j.%x
 #SBATCH --error=logs/e%j.%x
