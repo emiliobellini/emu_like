@@ -63,7 +63,7 @@ class FFNNEmu(Emulator):
         self.model_fname = 'model.keras'
         self.checkpoint_folder = 'checkpoints'
         self.checkpoint_fname = 'checkpoint_epoch{epoch:04d}.weights.h5'
-        self.log_fname = 'history_log.cvs'
+        self.log_fname = 'history_log.csv'
         self.data_fname = 'data.fits'
         return
 
@@ -269,7 +269,7 @@ class FFNNEmu(Emulator):
         # Load history
         try:
             fname = os.path.join(path, self.log_fname)
-            history = np.genfromtxt(fname, delimiter=",", skip_header=1)
+            history = np.genfromtxt(fname, delimiter=',', skip_header=1)
             self.epochs = [int(x) for x in history[:, 0]]
             self.loss = list(history[:, 1])
             self.val_loss = list(history[:, 2])

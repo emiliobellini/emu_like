@@ -1,6 +1,7 @@
 import argparse
+import csv
+import numpy as np
 import os
-import re
 import emu_like.io as io
 
 def get_head(fname, lines=1):
@@ -57,31 +58,30 @@ if __name__ == '__main__':
     for log_file in args.log_files:
         if log_file.startswith('logs/e'):
             continue
-        # Locate output file
+        # Locate output folder
         head = get_head(log_file, lines=40)
         for line in head:
             if line.startswith(str_out):
                 output_folder = line.replace(str_out, '')
 
-        # Get last epoch
-        tail = get_tail(log_file, lines=1000)
-        for line in tail:
-            if re.match('Epoch [0-9]+/[0-9]+', line):
-                epochs = re.sub('Epoch ', '', line)
-                last_epoch, tot_epochs = epochs.split('/')
-                last_epoch = int(last_epoch)
-                tot_epochs = int(tot_epochs)
-        
-        # Get last improvement epoch
-        tail = get_tail(os.path.join(output_folder, 'history_log.cvs'), lines=1)[0]
-        best_epoch, loss, val_loss = tail.split(',')
+        # Load history
+        # history = np.genfromtxt(
+        #     os.path.join(output_folder, 'history_log.cvs'),
+        #     delimiter=',',
+        #     skip_header=1)
+        with open(os.path.join(output_folder, 'history_log.cvs')) as csvfile:
+            history = np.array(list(csv.reader(csvfile, delimiter=',')))[1:].astype(float)
+
+        # Last epoch
+        last_epoch = int(history[-1, 0])
+
+        # Best epoch
+        idx_best = np.where(history[:, 2] == np.min(history[:, 2]))[0][0]
+        best_epoch, loss, val_loss = history[idx_best]
         best_epoch = int(best_epoch)
-        loss = float(loss)
-        val_loss = float(val_loss)
 
         # Print stuff
         io.info('Folder {}'.format(output_folder))
-        io.print_level(1, 'Total epochs: {}'.format(tot_epochs))
         io.print_level(1, 'Last epoch: {}'.format(last_epoch))
         io.print_level(1, 'Best epoch: {}'.format(best_epoch))
         io.print_level(1, 'Epochs without improvement: {}'.format(last_epoch-best_epoch))
