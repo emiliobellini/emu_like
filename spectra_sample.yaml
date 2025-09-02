@@ -2,11 +2,15 @@
 # Usage:
 #   python main.py sample spectra_sample.yaml -v
 
-# Output fits file (str)
-output: output/spectra/sample.fits
-# Maximum execution time (float, default: None) in hours
-# after which the sampling will exit.
-max_execution_time: 24
+output:
+  # Output fits file (str)
+  path: output/spectra/sample.fits
+  # Maximum execution time (float, default: None) in hours
+  # after which the sampling will exit.
+  timeout: 24
+  # Interval of steps (int, default: None) after which the
+  # samples are saved.
+  save_interval: 1000
 
 
 # Sampling method for x.

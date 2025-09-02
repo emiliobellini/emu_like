@@ -285,10 +285,10 @@ class FitsFile(object):
 
     """
 
-    def __init__(self, fname=None, root=None):
+    def __init__(self, fname, root=None):
         # Define path
         if root is None:
-            self.path = fname
+            self.path = os.path.abspath(fname)
         else:
             self.path = os.path.abspath(os.path.join(root, fname))
         # Check existence
@@ -507,9 +507,18 @@ class YamlFile(object):
     """
 
     def __init__(self, fname=None, root=None):
+        # Defaults
+        self.default_name = 'params.yaml'
+        self.default_header = (
+            '# This is an automatically generated file. Do not modify it!\n'
+            '# It is used to resume training instead of the input one.\n\n')
         # Define path
-        if root is None:
-            self.path = fname
+        if fname is None and root is None:
+            self.path = os.path.abspath(self.default_name)
+        elif root is None:
+            self.path = os.path.abspath(fname)
+        elif fname is None:
+            self.path = os.path.abspath(os.path.join(root, self.default_name))
         else:
             self.path = os.path.abspath(os.path.join(root, fname))
         # Check existence
@@ -518,11 +527,6 @@ class YamlFile(object):
         is_yaml = self.path.endswith('.yaml')
         if not is_yaml:
             raise Exception('Expected .yaml file, found {}'.format(self.path))
-        # Defaults
-        self.default_name = 'params.yaml'
-        self.default_header = (
-            '# This is an automatically generated file. Do not modify it!\n'
-            '# It is used to resume training instead of the input one.\n\n')
         return
 
     def __setitem__(self, item, value):

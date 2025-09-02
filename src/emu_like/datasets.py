@@ -287,8 +287,6 @@ class Dataset(object):
 
         # Main path
         self.path = path
-        # Store y name
-        self.name = name
 
         if columns_x is None:
             columns_x = slice(None)
@@ -320,10 +318,14 @@ class Dataset(object):
                 self.settings['params'][name]['prior']['max']] for name in self.x_names]
 
         # Init y_model
+        if name is None:
+            dataset_settings = None
+        else:
+            dataset_settings = {name: self.settings['y_model']['outputs'][name]}
         y_model = YModel.choose_one(
             self.settings['y_model']['name'],
             self.settings['params'],
-            {name: self.settings['y_model']['outputs'][name]},
+            dataset_settings,
             self.n_samples,
             **self.settings['y_model']['args'],
             verbose=False)
@@ -334,8 +336,13 @@ class Dataset(object):
             verbose=False,
         )
 
-        # Load y data.
-        y_model.y = fits.get_data(name)
+        # Store y name
+        if name is None:
+            name = y_model.y_keys[0]
+        self.name = name
+
+        # Load y data
+        y_model.y = fits.get_data(self.name)
         self.y = y_model.y
 
         # Get remaining y attributes
@@ -877,7 +884,7 @@ class DataCollection(object):
         )
 
         # Load y data.
-        self.y_keys = y_model.spectra.names
+        self.y_keys = y_model.y_keys
         # 1) load ys.
         y = [fits.get_data(name) for name in self.y_keys]
         # 2) Infer dimensions
@@ -1027,7 +1034,7 @@ class DataCollection(object):
         self.n_y = y_model.get_n_y()
         self.y_names = y_model.get_y_names()
         self.y_headers = y_model.get_y_headers()
-        self.y_keys = y_model.spectra.names
+        self.y_keys = y_model.y_keys
 
         # Init self.y
         y_model.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]

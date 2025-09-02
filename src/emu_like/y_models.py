@@ -40,6 +40,7 @@ class YModel(object):
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
         self.outputs = None
+        self.y_keys = ['y_data']
 
         # Derive varying parameters
         self.x_names = [x for x in self.params
@@ -101,8 +102,10 @@ class YModel(object):
         if self.y == []:
             raise Exception('Empty y arrays! Use get_y '
                             'or evaluate to generate them first.')
-
-        self.n_y = [y.shape[1] for y in self.y]
+        elif isinstance(self.y, list):
+            self.n_y = [y.shape[1] for y in self.y]
+        else:
+            self.n_y = [self.y.shape[1]]
         return self.n_y
 
     def get_y_names(self):
@@ -121,7 +124,7 @@ class YModel(object):
         if self.y_names == []:
             self.get_y_names()
         
-        self.y_headers = ['\t'.join(y_names) for y_names in self.y_names]
+        self.y_headers = [{'y_names': y_names} for y_names in self.y_names]
         return self.y_headers
 
     def get_y(self, x, **kwargs):
@@ -520,6 +523,7 @@ class ClassSpectra(YModel):
 
         # Initialise spectra
         self.spectra = Spectra(outputs)
+        self.y_keys = self.spectra.names
 
         # Build parameter dictionary
         var = {nm: None for nm in self.x_names}

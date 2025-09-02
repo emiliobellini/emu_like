@@ -38,6 +38,8 @@ emulator:
     # calculated individually in each of these batches and then
     # the loss function takes care of combining each batch.
     batch_size: 32
+    # Number of epochs (int) before early stopping without improvements.
+    patience: 100
     # If False remove the output layer (bool, default: True).
     # Useful to reduce to linear regression case.
     want_output_layer: True
@@ -96,6 +98,9 @@ datasets:
   # - MinMaxScalerPlus1: min and max rescaled in the range [1, 2]
   # - ExpMinMaxScaler: apply exponential and then MinMaxScaler
   rescale_x: StandardScaler
-  rescale_y: MinMaxScalerPlus1
-
-
+  rescale_y: MinMaxPlus1Scaler
+  # Apply Principal Component Analysis (PCA) on x and/or y.
+  # num_i_pca (int or None) is the number of PCA modes that should be retained.
+  # If None PCA is not used.
+  num_x_pca: None
+  num_y_pca: None
