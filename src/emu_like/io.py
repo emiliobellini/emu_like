@@ -580,10 +580,13 @@ class YamlFile(object):
         - overwrite (bool, default: False): overwrite already existing file;
         - verbose (bool, default: False): verbosity.
         """
-
         # Define path
-        if root is None:
-            self.path = fname
+        if fname is None and root is None:
+            self.path = os.path.abspath(self.default_name)
+        elif root is None:
+            self.path = os.path.abspath(fname)
+        elif fname is None:
+            self.path = os.path.abspath(os.path.join(root, self.default_name))
         else:
             self.path = os.path.abspath(os.path.join(root, fname))
         # Check existence

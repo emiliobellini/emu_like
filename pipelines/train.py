@@ -39,6 +39,10 @@ def train_emu(args):
         if io.Folder(params['output']).is_empty():
             if args.verbose:
                 io.info("Writing output in {}".format(params['output']))
+            # Save params
+            params.write(
+                root=params['output'],
+                verbose=args.verbose)
         else:
             raise Exception(
                 'Output folder not empty! Exiting to avoid corruption of '
