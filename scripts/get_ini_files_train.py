@@ -1,3 +1,4 @@
+import numpy as np
 import os
 import yaml
 import emu_like.io as io
@@ -71,7 +72,10 @@ wait
 """
 
 template_yaml = {
-    'output': None,
+    'output': {
+        'path': None,
+        'timeout': None,
+    },
     'emulator': {
         'name': 'ffnn_emu',
         'args': {
@@ -118,10 +122,13 @@ if __name__ == '__main__':
     model = 'lcdm'
     learning_rate = 1.e-3
     num_x_pca = None
-    num_y_pca = 64
+    num_y_pca = None
+    timeout = 47
 
     n_samples_1000 = 100
     data_root = '/ceph/hpc/data/s25r06-05-users/'
+
+    time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
 
     ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/train/{}'.format(model)
     io.Folder(ini_folder).create()
@@ -136,10 +143,12 @@ if __name__ == '__main__':
             with open(os.path.join(ini_folder, 'run_'+file_name+'.sh'), 'w') as fn:
                 template_sh_local = template_sh.replace('TODO_NAME', full_name)
                 template_sh_local = template_sh_local.replace('TODO_PATH_YAML', os.path.join(ini_folder, file_name+'.yaml'))
+                template_sh_local = template_sh_local.replace('TODO_TIME', time_string)
                 fn.write(template_sh_local)
 
             # yaml
-            template_yaml['output'] = os.path.join(data_root, '{}/train/{}/'.format(model, spectrum))
+            template_yaml['output']['path'] = os.path.join(data_root, '{}/train/{}/'.format(model, spectrum))
+            template_yaml['output']['timeout'] = timeout
             template_yaml['emulator']['args']['learning_rate'] = learning_rate
             template_yaml['datasets']['name'] = spectrum
             template_yaml['datasets']['paths'] = [
