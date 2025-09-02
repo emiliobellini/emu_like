@@ -84,7 +84,9 @@ if __name__ == '__main__':
                     array = sp.get(cosmo, z=z)
                     if sp.ratio:
                         if sp.is_pk:
-                            array = array/ref[sp.name](cosmo_params['z_pk'])
+                            z_array = fits.get_data('z_array')
+                            den = interp.make_splrep(z_array, ref[sp.name].T, s=0)(cosmo_params['z_pk']).T
+                            array = array/den
                         elif sp.is_cl:
                             array = array/ref[sp.name]
                     new_y[idx][sp.name] = array
