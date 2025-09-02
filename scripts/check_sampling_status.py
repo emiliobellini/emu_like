@@ -52,39 +52,43 @@ if __name__ == '__main__':
     parser.add_argument('log_files', nargs='+')
     args = parser.parse_args()
 
-    str_out = '\x1b[1;32m[info]\x1b[00m Writing output in '
+    str_out = '\x1b[1;32m[info]\x1b[00m Resuming from '
+    str_save = '\x1b[1;32m[info]\x1b[00m Saving every '
 
     for log_file in args.log_files:
         if log_file.startswith('logs/e'):
             continue
+        else:
+            err_file = log_file.replace('logs/o', 'logs/e')
+
         # Locate output file
         head = get_head(log_file, lines=40)
         for line in head:
             if line.startswith(str_out):
-                output_folder = line.replace(str_out, '')
+                output_file = line.replace(str_out, '')[:-1]
+            elif line.startswith(str_save):
+                save_interval = line.replace(str_save, '')
+                save_interval = int(save_interval.replace(' steps', ''))
 
-        # Get last epoch
-        tail = get_tail(log_file, lines=1000)
-        for line in tail:
-            if re.match('Epoch [0-9]+/[0-9]+', line):
-                epochs = re.sub('Epoch ', '', line)
-                last_epoch, tot_epochs = epochs.split('/')
-                last_epoch = int(last_epoch)
-                tot_epochs = int(tot_epochs)
-        
-        # Get last improvement epoch
-        tail = get_tail(os.path.join(output_folder, 'history_log.cvs'), lines=1)[0]
-        best_epoch, loss, val_loss = tail.split(',')
-        best_epoch = int(best_epoch)
-        loss = float(loss)
-        val_loss = float(val_loss)
+        # Get samples this run
+        tail = get_tail(err_file, lines=1)[0]
+        tail = re.search(r'[0-9]+/[0-9]+', tail).group()
+        samples_this_run, remaining_this_run = [int(x) for x in tail.split('/')]
+
+        # Get saved samples
+        fits = io.FitsFile(output_file)
+        hd = fits.get_header(0)
+        sp_name = list(hd['y_model']['outputs'].keys())[0]
+        samples_saved = fits.get_data(sp_name).shape[0]
+        samples_tot = fits.get_data('x_data').shape[0]
 
         # Print stuff
-        io.info('Folder {}'.format(output_folder))
-        io.print_level(1, 'Total epochs: {}'.format(tot_epochs))
-        io.print_level(1, 'Last epoch: {}'.format(last_epoch))
-        io.print_level(1, 'Best epoch: {}'.format(best_epoch))
-        io.print_level(1, 'Epochs without improvement: {}'.format(last_epoch-best_epoch))
-        io.print_level(1, 'Loss: {}'.format(loss))
-        io.print_level(1, 'Validation Loss: {}'.format(val_loss))
+        samples_run = samples_tot-remaining_this_run+samples_this_run
+        io.info('Folder {}'.format(output_file))
+        io.print_level(1, 'Total samples: {}'.format(samples_tot))
+        io.print_level(1, 'Number of samples run: {}'.format(samples_run))
+        io.print_level(1, 'Number of samples saved: {}'.format(samples_saved))
+        io.print_level(1, 'Remaining samples to run: {}'.format(samples_tot-samples_run))
+        io.print_level(1, 'Remaining samples to save: {}'.format(samples_tot-samples_saved))
+        io.print_level(1, 'Remaining samples to next save: {}'.format(save_interval-samples_run+samples_saved))
         print()
