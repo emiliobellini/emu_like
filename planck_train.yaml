@@ -2,8 +2,12 @@
 # Usage:
 #   python main.py train planck_train.yaml -v
 
-# Output folder (str)
-output: output/planck/train
+output:
+  # Output fits file (str)
+  path: output/planck/train
+  # Maximum execution time (float, default: None) in hours
+  # after which the training will exit.
+  # timeout: 24
 
 
 # Emulator architecture.

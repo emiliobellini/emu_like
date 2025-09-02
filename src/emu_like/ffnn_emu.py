@@ -11,6 +11,7 @@ import numpy as np
 import os
 import tensorflow as tf
 from tensorflow import keras
+import time
 from . import io as io
 from .emu import Emulator
 from .pca import PCA
@@ -107,14 +108,16 @@ class FFNNEmu(Emulator):
 
         return params
 
-    def _callbacks(self, path=None, patience=100, verbose=False):
+    def _callbacks(self, path=None, patience=None, timeout=None, verbose=False):
         """
         Define and initialise callbacks.
         Arguments:
         - path (str, default: None): output path. If None, the callbacks
           that require saving some output will be ignored;
-        - patience (intm default: 100): number of epochs (int) before
+        - patience (intm default: None): number of epochs (int) before
           early stopping without improvements;
+        - timeout (float, default None): after this time (in hours)
+          stop the training;
         - verbose (bool, default: False): verbosity.
 
         Callbacks implemented:
@@ -124,9 +127,13 @@ class FFNNEmu(Emulator):
         - Early Stopping: stop earlier if loss of the validation
           dataset does not improve for a certain number of epochs.
         """
+        if verbose is True:
+            n_verbose = 1
+        else:
+            n_verbose = 0
 
         # Checkpoint
-        if path:
+        if path is not None:
             checkpoint_folder = io.Folder(path).subfolder(
                 self.checkpoint_folder).create(verbose=verbose)
             fname = os.path.join(
@@ -143,26 +150,36 @@ class FFNNEmu(Emulator):
                 save_weights_only=True)
 
         # Logfile
-        if path:
+        if path is not None:
             fname = os.path.join(path, self.log_fname)
             csv_logger = keras.callbacks.CSVLogger(fname, append=True)
 
         # Early Stopping
         # TODO: understand what should be passed by the user
-        early_stopping = keras.callbacks.EarlyStopping(
-            monitor="val_loss",
-            min_delta=0,
-            patience=patience,
-            verbose=1,
-            mode="auto",
-            baseline=None,
-            restore_best_weights=True,
-        )
+        if patience is not None:
+            early_stopping = keras.callbacks.EarlyStopping(
+                monitor="val_loss",
+                min_delta=0,
+                patience=patience,
+                verbose=n_verbose,
+                mode="auto",
+                baseline=None,
+                restore_best_weights=True,
+            )
 
-        if path:
-            callbacks = [csv_logger, early_stopping, checkpoint]
-        else:
-            callbacks = [early_stopping]
+        # Time Early Stopping
+        if timeout is not None:
+            time_early_stopping = TimeBasedEarlyStopping(
+                max_time_hours=timeout,
+                verbose=n_verbose)
+
+        # Build callbacks
+        if path is not None:
+            callbacks = [csv_logger, checkpoint]
+        if patience is not None:
+            callbacks.append(early_stopping)
+        if timeout is not None:
+            callbacks.append(time_early_stopping)
 
         return callbacks
 
@@ -437,7 +454,7 @@ class FFNNEmu(Emulator):
         return
 
     def train(self, data, epochs, learning_rate, patience=100,
-              path=None, get_plots=False, verbose=False):
+              path=None, timeout=None, get_plots=False, verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -455,6 +472,8 @@ class FFNNEmu(Emulator):
           early stopping without improvements;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
+        - timeout (float, default None): after this time (in hours)
+          stop the training;
         - get_plots (bool, default: False): get loss vs epoch plot;
         - verbose (bool, default: False): verbosity.
         """
@@ -480,7 +499,11 @@ class FFNNEmu(Emulator):
             learning_rate = learning_rate[-1]
 
         # Callbacks
-        callbacks = self._callbacks(path, patience=patience, verbose=verbose)
+        callbacks = self._callbacks(
+            path,
+            patience=patience,
+            timeout=timeout,
+            verbose=verbose)
 
         self.model.optimizer.learning_rate = learning_rate
 
@@ -567,3 +590,23 @@ class FFNNEmu(Emulator):
             y = self.y_scaler.inverse_transform(y_scaled)[0]
 
         return y
+
+
+class TimeBasedEarlyStopping(keras.callbacks.Callback):
+    def __init__(self, max_time_hours, verbose=False):
+        super().__init__()
+        self.max_time_hours = max_time_hours
+        self.start_time = None
+        self.verbose = verbose
+    
+    def on_train_begin(self, logs=None):
+        self.start_time = time.time()
+    
+    def on_epoch_end(self, epoch, logs=None):
+        current_time = time.time()
+        elapsed_time = current_time - self.start_time
+        
+        if elapsed_time > self.max_time_hours*60.*60.:
+            self.model.stop_training = True
+            if self.verbose:
+                print(f"\nEarly stopping: {elapsed_time:.2f}s > {self.max_time_hours*60.*60.}s")

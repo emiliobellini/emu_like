@@ -29,19 +29,19 @@ def train_emu(args):
     # If resume load parameters from output folder
     if args.resume:
         if args.verbose:
-            io.info('Resuming from {}.'.format(params['output']))
+            io.info('Resuming from {}.'.format(params['output']['path']))
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
         # Read params from output folder
-        params = io.YamlFile(root=params['output']).read()
+        params = io.YamlFile(root=params['output']['path']).read()
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
-        if io.Folder(params['output']).is_empty():
+        if io.Folder(params['output']['path']).is_empty():
             if args.verbose:
-                io.info("Writing output in {}".format(params['output']))
+                io.info("Writing output in {}".format(params['output']['path']))
             # Save params
             params.write(
-                root=params['output'],
+                root=params['output']['path'],
                 verbose=args.verbose)
         else:
             raise Exception(
@@ -139,7 +139,7 @@ def train_emu(args):
     # If resume
     if args.resume:
         # Load emulator
-        emu.load(params['output'], model_to_load='best', verbose=args.verbose)
+        emu.load(params['output']['path'], model_to_load='best', verbose=args.verbose)
     # Otherwise
     else:
         # Get dimensions of x and y for emulator
@@ -148,13 +148,22 @@ def train_emu(args):
         # Build architecture
         emu.build(params['emulator']['args'], verbose=args.verbose)
 
+    # Default output parameters
+    try:
+        timeout = params['output']['timeout']
+        if args.verbose:
+            io.info('Time limit for execution is {} hours'.format(timeout))
+    except KeyError:
+        timeout = None
+
     # Train the emulator
     emu.train(
         data,
         params['emulator']['args']['epochs'],
         params['emulator']['args']['learning_rate'],
         patience=params['emulator']['args']['patience'],
-        path=params['output'],
+        path=params['output']['path'],
+        timeout=timeout,
         get_plots=True,
         verbose=args.verbose)
 
