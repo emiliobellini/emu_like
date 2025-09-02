@@ -438,12 +438,12 @@ class FitsFile(object):
             print_level(1, 'Appended {} to {}'.format(name.upper(), os.path.relpath(self.path)))
         return
 
-    def update(self, name=None, data=None, header=None):
+    def update(self, name, data=None, header=None):
         """
         Update an HDU of a fits file. The HDU should already
         exists (otherwise use the .write method).
         Arguments:
-        - name (str, default: None): name of the HDU;
+        - name (str): name of the HDU;
         - data (array, default: None): data to be updated;
         - header (dict or fits.Header): header to be updated.
           If the input is a dictionary, it is manually
@@ -456,7 +456,8 @@ class FitsFile(object):
             header = self._delistify(header)
             header = fits.Header(header)
         with fits.open(self.path, mode='update') as hdul:
-            hdul[name].data = data
+            if data is not None:
+                hdul[name].data = data
             if header is not None:
                 hdul[name].header = header
         return

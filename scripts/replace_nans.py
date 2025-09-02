@@ -94,4 +94,6 @@ if __name__ == '__main__':
             for idx in idxs_nan:
                 data[sp.name][idx] = new_y[idx][sp.name]
 
-            fits.update(data[sp.name], sp.name)
+            fits.update(
+                name=sp.name,
+                data=data[sp.name])
