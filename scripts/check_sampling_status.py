@@ -85,7 +85,7 @@ if __name__ == '__main__':
         # Print stuff
         samples_run = samples_tot-remaining_this_run+samples_this_run
         io.info('Folder {}'.format(output_file))
-        io.print_level(1, 'Total samples: {}'.format(samples_tot))
+        # io.print_level(1, 'Total samples: {}'.format(samples_tot))
         io.print_level(1, 'Number of samples run: {}'.format(samples_run))
         io.print_level(1, 'Number of samples saved: {}'.format(samples_saved))
         io.print_level(1, 'Remaining samples to run: {}'.format(samples_tot-samples_run))

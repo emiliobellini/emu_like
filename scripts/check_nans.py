@@ -16,6 +16,7 @@ if __name__ == '__main__':
     folder = io.Folder(args.sample_folder)
 
     for fname in folder.list_files():
+        io.info('File {}'.format(fname))
         if '.fits' in fname:
 
             fits = io.FitsFile(fname)
@@ -31,4 +32,4 @@ if __name__ == '__main__':
             if is_nan:
                 io.warning('Found nans in {} ({})'.format(spectrum, fname))
             else:
-                io.info('No nans in {} ({})'.format(spectrum, fname))
+                io.print_level(1, 'No nans in {}'.format(spectrum))
