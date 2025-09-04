@@ -858,18 +858,10 @@ class ClassSpectra(YModel):
         y_test = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(y_test))
         ax[1, 0].plot(x, get_diff(emu, x_test, y_test).T*100., 'k-', alpha=0.1)
 
-        if data.x.shape[0] > max_data:
-            rng = np.random.default_rng()
-            mask = rng.choice(data.x.shape[0], size=max_data, replace=False)
-            x_all = data.x[mask]
-            y_all = data.y[mask]
-        else:
-            x_all = data.x
-            y_all = data.y
-        diff = get_diff(emu, x_all, y_all)
+        diff = get_diff(emu, data.x, data.y)
         idx_max = get_idx_max_diff(diff)
-        y_emu_max = get_y(emu, x_all)[idx_max]
-        ref_max = get_ref(emu, x_all, idx_max)
+        y_emu_max = get_y(emu, data.x)[idx_max]
+        ref_max = get_ref(emu, data.x, idx_max)
 
         # Worst fit, rel diff
         ax[2, 0].plot(x, diff[idx_max]*100., 'k-')
@@ -881,7 +873,7 @@ class ClassSpectra(YModel):
 
         # Worst fit, P
         ax[4, 0].plot(x, ref_max*y_emu_max)
-        ax[4, 0].plot(x, ref_max*y_all[idx_max], '--')
+        ax[4, 0].plot(x, ref_max*data.y[idx_max], '--')
 
         plt.subplots_adjust(bottom=0.15, hspace=0.05, wspace=0.15)
         if path:

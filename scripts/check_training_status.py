@@ -66,10 +66,10 @@ if __name__ == '__main__':
 
         # Load history
         # history = np.genfromtxt(
-        #     os.path.join(output_folder, 'history_log.cvs'),
+        #     os.path.join(output_folder, 'history_log.csv'),
         #     delimiter=',',
         #     skip_header=1)
-        with open(os.path.join(output_folder, 'history_log.cvs')) as csvfile:
+        with open(os.path.join(output_folder, 'history_log.csv')) as csvfile:
             history = np.array(list(csv.reader(csvfile, delimiter=',')))[1:].astype(float)
 
         # Last epoch
