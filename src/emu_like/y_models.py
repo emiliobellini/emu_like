@@ -158,11 +158,9 @@ class YModel(object):
         """
         return
 
-    def plot(self, emu, data, path=None):
+    def plot(self, emu, data, max_data=1e4, path=None):
         """
-        Placeholder for model specific plots. Arguments:
-        - emu (emu_like.FFNNEmu object)
-        - path (str, default:None): path where to save the plots.
+        Placeholder for model specific plots.
         """
         return
 
@@ -782,11 +780,12 @@ class ClassSpectra(YModel):
 
         return
 
-    def plot(self, emu, data, path=None):
+    def plot(self, emu, data, max_data=1e4, path=None):
         """
         Plot single spectrum. Arguments:
         - emu (emu_like.FFNNEmu object);
         - data (src.emu_like.datasets.Dataset object);
+        - max_data (float, default: 1e4): maximum number of samples to plot;
         - path (str, default:None): path where to save the plots.
         """
 
@@ -802,9 +801,9 @@ class ClassSpectra(YModel):
             idx = np.argmax(np.mean(diff**2., axis=1))
             return idx
 
-        def get_ref(emu, data, idx_max):
+        def get_ref(emu, x, idx_max):
             if emu.y_model.spectra[0].is_pk:
-                z = data.x[idx_max, 0]
+                z = x[idx_max, 0]
                 ref = interp.make_splrep(emu.y_model.z_array, emu.y_model.y_ref[0][0].T, s=0)(z)
             else:
                 ref = emu.y_model.y_ref[0][0]
@@ -834,19 +833,43 @@ class ClassSpectra(YModel):
             ax[-1, 0].set_yscale('linear')
 
         # Training set
-        x_train = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(data.x_train))
-        y_train = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(data.y_train))
+        if data.x_train.shape[0] > max_data:
+            rng = np.random.default_rng()
+            mask = rng.choice(data.x_train.shape[0], size=max_data, replace=False)
+            x_train = data.x_train[mask]
+            y_train = data.y_train[mask]
+        else:
+            x_train = data.x_train
+            y_train = data.y_train
+        x_train = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(x_train))
+        y_train = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(y_train))
         ax[0, 0].plot(x, get_diff(emu, x_train, y_train).T*100., 'k-', alpha=0.1)
 
         # Validation set
-        x_test = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(data.x_test))
-        y_test = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(data.y_test))
+        if data.x_test.shape[0] > max_data:
+            rng = np.random.default_rng()
+            mask = rng.choice(data.x_test.shape[0], size=max_data, replace=False)
+            x_test = data.x_test[mask]
+            y_test = data.y_test[mask]
+        else:
+            x_test = data.x_test
+            y_test = data.y_test
+        x_test = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(x_test))
+        y_test = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(y_test))
         ax[1, 0].plot(x, get_diff(emu, x_test, y_test).T*100., 'k-', alpha=0.1)
 
-        diff = get_diff(emu, data.x, data.y)
+        if data.x.shape[0] > max_data:
+            rng = np.random.default_rng()
+            mask = rng.choice(data.x.shape[0], size=max_data, replace=False)
+            x_all = data.x[mask]
+            y_all = data.y[mask]
+        else:
+            x_all = data.x
+            y_all = data.y
+        diff = get_diff(emu, x_all, y_all)
         idx_max = get_idx_max_diff(diff)
-        y_emu_max = get_y(emu, data.x)[idx_max]
-        ref_max = get_ref(emu, data, idx_max)
+        y_emu_max = get_y(emu, x_all)[idx_max]
+        ref_max = get_ref(emu, x_all, idx_max)
 
         # Worst fit, rel diff
         ax[2, 0].plot(x, diff[idx_max]*100., 'k-')
@@ -858,7 +881,7 @@ class ClassSpectra(YModel):
 
         # Worst fit, P
         ax[4, 0].plot(x, ref_max*y_emu_max)
-        ax[4, 0].plot(x, ref_max*data.y[idx_max], '--')
+        ax[4, 0].plot(x, ref_max*y_all[idx_max], '--')
 
         plt.subplots_adjust(bottom=0.15, hspace=0.05, wspace=0.15)
         if path:

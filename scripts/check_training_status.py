@@ -85,6 +85,6 @@ if __name__ == '__main__':
         io.print_level(1, 'Last epoch: {}'.format(last_epoch))
         io.print_level(1, 'Best epoch: {}'.format(best_epoch))
         io.print_level(1, 'Epochs without improvement: {}'.format(last_epoch-best_epoch))
-        io.print_level(1, 'Loss: {}'.format(loss))
-        io.print_level(1, 'Validation Loss: {}'.format(val_loss))
+        io.print_level(1, 'Loss: {:.2e}'.format(loss))
+        io.print_level(1, 'Validation Loss: {:.2e}'.format(val_loss))
         print()
