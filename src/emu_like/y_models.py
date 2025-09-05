@@ -835,7 +835,7 @@ class ClassSpectra(YModel):
         # Training set
         if data.x_train.shape[0] > max_data:
             rng = np.random.default_rng()
-            mask = rng.choice(data.x_train.shape[0], size=max_data, replace=False)
+            mask = rng.choice(data.x_train.shape[0], size=int(max_data), replace=False)
             x_train = data.x_train[mask]
             y_train = data.y_train[mask]
         else:
@@ -848,7 +848,7 @@ class ClassSpectra(YModel):
         # Validation set
         if data.x_test.shape[0] > max_data:
             rng = np.random.default_rng()
-            mask = rng.choice(data.x_test.shape[0], size=max_data, replace=False)
+            mask = rng.choice(data.x_test.shape[0], size=int(max_data), replace=False)
             x_test = data.x_test[mask]
             y_test = data.y_test[mask]
         else:
