@@ -434,7 +434,8 @@ class FFNNEmu(Emulator):
         for i in range(len(params['neurons_hidden'])):
             model.add(
                 keras.layers.Dense(params['neurons_hidden'][i],
-                                   activation=params['activation']))
+                                   activation=params['activation'],
+                                   kernel_initializer='he_normal'))
         if params['batch_normalization']:
             model.add(keras.layers.BatchNormalization())
         if params['dropout_rate'] > 0:

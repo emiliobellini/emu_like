@@ -54,6 +54,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     str_out = '\x1b[1;32m[info]\x1b[00m Writing output in '
+    str_res = '\x1b[1;32m[info]\x1b[00m Resuming from '
 
     for log_file in args.log_files:
         if log_file.startswith('logs/e'):
@@ -63,6 +64,8 @@ if __name__ == '__main__':
         for line in head:
             if line.startswith(str_out):
                 output_folder = line.replace(str_out, '')
+            if line.startswith(str_res):
+                output_folder = line.replace(str_res, '')
 
         # Load history
         # history = np.genfromtxt(
