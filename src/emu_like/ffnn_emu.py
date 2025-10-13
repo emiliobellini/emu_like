@@ -17,7 +17,6 @@ from .emu import Emulator
 from .pca import PCA
 from .scalers import Scaler
 from .y_models import YModel
-# TODO: something is not working here
 from . import loss_functions as lf  # noqa:F401
 
 
@@ -371,11 +370,18 @@ class FFNNEmu(Emulator):
 
         return
 
-    def build(self, params, verbose=False):
+    def build(self, params, data=None, verbose=False):
         """
         Build emulator architecture.
         Arguments:
         - params (dict, default: None): parameters for the emulator;
+        - data (src.emu_like.datasets.Dataset object): class
+          with the dataset (already loaded, rescaled and split
+          into training and testing samples). Some loss function needs
+          extra arguments that can be inferred from the data class.
+          E.g., when doing the pca it is possible to choose a loss
+          function that weights the different modes. For that we need
+          the pca transofrmation done;
         - verbose (bool, default: False): verbosity.
 
         The params dictionary should contain the following keys:
@@ -418,9 +424,12 @@ class FFNNEmu(Emulator):
             io.print_level(1, 'Optimizer: {}'.format(params['optimizer']))
             io.print_level(1, 'Loss function: {}'.format(params['loss']))
 
-        # Get loss function TODO
-        # loss = eval('lf.'+params['loss'])
-
+        # Get loss function
+        try:
+            loss_function = eval('lf.'+params['loss'])(data=data)
+        except AttributeError:
+            loss_function = params['loss']
+        
         model = tf.keras.Sequential()
         # Input layer
         model.add(
@@ -445,7 +454,7 @@ class FFNNEmu(Emulator):
             model.add(keras.layers.Dense(params['data_n_y'],
                                          activation=None))
 
-        model.compile(optimizer=params['optimizer'], loss=params['loss'])
+        model.compile(optimizer=params['optimizer'], loss=loss_function)
 
         self.model = model
 

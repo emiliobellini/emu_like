@@ -12,6 +12,20 @@ from tensorflow.python.keras import backend as keras_backend
 from tensorflow import keras
 
 
+def mean_squared_error_pca(**kwargs):
+    fac = kwargs['data'].y_pca.pca.singular_values_/kwargs['data'].y_pca.pca.singular_values_[0]
+    def loss(y_true, y_pred):
+        return keras_backend.mean(keras_backend.square((y_pred - y_true)*fac), axis=-1)
+    return loss
+
+def mean_squared_error(**kwargs):
+    import numpy as np
+    fac = kwargs['data'].y_pca.pca.singular_values_/kwargs['data'].y_pca.pca.singular_values_[0]
+    fac = fac*0. + 1.
+    def loss(y_true, y_pred):
+        return keras_backend.mean(keras_backend.square((y_pred - y_true)*fac), axis=-1)
+    return loss
+
 # @keras.saving.register_keras_serializable()
 # def max_absolute_error(y_true, y_pred):
 #     diff = keras_backend.abs(y_true - y_pred)

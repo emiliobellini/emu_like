@@ -146,7 +146,10 @@ def train_emu(args):
         params['emulator']['args']['data_n_x'] = data.x_train.shape[1]
         params['emulator']['args']['data_n_y'] = data.y_train.shape[1]
         # Build architecture
-        emu.build(params['emulator']['args'], verbose=args.verbose)
+        emu.build(
+            params['emulator']['args'],
+            data=data,
+            verbose=args.verbose)
 
     # Default output parameters
     try:
