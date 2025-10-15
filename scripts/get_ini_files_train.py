@@ -54,6 +54,8 @@ cd $SLURM_SUBMIT_DIR
 
 # ==== JOB COMMANDS ===== #
 
+module load Python/3.12.3-GCCcore-13.3.0
+module load libffi/3.4.5-GCCcore-13.3.0
 cd /ceph/hpc/home/bellinie
 source ./venv/bin/activate
 cd emu_like

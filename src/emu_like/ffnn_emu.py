@@ -12,6 +12,7 @@ import os
 import tensorflow as tf
 from tensorflow import keras
 import time
+from types import SimpleNamespace
 from . import io as io
 from .emu import Emulator
 from .pca import PCA
@@ -198,7 +199,32 @@ class FFNNEmu(Emulator):
         plt.close()
         return
 
-    def load(self, path, model_to_load='best', verbose=False):
+
+    def _stored_loss_name(self, path):
+        """Read the loss name stored in params.yaml, if available."""
+        params_file = io.YamlFile()
+        try:
+            params_file.read(fname='params.yaml', root=path)
+        except FileNotFoundError:
+            return None
+        content = params_file.content or {}
+        emulator_block = content.get('emulator', {}) or {}
+        args_block = emulator_block.get('args', {}) or {}
+        return args_block.get('loss')
+
+    def _build_custom_loss(self, loss_name, y_pca):
+        """Recreate a registered custom loss callable from disk assets."""
+        if not loss_name or not hasattr(lf, loss_name):
+            return None
+        if y_pca is None:
+            raise ValueError(
+                'Cannot rebuild custom loss `{}` without the stored PCA.'.format(loss_name)
+            )
+        loss_factory = getattr(lf, loss_name)
+        data_stub = SimpleNamespace(y_pca=y_pca)
+        return loss_factory(data=data_stub)
+
+    def load(self, path, model_to_load='best', still_training=True, verbose=False):
         """
         Load from path a model for the emulator.
         This can be used both for using the emulator
@@ -208,6 +234,10 @@ class FFNNEmu(Emulator):
         - model_to_load (str or int, default: best): which
           model shall I load? Options: 'best' or an
           integer number specifying the epoch to load;
+        - still_training (bool, default: True): passes this flag to the
+          keras.models.load_model option. If we want to use the model
+          to evaluate it, but we do not need to train it it does not import
+          the loss function;
         - verbose (bool, default: False): verbosity.
 
         NOTE: if model_to_load is an integer, make sure that the
@@ -219,13 +249,39 @@ class FFNNEmu(Emulator):
         if verbose:
             io.info('Loading FFNN architecture')
 
+        custom_objects = None
+        preloaded_y_pca = None
+        if still_training:
+            stored_loss = self._stored_loss_name(path)
+            if stored_loss and hasattr(lf, stored_loss):
+                y_pca_path = os.path.join(path, self.y_pca_fname)
+                if not os.path.isfile(y_pca_path):
+                    raise FileNotFoundError(
+                        'Expected PCA file at {} to rebuild custom loss `{}`'.format(
+                            y_pca_path, stored_loss)
+                    )
+                preloaded_y_pca = PCA.load(y_pca_path, verbose=verbose)
+                custom_loss = self._build_custom_loss(stored_loss, preloaded_y_pca)
+                if custom_loss is not None:
+                    custom_objects = {
+                        'loss': custom_loss,
+                        stored_loss: custom_loss,
+                        'function': custom_loss,
+                    }
+
         # Load last model
         if model_to_load == 'best':
             fname = os.path.join(path, self.model_fname)
-            self.model = keras.models.load_model(fname)
+            self.model = keras.models.load_model(
+                fname,
+                compile=still_training,
+                custom_objects=custom_objects)
         elif isinstance(model_to_load, int):
             fname = os.path.join(path, self.model_fname)
-            self.model = keras.models.load_model(fname)
+            self.model = keras.models.load_model(
+                fname,
+                compile=still_training,
+                custom_objects=custom_objects)
             epoch = {'epoch': model_to_load}
             fname = os.path.join(
                 path,
@@ -252,7 +308,10 @@ class FFNNEmu(Emulator):
         fname = os.path.join(path, self.x_pca_fname)
         self.x_pca = PCA.load(fname, verbose=verbose)
         fname = os.path.join(path, self.y_pca_fname)
-        self.y_pca = PCA.load(fname, verbose=verbose)
+        if preloaded_y_pca is not None:
+            self.y_pca = preloaded_y_pca
+        else:
+            self.y_pca = PCA.load(fname, verbose=verbose)
 
         # Init fits file
         fits = io.FitsFile(self.data_fname, root=path)
