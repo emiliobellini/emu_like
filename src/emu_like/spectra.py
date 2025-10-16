@@ -12,7 +12,17 @@ been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
 """
 
-import classy
+try:
+    import classy  # type: ignore
+except ImportError:  # classy is optional for dataset-based training
+    classy = None  # type: ignore
+
+    class ClassySevereError(Exception):
+        """Placeholder raised when CLASS errors are caught without classy installed."""
+        pass
+else:
+    ClassySevereError = classy.CosmoSevereError
+
 import numpy as np
 import scipy.interpolate as interp
 
@@ -609,7 +619,7 @@ class ColdBaryonPk(Pk):
         else:
             try:
                 pk = np.array([cosmo.pk_cb(k, z) for k in k_range])
-            except classy.CosmoSevereError:
+            except ClassySevereError:
                 pk = np.array([cosmo.pk(k, z) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.

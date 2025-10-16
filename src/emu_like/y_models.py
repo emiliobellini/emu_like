@@ -19,6 +19,11 @@ import numpy as np
 import os
 import scipy.interpolate as interp
 from . import io as io
+try:
+    import classy  # type: ignore
+except ImportError:  # classy is optional for dataset-based workflows
+    classy = None  # type: ignore
+
 from .spectra import Spectra
 from .x_samplers import XSampler
 
@@ -512,14 +517,7 @@ class ClassSpectra(YModel):
         YModel.__init__(self, name, params, n_samples, **kwargs)
         self.outputs = outputs
 
-        # Init classy
-        import classy
-        self.classy = classy
-        self.cosmo = classy.Class()
-        if verbose:
-            io.print_level(1, 'Loading classy from {}'.format(classy.__file__))
-
-        # Initialise spectra
+        # Initialise spectra metadata even if classy is unavailable.
         self.spectra = Spectra(outputs)
         self.y_keys = self.spectra.names
 
@@ -530,6 +528,29 @@ class ClassSpectra(YModel):
         # Fix known properties of the function
         self.n_y = self.get_n_y()
         self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+        self.y_names = self.get_y_names()
+        self.y_headers = self.get_y_headers()
+
+        # Default placeholders for reference spectra and sampling grids
+        n_specs = len(self.n_y)
+        self.y_ref = [np.ones((1, n_y)) for n_y in self.n_y]
+        self.k_ranges = [None] * n_specs
+        self.ell_ranges = [None] * n_specs
+        self.z_array = None
+
+        if classy is None:
+            if verbose:
+                io.info('classy not available; ClassSpectra running in read-only mode.')
+            self.classy = None
+            self.cosmo = None
+            return
+
+        # Init classy
+        self.classy = classy
+        self.cosmo = classy.Class()
+        if verbose:
+            io.print_level(1, 'Loading classy from {}'.format(classy.__file__))
+
 
         # Compute reference spectra (this is used to take the ratio if requested)
         # 1) Infer the maximum redshift
@@ -650,6 +671,9 @@ class ClassSpectra(YModel):
         - y: 1D array of output data (one sample).
 
         """
+
+        if self.classy is None or self.cosmo is None:
+            raise RuntimeError('classy is required to evaluate ClassSpectra outputs.')
 
         # Update parameter dictionary
         for npar, par in enumerate(self.x_names):
