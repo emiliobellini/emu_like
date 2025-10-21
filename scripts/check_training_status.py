@@ -79,7 +79,7 @@ if __name__ == '__main__':
         last_epoch = int(history[-1, 0])
 
         # Best epoch
-        idx_best = np.where(history[:, 2] == np.min(history[:, 2]))[0][0]
+        idx_best = np.where(history[:, 1] == np.min(history[:, 1]))[0][0]
         best_epoch, loss, val_loss = history[idx_best]
         best_epoch = int(best_epoch)
 

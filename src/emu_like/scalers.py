@@ -251,7 +251,7 @@ class MinMaxCommonScaler(Scaler):
         elif self.global_min == self.global_max:
             x_scaled = x/self.global_max
         else:
-            x_scaled = (x + self.global_min)/(self.global_max - self.global_min)
+            x_scaled = (x - self.global_min)/(self.global_max - self.global_min)
         return x_scaled
 
     def inverse_transform(self, x_scaled):
@@ -260,7 +260,7 @@ class MinMaxCommonScaler(Scaler):
         elif self.global_min == self.global_max:
             x = x_scaled * self.global_max
         else:
-            x = x_scaled * (self.global_max - self.global_min) - self.global_min
+            x = x_scaled * (self.global_max - self.global_min) + self.global_min
         return x
 
 
