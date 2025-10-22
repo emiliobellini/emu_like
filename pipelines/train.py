@@ -169,6 +169,7 @@ def train_emu(args):
         patience=params['emulator']['args']['patience'],
         path=params['output']['path'],
         timeout=timeout,
+        reduce_learning_rate=params['emulator']['args']['reduce_learning_rate'],
         get_plots=True,
         verbose=args.verbose)
 

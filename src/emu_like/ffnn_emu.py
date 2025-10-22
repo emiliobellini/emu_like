@@ -21,6 +21,24 @@ from .y_models import YModel
 from . import loss_functions as lf  # noqa:F401
 
 
+class LearningRateLogger(keras.callbacks.Callback):
+    """Attach the current optimizer learning rate to epoch logs."""
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        lr = self.model.optimizer.learning_rate
+        if isinstance(lr, keras.optimizers.schedules.LearningRateSchedule):
+            lr = lr(self.model.optimizer.iterations)
+        try:
+            value = tf.keras.backend.get_value(lr)
+        except Exception:
+            value = lr
+        try:
+            logs['learning_rate'] = float(value)
+        except (TypeError, ValueError):
+            logs['learning_rate'] = value
+
+
 class FFNNEmu(Emulator):
     """
     Feed Forward Neural Network emulator.
@@ -108,14 +126,15 @@ class FFNNEmu(Emulator):
 
         return params
 
-    def _callbacks(self, path=None, patience=None, timeout=None, verbose=False):
+    def _callbacks(self, path=None, patience=None, timeout=None, reduce_learning_rate=True, verbose=False):
         """
         Define and initialise callbacks.
         Arguments:
         - path (str, default: None): output path. If None, the callbacks
           that require saving some output will be ignored;
-        - patience (intm default: None): number of epochs (int) before
+        - patience (int, default: None): number of epochs (int) before
           early stopping without improvements;
+        - reduce_learning_rate (bool, default: True): reduce learning rate on plateau;
         - timeout (float, default None): after this time (in hours)
           stop the training;
         - verbose (bool, default: False): verbosity.
@@ -131,6 +150,8 @@ class FFNNEmu(Emulator):
             n_verbose = 1
         else:
             n_verbose = 0
+
+        callbacks = [LearningRateLogger()]
 
         # Checkpoint
         if path is not None:
@@ -149,10 +170,16 @@ class FFNNEmu(Emulator):
                 save_freq='epoch',
                 save_weights_only=True)
 
-        # Logfile
-        if path is not None:
+            # Logfile
             fname = os.path.join(path, self.log_fname)
             csv_logger = keras.callbacks.CSVLogger(fname, append=True)
+
+        if reduce_learning_rate:
+            reduce_on_plateau = keras.callbacks.ReduceLROnPlateau(
+                monitor='val_loss',
+                factor=0.5,
+                patience=max(1, patience // 2),
+                verbose=verbose)
 
         # Early Stopping
         # TODO: understand what should be passed by the user
@@ -175,7 +202,9 @@ class FFNNEmu(Emulator):
 
         # Build callbacks
         if path is not None:
-            callbacks = [csv_logger, checkpoint]
+            callbacks.extend([csv_logger, checkpoint])
+        if reduce_learning_rate:
+            callbacks.append(reduce_on_plateau)
         if patience is not None:
             callbacks.append(early_stopping)
         if timeout is not None:
@@ -523,7 +552,7 @@ class FFNNEmu(Emulator):
         return
 
     def train(self, data, epochs, learning_rate, patience=100,
-              path=None, timeout=None, get_plots=False, verbose=False):
+              path=None, timeout=None, reduce_learning_rate=True, get_plots=False, verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -543,6 +572,7 @@ class FFNNEmu(Emulator):
           the emulator will not be saved;
         - timeout (float, default None): after this time (in hours)
           stop the training;
+        - reduce_learning_rate (bool, default: True): reduce learning rate on plateau;
         - get_plots (bool, default: False): get loss vs epoch plot;
         - verbose (bool, default: False): verbosity.
         """
@@ -572,6 +602,7 @@ class FFNNEmu(Emulator):
             path,
             patience=patience,
             timeout=timeout,
+            reduce_learning_rate=reduce_learning_rate,
             verbose=verbose)
 
         self.model.optimizer.learning_rate = learning_rate

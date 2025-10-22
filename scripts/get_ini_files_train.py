@@ -92,6 +92,7 @@ template_yaml = {
             'patience': 10000,
             'want_output_layer': True,
             'learning_rate': None,
+            'reduce_learning_rate': None,
         },
     },
     'datasets': {
@@ -123,6 +124,7 @@ if __name__ == '__main__':
     # Settings
     model = 'lcdm'
     learning_rate = 1.e-3
+    reduce_learning_rate = True
     num_x_pca = None
     num_y_pca = None
     timeout = 47
@@ -152,6 +154,7 @@ if __name__ == '__main__':
             template_yaml['output']['path'] = os.path.join(data_root, '{}/train/{}/'.format(model, spectrum))
             template_yaml['output']['timeout'] = timeout
             template_yaml['emulator']['args']['learning_rate'] = learning_rate
+            template_yaml['emulator']['args']['reduce_learning_rate'] = reduce_learning_rate
             template_yaml['datasets']['name'] = spectrum
             template_yaml['datasets']['paths'] = [
                 os.path.join(data_root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum_type, n_samples_1000, x))

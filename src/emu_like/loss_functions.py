@@ -27,18 +27,18 @@ def mean_squared_error(**kwargs):
     return loss
 
 
+# def mean_squared_error_pca(**kwargs):
+#     fac = kwargs['data'].y_pca.pca.singular_values_/kwargs['data'].y_pca.pca.singular_values_[0]
+#     @register_keras_serializable(package='emu_like', name='mean_squared_error_pca')
+#     def loss(y_true, y_pred):
+#         return keras_backend.mean(keras_backend.square((y_pred - y_true)*fac), axis=-1)
+#     return loss
+
+
 def mean_squared_error_pca(**kwargs):
     fac = kwargs['data'].y_pca.pca.singular_values_/kwargs['data'].y_pca.pca.singular_values_[0]
-    @register_keras_serializable(package='emu_like', name='mean_squared_error_pca')
-    def loss(y_true, y_pred):
-        return keras_backend.mean(keras_backend.square((y_pred - y_true)*fac), axis=-1)
-    return loss
-
-
-def mean_squared_error_pca_2(**kwargs):
-    fac = kwargs['data'].y_pca.pca.singular_values_/kwargs['data'].y_pca.pca.singular_values_[0]
     fac = np.maximum(fac, 0.2)
-    @register_keras_serializable(package='emu_like', name='mean_squared_error_pca_2')
+    @register_keras_serializable(package='emu_like', name='mean_squared_error_pca')
     def loss(y_true, y_pred):
         return keras_backend.mean(fac * keras_backend.square(y_pred - y_true), axis=-1)
     return loss
