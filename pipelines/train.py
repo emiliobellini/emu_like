@@ -55,12 +55,6 @@ def train_emu(args):
         params['emulator']['name'],
         verbose=args.verbose)
 
-    # Update parameters with input
-    params = emu.update_params(
-        params,
-        epochs=args.additional_epochs,
-        learning_rate=args.learning_rate)
-
     # Test datasets input paths
     has_paths = params['datasets']['paths'] is not None
     if has_paths:
@@ -161,11 +155,29 @@ def train_emu(args):
     except KeyError:
         timeout = None
 
+    # Update number of epochs to run
+    if args.resume and args.additional_epochs < 0:
+        epochs = max(params['emulator']['args']['epochs'] - emu.epochs[-1], 0)
+    elif args.resume and args.additional_epochs > 0:
+        epochs = args.additional_epochs
+    elif args.additional_epochs < 0:
+        epochs = params['emulator']['args']['epochs']
+    else:
+        epochs = params['emulator']['args']['epochs'] + args.additional_epochs
+
+    # Update initial learning rate
+    if args.resume and args.learning_rate < 0:
+        learning_rate = emu.learning_rate[-1]
+    elif args.learning_rate > 0:
+        learning_rate = args.learning_rate
+    else:
+        learning_rate = params['emulator']['args']['epochs']
+
     # Train the emulator
     emu.train(
         data,
-        params['emulator']['args']['epochs'],
-        params['emulator']['args']['learning_rate'],
+        epochs,
+        learning_rate,
         patience=params['emulator']['args']['patience'],
         path=params['output']['path'],
         timeout=timeout,

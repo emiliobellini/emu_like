@@ -71,6 +71,7 @@ class FFNNEmu(Emulator):
         self.y_names = None
         self.x_ranges = None
         self.epochs = []  # List of the epochs run
+        self.learning_rate = []  # List of learning_rates per epoch
         self.loss = []  # List of the losses per epoch
         self.val_loss = []  # List of the validation losses per epoch
         # Defaults
@@ -84,47 +85,6 @@ class FFNNEmu(Emulator):
         self.log_fname = 'history_log.csv'
         self.data_fname = 'data.fits'
         return
-
-    @staticmethod
-    def update_params(params, epochs=None, learning_rate=None):
-        """
-        Update the parameters of the emulator.
-        In particular, it updates the learning rate
-        and the number of epochs to run.
-        Arguments:
-        - params (src.emu_like.io.YamlFile class):
-          the params class that should be updated;
-        - epochs (int, default: None): epochs that
-          should be run;
-        - learning rate (float): learning rate to be
-          used.
-        """
-        # Local variables
-        old_epochs = params['emulator']['args']['epochs']
-        old_learning_rate = params['emulator']['args']['learning_rate']
-        change_epochs = False
-        change_learning_rate = False
-
-        # Convert to list (this is useful when resuming to append new settings)
-        if isinstance(old_epochs, int):
-            old_epochs = [old_epochs]
-        if isinstance(old_learning_rate, float):
-            old_learning_rate = [old_learning_rate]
-
-        # Decide if we have to change them
-        if epochs > 0:
-            change_epochs = True
-        if learning_rate and learning_rate != old_learning_rate[-1]:
-            change_learning_rate = True
-
-        # Do the change
-        if change_epochs or change_learning_rate:
-            old_epochs.append(epochs)
-            old_learning_rate.append(learning_rate)
-        params['emulator']['args']['epochs'] = old_epochs
-        params['emulator']['args']['learning_rate'] = old_learning_rate
-
-        return params
 
     def _callbacks(self, path=None, patience=None, timeout=None, reduce_learning_rate=True, verbose=False):
         """
@@ -358,8 +318,9 @@ class FFNNEmu(Emulator):
             fname = os.path.join(path, self.log_fname)
             history = np.genfromtxt(fname, delimiter=',', skip_header=1)
             self.epochs = [int(x) for x in history[:, 0]]
-            self.loss = list(history[:, 1])
-            self.val_loss = list(history[:, 2])
+            self.learning_rate = list(history[:, 1])
+            self.loss = list(history[:, 2])
+            self.val_loss = list(history[:, 3])
         except FileNotFoundError:
             pass
 
@@ -552,7 +513,8 @@ class FFNNEmu(Emulator):
         return
 
     def train(self, data, epochs, learning_rate, patience=100,
-              path=None, timeout=None, reduce_learning_rate=True, get_plots=False, verbose=False):
+              path=None, timeout=None, reduce_learning_rate=True, get_plots=False,
+              verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -560,12 +522,8 @@ class FFNNEmu(Emulator):
           with the dataset (already loaded, rescaled and split
           into training and testing samples) that should be
           used to train the emulator;
-        - epochs (int or list of ints): epochs to run. If it is
-          a list of ints, the last element will be used. List is
-          used to keep record of resume;
-        - learning_rate (float or list of floats): learning
-          rate. If it is a list of floats, the last element
-          will be used. List is used to keep record of resume;
+        - epochs (int): epochs to run;
+        - learning_rate (float): learning rate;
         - patience (intm default: 100): number of epochs (int) before
           early stopping without improvements;
         - path (str, default: None): output path. If None,
@@ -577,11 +535,7 @@ class FFNNEmu(Emulator):
         - verbose (bool, default: False): verbosity.
         """
 
-        # Create output folder
-        if path is not None:
-            io.Folder(path).create(verbose)
-    
-         # Store dataset details as attributes
+        # Store dataset details as attributes
         self.x_scaler = data.x_scaler
         self.y_scaler = data.y_scaler
         self.x_pca = data.x_pca
@@ -590,12 +544,6 @@ class FFNNEmu(Emulator):
         self.y_names = data.y_names
         self.x_ranges = data.x_ranges
         self.y_model = data.y_model
-
-        # Take the last element of the list and use this
-        if isinstance(epochs, list):
-            epochs = epochs[-1]
-        if isinstance(learning_rate, list):
-            learning_rate = learning_rate[-1]
 
         # Callbacks
         callbacks = self._callbacks(
@@ -626,6 +574,7 @@ class FFNNEmu(Emulator):
 
         # Update history
         self.epochs = self.epochs + self.model.history.epoch
+        self.learning_rate = self.learning_rate + self.model.history.history['learning_rate']
         self.loss = self.loss + self.model.history.history['loss']
         self.val_loss = self.val_loss + self.model.history.history['val_loss']
 

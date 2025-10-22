@@ -72,12 +72,12 @@ def argument_parser():
     train_parser.add_argument(
         '--additional_epochs', '-e',
         type=int,
-        default=0,
+        default=-1,
         help='Number of additional epochs (int)')
     train_parser.add_argument(
         '--learning_rate', '-lr',
         type=float,
-        default=1.e-3,
+        default=-1.,
         help='New learning rate (float)')
 
     # MCMC arguments
