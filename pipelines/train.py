@@ -171,7 +171,7 @@ def train_emu(args):
     elif args.learning_rate > 0:
         learning_rate = args.learning_rate
     else:
-        learning_rate = params['emulator']['args']['epochs']
+        learning_rate = params['emulator']['args']['learning_rate']
 
     # Train the emulator
     emu.train(
