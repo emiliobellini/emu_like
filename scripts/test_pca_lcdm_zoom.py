@@ -28,12 +28,12 @@ SPECTRUM_CONFIGS = [
     ('fk_m', 'pk', 540, 600),
     ('fk_cb', 'pk', 540, 600),
     ('fk_weyl', 'pk', 540, 600),
-    ('cl_TT_lensed', 'cl', 300, 400),
-    ('cl_TE_lensed', 'cl', 300, 400),
-    ('cl_EE_lensed', 'cl', 300, 400),
-    ('cl_BB_lensed', 'cl', 300, 400),
-    ('cl_pp_lensed', 'cl', 300, 400),
-    ('cl_Tp_lensed', 'cl', 300, 400),
+    ('cl_TT_lensed', 'cl', 260, 360),
+    ('cl_TE_lensed', 'cl', 260, 360),
+    ('cl_EE_lensed', 'cl', 260, 360),
+    ('cl_BB_lensed', 'cl', 260, 360),
+    ('cl_pp_lensed', 'cl', 260, 360),
+    ('cl_Tp_lensed', 'cl', 200, 300),
 ]
 
 
