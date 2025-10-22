@@ -9,6 +9,7 @@
 import emu_like.io as io
 from emu_like.datasets import DataCollection
 
+
 def sample_emu(args):
     """ Generate the dataset for the emulator.
 

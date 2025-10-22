@@ -20,7 +20,7 @@ def export_emu(args):
 
 
     """
-    
+
     input = io.Folder(args.input)
     output = io.Folder(args.output)
     output.create()
@@ -29,7 +29,7 @@ def export_emu(args):
         raise Exception(
             'Output folder not empty! Exiting to avoid corruption of '
             'precious data!')
-    
+
     # Load emulators
     if args.verbose:
         io.info('Exporting emulators:')
@@ -65,5 +65,5 @@ def export_emu(args):
 
         if args.verbose:
             io.print_level(1, 'Saved {} emulator'.format(name))
-    
+
     return

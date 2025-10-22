@@ -38,7 +38,8 @@ def train_emu(args):
         # Check if output folder is empty, otherwise stop
         if io.Folder(params['output']['path']).is_empty():
             if args.verbose:
-                io.info("Writing output in {}".format(params['output']['path']))
+                io.info("Writing output in {}".format(
+                    params['output']['path']))
             # Save params
             params.write(
                 root=params['output']['path'],
@@ -80,7 +81,7 @@ def train_emu(args):
             columns_x=params['datasets']['columns_x'],
             columns_y=params['datasets']['columns_y'],
             verbose=False)
-        for path in params['datasets']['paths']]
+            for path in params['datasets']['paths']]
     # 2) unique text files for x and y
     elif has_paths:
         data = [Dataset().load_external(
@@ -129,7 +130,7 @@ def train_emu(args):
         params['datasets']['rescale_x'],
         params['datasets']['rescale_y'],
         verbose=args.verbose)
-    
+
     # If requested apply PCA on x and/or y
     data.apply_pca(
         params['datasets']['num_x_pca'],
@@ -139,7 +140,8 @@ def train_emu(args):
     # If resume
     if args.resume:
         # Load emulator
-        emu.load(params['output']['path'], model_to_load='best', verbose=args.verbose)
+        emu.load(params['output']['path'], model_to_load='best',
+                 verbose=args.verbose)
     # Otherwise
     else:
         # Get dimensions of x and y for emulator
