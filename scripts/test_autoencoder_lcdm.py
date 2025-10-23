@@ -210,7 +210,7 @@ np.random.seed(0)
 tf.random.set_seed(0)
 
 
-def scale(y, y_train, y_test, scaler_name='MinMaxCommonScaler'):
+def scale(y, y_train, y_test, scaler_name='LogStandardScaler'):
     """Scale the provided splits with a scaler fitted on the training data.
 
     Args:
