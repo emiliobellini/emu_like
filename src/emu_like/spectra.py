@@ -6,7 +6,7 @@
 
 : Description: this module provides a list of classes for each
 spectrum that can be computed. It uses classy to get the spectra,
-the syntax and conventions are equivalent to those in Class. 
+the syntax and conventions are equivalent to those in Class.
 Here we are assuming that a classy.Class() object has already
 been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
@@ -18,7 +18,10 @@ except ImportError:  # classy is optional for dataset-based training
     classy = None  # type: ignore
 
     class ClassySevereError(Exception):
-        """Placeholder raised when CLASS errors are caught without classy installed."""
+        """
+        Placeholder raised when CLASS errors
+        are caught without classy installed.
+        """
         pass
 else:
     ClassySevereError = classy.CosmoSevereError
@@ -46,10 +49,11 @@ class Spectra(object):
         """
         # Init classy
         if isinstance(dict_or_list, dict):
-            self.list = [Spectrum.choose_one(sp, dict_or_list[sp]) for sp in dict_or_list]
+            self.list = [Spectrum.choose_one(sp, dict_or_list[sp])
+                         for sp in dict_or_list]
         elif isinstance(dict_or_list, list):
             self.list = dict_or_list
-        
+
         # List of names of the spectra
         self.names = self.get_names()
         return
@@ -312,7 +316,7 @@ class Pk(Spectrum):
         # Get array of pk
         pk_array, k_array, z_array = cosmo.get_pk_and_k_and_z(
             nonlinear=nonlinear,
-            only_clustering_species = only_cb,
+            only_clustering_species=only_cb,
             h_units=False)
 
         # Flip z_array (for the interpolation it has to be increasing)
@@ -503,7 +507,8 @@ class GrowthRate(Pk):
             pk = pk_array
             # Compute derivative (d ln P / d ln z)
             dpkdz = interp.make_splrep(
-                self.pk.z_array, pk_array.T, s=0).derivative()(self.pk.z_array).T
+                self.pk.z_array, pk_array.T, s=0).derivative()(
+                    self.pk.z_array).T
             # Compute growth factor f
             fk = -0.5 * (1+self.pk.z_array) * dpkdz/pk
             # Store the z_array
@@ -517,22 +522,28 @@ class GrowthRate(Pk):
             if True:
                 dpkdz = interp.make_splrep(
                     self.pk.z_array, pk_array.T, s=0).derivative()(z)
-            # Here we keep also the manual derivative because the growth rate is noisy
-            # and we may want to check it is less noisy with this (for now they are equivalent)
+            # Here we keep also the derivative I implemented because the
+            # growth rate is noisy and we may want to check it is less noisy
+            # with this (for now they are equivalent)
             else:
                 z_step = 0.1
                 if z - z_step >= 0.:
-                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    pk_m1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z-z_step)
+                    pk_p1 = interp.make_splrep(
+                        self.pk.z_array, pk_array.T, s=0)(z+z_step)
+                    pk_m1 = interp.make_splrep(
+                        self.pk.z_array, pk_array.T, s=0)(z-z_step)
                     dpkdz = (pk_p1-pk_m1)/(2.*z_step)
                 elif z - z_step/10 >= 0.:
                     z_step = z
-                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    pk_m1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z-z_step)
+                    pk_p1 = interp.make_splrep(
+                        self.pk.z_array, pk_array.T, s=0)(z+z_step)
+                    pk_m1 = interp.make_splrep(
+                        self.pk.z_array, pk_array.T, s=0)(z-z_step)
                     dpkdz = (pk_p1-pk_m1)/(2.*z_step)
                 else:
-                    z_step /=10
-                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
+                    z_step /= 10
+                    pk_p1 = interp.make_splrep(
+                        self.pk.z_array, pk_array.T, s=0)(z+z_step)
                     dpkdz = (pk_p1-pk)/z_step
             # Compute growth factor f
             fk = -0.5 * (1+z) * dpkdz/pk
@@ -631,7 +642,7 @@ class WeylPk(Pk):
     """
     Weyl power spectrum.
     As in Class, we use the convention:
-    
+
     Weyl_pk = matter_pk * ((phi+psi)/2./d_m)**2 * k**4
 
     The k**4 factor is just a convention. Since there is a factor
@@ -777,7 +788,7 @@ class CellTT(Cell):
     """
     TT power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -808,7 +819,7 @@ class CellEE(Cell):
     """
     EE power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -965,7 +976,7 @@ class CellTTLensed(Cell):
     """
     TT lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -996,7 +1007,7 @@ class CellEELensed(Cell):
     """
     EE lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1027,7 +1038,7 @@ class CellTELensed(Cell):
     """
     TE lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1058,7 +1069,7 @@ class CellBBLensed(Cell):
     """
     BB lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1089,7 +1100,7 @@ class CellppLensed(Cell):
     """
     Tp lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1120,7 +1131,7 @@ class CellTpLensed(Cell):
     """
     Tp lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """

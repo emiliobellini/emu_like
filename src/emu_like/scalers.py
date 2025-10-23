@@ -64,7 +64,7 @@ class Scaler(object):
             - Scaler (object): get the correct
               scaler and initialize it.
         """
-        if scaler_type == 'None' or scaler_type == None:
+        if scaler_type == 'None' or scaler_type is None:
             return NoneScaler(scaler_type)
         elif scaler_type == 'StandardScaler':
             return StandardScaler(scaler_type)
@@ -273,28 +273,28 @@ class MinMaxCommonScaler(Scaler):
             x_to_fit = self._replace_inf(x)
         else:
             x_to_fit = x
-        self.global_min = np.min(x_to_fit)
-        self.global_max = np.max(x_to_fit)
+        self.glob_min = np.min(x_to_fit)
+        self.glob_max = np.max(x_to_fit)
         return
 
     def transform(self, x, replace_infinity=True):
         if replace_infinity:
             x = self._replace_inf(x)
-        if self.global_min == 0. and self.global_max == 0.:
+        if self.glob_min == 0. and self.glob_max == 0.:
             x_scaled = x
-        elif self.global_min == self.global_max:
-            x_scaled = x/self.global_max
+        elif self.glob_min == self.glob_max:
+            x_scaled = x/self.glob_max
         else:
-            x_scaled = (x - self.global_min)/(self.global_max - self.global_min)
+            x_scaled = (x - self.glob_min)/(self.glob_max - self.glob_min)
         return x_scaled
 
     def inverse_transform(self, x_scaled):
-        if self.global_min == 0. and self.global_max == 0.:
+        if self.glob_min == 0. and self.glob_max == 0.:
             x = x_scaled
-        elif self.global_min == self.global_max:
-            x = x_scaled * self.global_max
+        elif self.glob_min == self.glob_max:
+            x = x_scaled * self.glob_max
         else:
-            x = x_scaled * (self.global_max - self.global_min) + self.global_min
+            x = x_scaled * (self.glob_max - self.glob_min) + self.glob_min
         return x
 
 

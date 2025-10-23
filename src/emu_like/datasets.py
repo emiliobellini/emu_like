@@ -89,7 +89,7 @@ class Dataset(object):
         # Labels
         self.x_names = x_names  # List of names of x data
         self.y_names = y_names  # List of names of y data
-        self.x_key = None # Name of the x image in fits file
+        self.x_key = None  # Name of the x image in fits file
 
         # y_model
         self.y_model = y_model
@@ -311,17 +311,20 @@ class Dataset(object):
         self.x_key = x_sampler.x_key
 
         if self.settings is None:
-            self.x_ranges = [[m, M] for m, M in zip(self.x.min(axis=0), self.x.max(axis=0))]
+            self.x_ranges = [[m, M] for m, M in zip(
+                self.x.min(axis=0), self.x.max(axis=0))]
         else:
             self.x_ranges = [[
                 self.settings['params'][name]['prior']['min'],
-                self.settings['params'][name]['prior']['max']] for name in self.x_names]
+                self.settings['params'][name]['prior']['max']]
+                for name in self.x_names]
 
         # Init y_model
         if name is None:
             dataset_settings = None
         else:
-            dataset_settings = {name: self.settings['y_model']['outputs'][name]}
+            dataset_settings = {
+                name: self.settings['y_model']['outputs'][name]}
         y_model = YModel.choose_one(
             self.settings['y_model']['name'],
             self.settings['params'],
@@ -329,7 +332,7 @@ class Dataset(object):
             self.n_samples,
             **self.settings['y_model']['args'],
             verbose=False)
-        
+
         # Load y_model
         y_model.load(
             self.path,
@@ -420,7 +423,7 @@ class Dataset(object):
                             'Dataset could not be loaded!')
 
         # Load data
-        self.x  = self._load_array(path_x)
+        self.x = self._load_array(path_x)
         self.y = self._load_array(path_y)
 
         # Get shapes
@@ -428,8 +431,10 @@ class Dataset(object):
         _, self.n_y = self.y.shape
 
         # Try to infer the names
-        self.x_names = Dataset._try_to_load_names_array(path_x, n_names=self.n_y)
-        self.y_names = Dataset._try_to_load_names_array(path_y, n_names=self.n_y)
+        self.x_names = Dataset._try_to_load_names_array(
+            path_x, n_names=self.n_y)
+        self.y_names = Dataset._try_to_load_names_array(
+            path_y, n_names=self.n_y)
 
         # Slice data
         self.slice(columns_x, columns_y, verbose=verbose)
@@ -474,7 +479,7 @@ class Dataset(object):
         else:
             raise ValueError('Datasets can not be joined as they have '
                              'different number of x variables')
-        
+
         # n_y
         if all(s.n_y == datasets[0].n_y for s in datasets):
             data.n_y = datasets[0].n_y
@@ -507,13 +512,15 @@ class Dataset(object):
         for nname, _ in enumerate(data.x_names):
             data.x_ranges.append(
                 [min([dat.x_ranges[nname][0] for dat in datasets]),
-                max([dat.x_ranges[nname][1] for dat in datasets])]
+                 max([dat.x_ranges[nname][1] for dat in datasets])]
             )
 
         # Adjust params
         for var in datasets[0].y_model.params:
-            mins = [dat.y_model.params[var]['prior']['min'] for dat in datasets]
-            maxs = [dat.y_model.params[var]['prior']['max'] for dat in datasets]
+            mins = [dat.y_model.params[var]['prior']['min']
+                    for dat in datasets]
+            maxs = [dat.y_model.params[var]['prior']['max']
+                    for dat in datasets]
             data.y_model.params[var]['prior']['min'] = min(mins)
             data.y_model.params[var]['prior']['max'] = max(maxs)
 
@@ -618,9 +625,11 @@ class Dataset(object):
 
         if verbose:
             if num_x_pca is not None:
-                io.info('Applying PCA on x. Number of modes retained {}.'.format(num_x_pca))
+                io.info('Applying PCA on x. Number of modes retained {}.'
+                        ''.format(num_x_pca))
             if num_y_pca is not None:
-                io.info('Applying PCA on y. Number of modes retained {}.'.format(num_y_pca))
+                io.info('Applying PCA on y. Number of modes retained {}.'
+                        ''.format(num_y_pca))
 
         # PCA x
         self.x_pca = pca.PCA(n_components=num_x_pca)
@@ -687,8 +696,8 @@ class DataCollection(object):
         self.x_names = None  # List of names of x data
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
-        self.x_key = None # Name of the x image in fits file
-        self.y_keys = [] # Name of the y images in fits file
+        self.x_key = None  # Name of the x image in fits file
+        self.y_keys = []  # Name of the y images in fits file
 
         # Paths
         self.path = None  # Path of the dataset
@@ -810,7 +819,7 @@ class DataCollection(object):
                 header=hd_ys[idx],
                 verbose=verbose,
             )
-        
+
         # Save y_model
         if y_model is None:
             y_model = self.y_model
@@ -841,7 +850,7 @@ class DataCollection(object):
 
         if verbose:
             io.info('Loading data collection.')
-        
+
         # Init fits file
         fits = io.FitsFile(path)
 
@@ -876,7 +885,7 @@ class DataCollection(object):
             self.n_samples,
             **self.settings['y_model']['args'],
             verbose=False)
-        
+
         # Load y_model
         y_model.load(
             self.path,
@@ -950,7 +959,8 @@ class DataCollection(object):
         - y_outputs (dict, default: None): dictionary dealing
           with multiple y outputs for a single x (see class_spectra);
         - output (str, default: None): if None nothing is saved;
-        - timeout (float, default None): after this time (in hours) stop the loop;
+        - timeout (float, default None): after timeout (in hours) stop
+          sampling;
         - save_interval (int, default=None): save every n steps. If None, it
           saves only at the end;
         - debug (bool, default=False): if True print additional messages;
@@ -965,9 +975,9 @@ class DataCollection(object):
             fits = io.FitsFile(self.path)
             if fits.exists:
                 raise Exception(
-                    'Output file exists! Exiting to avoid corruption of precious '
-                    'data! If you want to resume a previous run use the '
-                    '--resume (-r) option.')
+                    'Output file exists! Exiting to avoid corruption of '
+                    'precious data! If you want to resume a previous run use '
+                    'the --resume (-r) option.')
             elif verbose:
                 io.info('Generating dataset.')
                 io.print_level(1, 'Writing output in {}'.format(output))
@@ -1052,7 +1062,8 @@ class DataCollection(object):
                 io.print_level(0, 'Starting loop number {}'.format(nx))
             y_one_line = y_model.evaluate(x, nx)
             if debug:
-                io.print_level(1, 'Class executed in {:.2f} seconds'.format(time.time()-start_time_part))
+                io.print_level(1, 'Class executed in {:.2f} seconds'.format(
+                    time.time()-start_time_part))
             self.counter_samples += 1
 
             if any([np.isnan(yy).any() for yy in y_one_line]):
@@ -1064,9 +1075,11 @@ class DataCollection(object):
             if data_part is None:
                 data_part = y_one_line
             else:
-                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(data_part, y_one_line)]
+                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(
+                    data_part, y_one_line)]
             if debug:
-                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(time.time()-start_time_part))
+                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(
+                    time.time()-start_time_part))
 
             # Save array
             if save_it and isinstance(save_interval, int):
@@ -1089,7 +1102,8 @@ class DataCollection(object):
                             )
                     data_part = None
                     if debug:
-                        io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
+                        io.print_level(1, 'Saved arrays in {:.2f} seconds'
+                                       ''.format(time.time()-start_time_part))
 
             # Break in case
             if timeout is not None:
@@ -1097,8 +1111,9 @@ class DataCollection(object):
                     print('Reached maximum time!')
                     break
             if debug:
-                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(time.time()-start_time_loop))
-        
+                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(
+                    time.time()-start_time_loop))
+
         # Final save in case
         if save_it and data_part is not None:
             if debug:
@@ -1118,7 +1133,8 @@ class DataCollection(object):
                         header=self.y_headers[nname]
                     )
             if debug:
-                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
+                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(
+                    time.time()-start_time_part))
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -1138,7 +1154,8 @@ class DataCollection(object):
         before resuming). Many settings are already loaded.
         Arguments:
         - path (str): path pointing to the folder containing the dataset;
-        - timeout (float, default None): after this time (in hours) stop the loop;
+        - timeout (float, default None): after timeout (in hours) stop
+          sampling;
         - save_interval (int, default=None): save every n steps. If None, it
           saves only at the end;
         - debug (bool, default=False): if True print additional messages;
@@ -1176,7 +1193,8 @@ class DataCollection(object):
                 io.print_level(0, 'Starting loop number {}'.format(nx))
             y_one_line = self.y_model.evaluate(x, start + nx)
             if debug:
-                io.print_level(1, 'Class executed in {:.2f} seconds'.format(time.time()-start_time_part))
+                io.print_level(1, 'Class executed in {:.2f} seconds'.format(
+                    time.time()-start_time_part))
             self.counter_samples += 1
 
             if any([np.isnan(yy).any() for yy in y_one_line]):
@@ -1188,9 +1206,11 @@ class DataCollection(object):
             if data_part is None:
                 data_part = y_one_line
             else:
-                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(data_part, y_one_line)]
+                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(
+                    data_part, y_one_line)]
             if debug:
-                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(time.time()-start_time_part))
+                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(
+                    time.time()-start_time_part))
 
             # Save array
             if isinstance(save_interval, int):
@@ -1199,7 +1219,8 @@ class DataCollection(object):
                         start_time_part = time.time()
                     fits = io.FitsFile(fname=path)
                     data = [fits.get_data(name) for name in self.y_keys]
-                    data = [np.vstack([x1, x2]) for x1, x2 in zip(data, data_part)]
+                    data = [np.vstack([x1, x2]) for x1, x2 in zip(
+                        data, data_part)]
                     for nname, name in enumerate(self.y_keys):
                         fits.update(
                             name=name,
@@ -1207,7 +1228,8 @@ class DataCollection(object):
                         )
                     data_part = None
                     if debug:
-                        io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
+                        io.print_level(1, 'Saved arrays in {:.2f} seconds'
+                                       ''.format(time.time()-start_time_part))
 
             # Break in case
             if timeout is not None:
@@ -1215,8 +1237,9 @@ class DataCollection(object):
                     print('Reached maximum time!')
                     break
             if debug:
-                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(time.time()-start_time_loop))
-        
+                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(
+                    time.time()-start_time_loop))
+
         # Final save in case
         if data_part is not None:
             if debug:
@@ -1230,7 +1253,7 @@ class DataCollection(object):
                     data=data[nname],
                 )
             if debug:
-                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(time.time()-start_time_part))
+                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(
+                    time.time()-start_time_part))
 
         return
-

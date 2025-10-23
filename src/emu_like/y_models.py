@@ -56,16 +56,11 @@ class YModel(object):
         if item is None or item == 0:
             return self
         else:
-            raise TypeError('Base YModel object is not subscriptable. Implement your own rules!')
+            raise TypeError('Base YModel object is not subscriptable.'
+                            'Implement your own rules!')
 
     @staticmethod
-    def choose_one(
-        name,
-        params,
-        outputs,
-        n_samples,
-        verbose=False,
-        **kwargs):
+    def choose_one(name, params, outputs, n_samples, verbose=False, **kwargs):
         """
         Main function to get the correct model for y.
 
@@ -83,17 +78,23 @@ class YModel(object):
           the correct sampling function and initialize it.
         """
         if name == 'linear_1d':
-            return Linear1D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Linear1D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'quadratic_1d':
-            return Quadratic1D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Quadratic1D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'gaussian_1d':
-            return Gaussian1D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Gaussian1D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'linear_2d':
-            return Linear2D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Linear2D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'quadratic_2d':
-            return Quadratic2D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Quadratic2D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'cobaya_loglike':
-            return CobayaLoglike(name, params, n_samples, verbose=verbose, **kwargs)
+            return CobayaLoglike(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'class_spectra':
             return ClassSpectra(
                 name, params, n_samples, outputs, verbose=verbose, **kwargs)
@@ -128,7 +129,7 @@ class YModel(object):
         """
         if self.y_names == []:
             self.get_y_names()
-        
+
         self.y_headers = [{'y_names': y_names} for y_names in self.y_names]
         return self.y_headers
 
@@ -168,6 +169,7 @@ class YModel(object):
         Placeholder for model specific plots.
         """
         return
+
 
 # 1D functions
 
@@ -396,7 +398,7 @@ class CobayaLoglike(YModel):
 
         # Init Cobaya
         import cobaya
-        
+
         # Cobaya parameters
         self.cobaya_params = {'params': params} | kwargs
 
@@ -471,7 +473,8 @@ class ClassSpectra(YModel):
             verbose=False,
             **kwargs):
 
-        # Cosmo (Planck 2018 bestfit, Table 1 of https://arxiv.org/pdf/1807.06209)
+        # Cosmo (Planck 2018 bestfit,
+        # Table 1 of https://arxiv.org/pdf/1807.06209)
         self.ref_params = {
             'h': 0.6732,
             'Omega_m': 0.3158,
@@ -501,7 +504,7 @@ class ClassSpectra(YModel):
         }
 
         # Decide wether to fully initialize (it calls Class to
-        # compute the reference spectra, which takes some time) or not.        
+        # compute the reference spectra, which takes some time) or not.
         skip_init = False
         if params is None or n_samples is None or outputs is None:
             skip_init = True
@@ -540,7 +543,8 @@ class ClassSpectra(YModel):
 
         if classy is None:
             if verbose:
-                io.info('classy not available; ClassSpectra running in read-only mode.')
+                io.info('classy not available; ClassSpectra running in '
+                        'read-only mode.')
             self.classy = None
             self.cosmo = None
             return
@@ -551,8 +555,7 @@ class ClassSpectra(YModel):
         if verbose:
             io.print_level(1, 'Loading classy from {}'.format(classy.__file__))
 
-
-        # Compute reference spectra (this is used to take the ratio if requested)
+        # Compute reference spectra (used to take the ratio if requested)
         # 1) Infer the maximum redshift
         if any([sp.is_pk for sp in self.spectra]):
             z_max = {'z_max_pk': self._get_z_max()}
@@ -564,7 +567,8 @@ class ClassSpectra(YModel):
         cosmo_ref.set(self.ref_params)
         cosmo_ref.compute()
         # 3) Compute all the spectra
-        self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]
+        self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis]
+                      for sp in self.spectra]
         # 4) Replace with ones if we do not take ratio
         for nsp, sp in enumerate(self.spectra):
             if not sp.ratio:
@@ -590,11 +594,11 @@ class ClassSpectra(YModel):
     def __getitem__(self, item):
         if item is None:
             return self
-        
+
         # Get correct name and index for spectrum
         name = self.spectra[item].name
         idx = self.spectra._get_idx_from_name(name)
-        
+
         oneclassspectrum = ClassSpectra()
         # Fix relevant attributes
         oneclassspectrum.name = self.name
@@ -673,7 +677,8 @@ class ClassSpectra(YModel):
         """
 
         if self.classy is None or self.cosmo is None:
-            raise RuntimeError('classy is required to evaluate ClassSpectra outputs.')
+            raise RuntimeError(
+                'classy is required to evaluate ClassSpectra outputs.')
 
         # Update parameter dictionary
         for npar, par in enumerate(self.x_names):
@@ -709,7 +714,8 @@ class ClassSpectra(YModel):
             if sp.ratio:
                 # Get y_ref at the correct z
                 if sp.is_pk:
-                    den = interp.make_splrep(self.z_array, self.y_ref[nsp].T, s=0)(z).T
+                    den = interp.make_splrep(
+                        self.z_array, self.y_ref[nsp].T, s=0)(z).T
                 else:
                     den = self.y_ref[nsp]
                 y[nsp] = y[nsp]/den
@@ -732,7 +738,6 @@ class ClassSpectra(YModel):
             io.info('Saving reference spectra to {}'.format(path))
 
         fits = io.FitsFile(path)
-
 
         is_pk = False
         for nsp, sp in enumerate(self.spectra):
@@ -757,7 +762,7 @@ class ClassSpectra(YModel):
                     data=self.ell_ranges[nsp],
                     header=None,
                 )
-        
+
         if is_pk:
             # Write z_array
             fits.write(
@@ -765,7 +770,7 @@ class ClassSpectra(YModel):
                 data=self.z_array,
                 header=None,
             )
-        
+
         return
 
     def load(self, fname, root=None, verbose=False):
@@ -790,14 +795,16 @@ class ClassSpectra(YModel):
             self.y_ref.append(fits.get_data('ref_{}'.format(sp.name)))
             if sp.is_pk:
                 # Read k_range
-                self.k_ranges.append(fits.get_data('k_range_{}'.format(sp.name)))
+                self.k_ranges.append(
+                    fits.get_data('k_range_{}'.format(sp.name)))
                 self.ell_ranges.append(None)
                 is_pk = True
             elif sp.is_cl:
                 # Read ell_range
                 self.k_ranges.append(None)
-                self.ell_ranges.append(fits.get_data('ell_range_{}'.format(sp.name)))
-        
+                self.ell_ranges.append(
+                    fits.get_data('ell_range_{}'.format(sp.name)))
+
         if is_pk:
             # read z_array
             self.z_array = fits.get_data('z_array')
@@ -818,7 +825,7 @@ class ClassSpectra(YModel):
 
         def get_diff(emu, x, y):
             y_emu = get_y(emu, x)
-            diff =  y_emu/y-1
+            diff = y_emu/y-1
             return diff
 
         def get_idx_max_diff(diff):
@@ -828,7 +835,8 @@ class ClassSpectra(YModel):
         def get_ref(emu, x, idx_max):
             if emu.y_model.spectra[0].is_pk:
                 z = x[idx_max, 0]
-                ref = interp.make_splrep(emu.y_model.z_array, emu.y_model.y_ref[0][0].T, s=0)(z)
+                ref = interp.make_splrep(
+                    emu.y_model.z_array, emu.y_model.y_ref[0][0].T, s=0)(z)
             else:
                 ref = emu.y_model.y_ref[0][0]
             return ref
@@ -836,12 +844,14 @@ class ClassSpectra(YModel):
         # Spectrum name
         spectrum = self.spectra.names[0]
 
-        fig, ax = plt.subplots(nrows=5, ncols=1, figsize=(6., 20.), sharex=True, squeeze=False)
+        fig, ax = plt.subplots(
+            nrows=5, ncols=1, figsize=(6., 20.), sharex=True, squeeze=False)
 
         ax[0, 0].set_ylabel('rel. diff. [%] -- Training set')
         ax[1, 0].set_ylabel('rel. diff. [%] -- Validation set')
         ax[2, 0].set_ylabel('rel. diff. [%] -- Worst fit')
-        ax[3, 0].set_ylabel('{}/{}(ref) -- Worst fit'.format(spectrum, spectrum))
+        ax[3, 0].set_ylabel('{}/{}(ref) -- Worst fit'.format(
+            spectrum, spectrum))
         ax[4, 0].set_ylabel('{} -- Worst fit'.format(spectrum))
 
         # x variable
@@ -859,27 +869,34 @@ class ClassSpectra(YModel):
         # Training set
         if data.x_train.shape[0] > max_data:
             rng = np.random.default_rng()
-            mask = rng.choice(data.x_train.shape[0], size=int(max_data), replace=False)
+            mask = rng.choice(
+                data.x_train.shape[0], size=int(max_data), replace=False)
             x_train = data.x_train[mask]
             y_train = data.y_train[mask]
         else:
             x_train = data.x_train
             y_train = data.y_train
-        x_train = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(x_train))
-        y_train = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(y_train))
-        ax[0, 0].plot(x, get_diff(emu, x_train, y_train).T*100., 'k-', alpha=0.1)
+        x_train = emu.x_scaler.inverse_transform(
+            emu.x_pca.inverse_transform(x_train))
+        y_train = emu.y_scaler.inverse_transform(
+            emu.y_pca.inverse_transform(y_train))
+        ax[0, 0].plot(x, get_diff(
+            emu, x_train, y_train).T*100., 'k-', alpha=0.1)
 
         # Validation set
         if data.x_test.shape[0] > max_data:
             rng = np.random.default_rng()
-            mask = rng.choice(data.x_test.shape[0], size=int(max_data), replace=False)
+            mask = rng.choice(
+                data.x_test.shape[0], size=int(max_data), replace=False)
             x_test = data.x_test[mask]
             y_test = data.y_test[mask]
         else:
             x_test = data.x_test
             y_test = data.y_test
-        x_test = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(x_test))
-        y_test = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(y_test))
+        x_test = emu.x_scaler.inverse_transform(
+            emu.x_pca.inverse_transform(x_test))
+        y_test = emu.y_scaler.inverse_transform(
+            emu.y_pca.inverse_transform(y_test))
         ax[1, 0].plot(x, get_diff(emu, x_test, y_test).T*100., 'k-', alpha=0.1)
 
         diff = get_diff(emu, data.x, data.y)

@@ -301,38 +301,45 @@ class FitsFile(object):
 
     def _flatten_dict(self, nested_dict, delimiter='__'):
         split_dict = {}
-        flat_dict = self._flatten_dict_recursive(nested_dict, delimiter=delimiter)
-        # In astropy, keys can not be longer than 8 characters. We then create a flat
-        # dict where both keys and values are values. This dictionary will have keys
-        # starting with two delimiters for the keys of the previous step dictionary,
-        # and keys starting with one delimiter for the values of the previous dictionary.
-        # To fix the correspondence each key ends with a different integer,
+        flat_dict = self._flatten_dict_recursive(
+            nested_dict, delimiter=delimiter)
+        # In astropy, keys can not be longer than 8 characters. We then create
+        # a flat dict where both keys and values are values. This dictionary
+        # will have keys starting with two delimiters for the keys of the
+        # previous step dictionary, and keys starting with one delimiter for
+        # the values of the previous dictionary. To fix the correspondence each
+        # key ends with a different integer,
         for nkey, (key, val) in enumerate(flat_dict.items()):
             split_dict['{}{}{}'.format(delimiter, delimiter, nkey)] = key
             split_dict['{}{}'.format(delimiter, nkey)] = val
         return split_dict
 
-    def _flatten_dict_recursive(self, nested_dict, parent_key='', delimiter='__'):
+    def _flatten_dict_recursive(
+            self, nested_dict, parent_key='', delimiter='__'):
         """Flatten a nested dictionary, preserving key order."""
         items = []
         for key, value in nested_dict.items():
             new_key = f"{parent_key}{delimiter}{key}" if parent_key else key
             if isinstance(value, dict):
-                items.extend(self._flatten_dict_recursive(value, new_key, delimiter).items())
+                items.extend(self._flatten_dict_recursive(
+                    value, new_key, delimiter).items())
             else:
                 items.append((new_key, value))
         return OrderedDict(items)
 
     def _unflatten_dict(self, flat_dict, delimiter='__'):
         current_dict = {}
-        # We first fix the correspondence between keys and values to get a list of
-        # flattened keys and values (si discussion in _flatten_dict above).
+        # We first fix the correspondence between keys and values to get a list
+        # of flattened keys and values (si discussion in _flatten_dict above).
         for key_flat in flat_dict.keys():
             if key_flat.startswith('{}{}'.format(delimiter, delimiter)):
                 key = flat_dict[key_flat]
                 val = flat_dict[key_flat[len(delimiter):]]
                 current_dict[key] = val
-        """Reconstruct a nested dictionary from flattened keys, preserving order."""
+        """
+        Reconstruct a nested dictionary from flattened keys,
+        preserving order.
+        """
         result = OrderedDict()
         for key, value in current_dict.items():
             parts = key.split(delimiter)
@@ -389,7 +396,8 @@ class FitsFile(object):
                     if isinstance(val2, str):
                         current_dict[key][nval2] = self._floatify(val2)
                     elif isinstance(val2, list):
-                        current_dict[key][nval2] = [self._floatify(x) for x in val2]
+                        current_dict[key][nval2] = [self._floatify(x)
+                                                    for x in val2]
                     else:
                         current_dict[key][nval2] = val2
         return current_dict
@@ -435,7 +443,8 @@ class FitsFile(object):
             with fits.open(self.path, mode='append') as hdul:
                 hdul.append(fits.ImageHDU(data, name=name, header=header))
         if verbose:
-            print_level(1, 'Appended {} to {}'.format(name.upper(), os.path.relpath(self.path)))
+            print_level(1, 'Appended {} to {}'.format(
+                name.upper(), os.path.relpath(self.path)))
         return
 
     def update(self, name, data=None, header=None):
@@ -564,14 +573,16 @@ class YamlFile(object):
 
         if not self.exists:
             raise FileNotFoundError(
-                'The file you want to read ({}) does not exists!'.format(self.path))
+                'The file you want to read ({}) does not exists!'.format(
+                    self.path))
 
         with open(self.path) as file:
             self.content = yaml.safe_load(file)
-        
+
         return self
 
-    def write(self, fname=None, root=None, header=None, overwrite=False, verbose=False):
+    def write(self, fname=None, root=None, header=None, overwrite=False,
+              verbose=False):
         """
         Save parameter to path, with the header if specified.
         Arguments:
@@ -595,7 +606,8 @@ class YamlFile(object):
 
         if self.exists and not overwrite:
             raise FileNotFoundError(
-                'The file you want to read ({}) already exists!'.format(self.path))
+                'The file you want to read ({}) already exists!'.format(
+                    self.path))
 
         if header is None:
             header = self.default_header
@@ -613,7 +625,6 @@ class YamlFile(object):
         if verbose:
             print_level(1, 'Saved parameters at: {}'.format(self.path))
         return
-
 
 
 # ------------------- Scripts ------------------------------------------------#

@@ -86,7 +86,8 @@ class FFNNEmu(Emulator):
         self.data_fname = 'data.fits'
         return
 
-    def _callbacks(self, path=None, patience=None, timeout=None, reduce_learning_rate=True, verbose=False):
+    def _callbacks(self, path=None, patience=None, timeout=None,
+                   reduce_learning_rate=True, verbose=False):
         """
         Define and initialise callbacks.
         Arguments:
@@ -94,7 +95,8 @@ class FFNNEmu(Emulator):
           that require saving some output will be ignored;
         - patience (int, default: None): number of epochs (int) before
           early stopping without improvements;
-        - reduce_learning_rate (bool, default: True): reduce learning rate on plateau;
+        - reduce_learning_rate (bool, default: True): reduce learning rate on
+          plateau;
         - timeout (float, default None): after this time (in hours)
           stop the training;
         - verbose (bool, default: False): verbosity.
@@ -188,7 +190,6 @@ class FFNNEmu(Emulator):
         plt.close()
         return
 
-
     def _stored_loss_name(self, path):
         """Read the loss name stored in params.yaml, if available."""
         params_file = io.YamlFile()
@@ -207,13 +208,15 @@ class FFNNEmu(Emulator):
             return None
         if y_pca is None:
             raise ValueError(
-                'Cannot rebuild custom loss `{}` without the stored PCA.'.format(loss_name)
+                'Cannot rebuild custom loss `{}` without the stored PCA.'
+                ''.format(loss_name)
             )
         loss_factory = getattr(lf, loss_name)
         data_stub = SimpleNamespace(y_pca=y_pca)
         return loss_factory(data=data_stub)
 
-    def load(self, path, model_to_load='best', still_training=True, verbose=False):
+    def load(self, path, model_to_load='best', still_training=True,
+             verbose=False):
         """
         Load from path a model for the emulator.
         This can be used both for using the emulator
@@ -246,11 +249,12 @@ class FFNNEmu(Emulator):
                 y_pca_path = os.path.join(path, self.y_pca_fname)
                 if not os.path.isfile(y_pca_path):
                     raise FileNotFoundError(
-                        'Expected PCA file at {} to rebuild custom loss `{}`'.format(
-                            y_pca_path, stored_loss)
+                        'Expected PCA file at {} to rebuild custom loss `{}`'
+                        ''.format(y_pca_path, stored_loss)
                     )
                 preloaded_y_pca = PCA.load(y_pca_path, verbose=verbose)
-                custom_loss = self._build_custom_loss(stored_loss, preloaded_y_pca)
+                custom_loss = self._build_custom_loss(
+                    stored_loss, preloaded_y_pca)
                 if custom_loss is not None:
                     custom_objects = {
                         'loss': custom_loss,
@@ -350,7 +354,6 @@ class FFNNEmu(Emulator):
 
         # Create main folder
         io.Folder(path).create(verbose=verbose)
-
 
         # Save scalers
         try:
@@ -478,7 +481,7 @@ class FFNNEmu(Emulator):
             loss_function = eval('lf.'+params['loss'])(data=data)
         except AttributeError:
             loss_function = params['loss']
-        
+
         model = tf.keras.Sequential()
         # Input layer
         model.add(
@@ -513,8 +516,8 @@ class FFNNEmu(Emulator):
         return
 
     def train(self, data, epochs, learning_rate, patience=100,
-              path=None, timeout=None, reduce_learning_rate=True, get_plots=False,
-              verbose=False):
+              path=None, timeout=None, reduce_learning_rate=True,
+              get_plots=False, verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -530,7 +533,8 @@ class FFNNEmu(Emulator):
           the emulator will not be saved;
         - timeout (float, default None): after this time (in hours)
           stop the training;
-        - reduce_learning_rate (bool, default: True): reduce learning rate on plateau;
+        - reduce_learning_rate (bool, default: True): reduce learning rate on
+          plateau;
         - get_plots (bool, default: False): get loss vs epoch plot;
         - verbose (bool, default: False): verbosity.
         """
@@ -574,7 +578,8 @@ class FFNNEmu(Emulator):
 
         # Update history
         self.epochs = self.epochs + self.model.history.epoch
-        self.learning_rate = self.learning_rate + self.model.history.history['learning_rate']
+        self.learning_rate =\
+            self.learning_rate + self.model.history.history['learning_rate']
         self.loss = self.loss + self.model.history.history['loss']
         self.val_loss = self.val_loss + self.model.history.history['val_loss']
 
@@ -647,15 +652,16 @@ class TimeBasedEarlyStopping(keras.callbacks.Callback):
         self.max_time_hours = max_time_hours
         self.start_time = None
         self.verbose = verbose
-    
+
     def on_train_begin(self, logs=None):
         self.start_time = time.time()
-    
+
     def on_epoch_end(self, epoch, logs=None):
         current_time = time.time()
         elapsed_time = current_time - self.start_time
-        
+
         if elapsed_time > self.max_time_hours*60.*60.:
             self.model.stop_training = True
             if self.verbose:
-                print(f"\nEarly stopping: {elapsed_time:.2f}s > {self.max_time_hours*60.*60.}s")
+                print(f'\nEarly stopping: {elapsed_time:.2f}s'
+                      ' > {self.max_time_hours*60.*60.}s')
