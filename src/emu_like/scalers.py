@@ -199,7 +199,7 @@ class LogStandardScaler(Scaler):
     by removing the mean and scaling to unit variance.
     """
 
-    def __init__(self, name='StandardScaler'):
+    def __init__(self, name='LogStandardScaler'):
         Scaler.__init__(self, name)
         self.skl_scaler = skl_pre.StandardScaler()
         return

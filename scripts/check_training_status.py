@@ -4,6 +4,7 @@ import numpy as np
 import os
 import emu_like.io as io
 
+
 def get_head(fname, lines=1):
     """
     Imitates the bash head command
@@ -22,6 +23,7 @@ def get_head(fname, lines=1):
         line_list = list(f.readlines(total_bytes_scanned))
         line_list = [x.rstrip() for x in line_list[:lines]]
     return line_list
+
 
 def get_tail(fname, lines=1):
     """
@@ -73,14 +75,15 @@ if __name__ == '__main__':
         #     delimiter=',',
         #     skip_header=1)
         with open(os.path.join(output_folder, 'history_log.csv')) as csvfile:
-            history = np.array(list(csv.reader(csvfile, delimiter=',')))[1:].astype(float)
+            history = np.array(
+                list(csv.reader(csvfile, delimiter=',')))[1:].astype(float)
 
         # Last epoch
         last_epoch = int(history[-1, 0])
         last_learning_rate = history[-1, 1]
 
         # Best epoch
-        idx_best = np.where(history[:, 1] == np.min(history[:, 1]))[0][0]
+        idx_best = np.where(history[:, 3] == np.min(history[:, 3]))[0][0]
         best_epoch, learning_rate, loss, val_loss = history[idx_best]
         best_epoch = int(best_epoch)
 
@@ -88,8 +91,10 @@ if __name__ == '__main__':
         io.info('Folder {}'.format(output_folder))
         io.print_level(1, 'Last epoch: {}'.format(last_epoch))
         io.print_level(1, 'Best epoch: {}'.format(best_epoch))
-        io.print_level(1, 'Epochs without improvement: {}'.format(last_epoch-best_epoch))
-        io.print_level(1, 'Learning rate: {:.2e} (best), {:.2e} (last)'.format(learning_rate, last_learning_rate))
+        io.print_level(1, 'Epochs without improvement: {}'.format(
+            last_epoch-best_epoch))
+        io.print_level(1, 'Learning rate: {:.2e} (best), {:.2e} (last)'.format(
+            learning_rate, last_learning_rate))
         io.print_level(1, 'Loss: {:.2e}'.format(loss))
         io.print_level(1, 'Validation Loss: {:.2e}'.format(val_loss))
         print()

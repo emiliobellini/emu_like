@@ -9,6 +9,7 @@
 import argparse
 import os
 import re
+import time
 import yaml
 from astropy.io import fits
 from collections import OrderedDict
@@ -628,6 +629,26 @@ class YamlFile(object):
 
 
 # ------------------- Scripts ------------------------------------------------#
+
+def timeit(func):
+    def wrapper_function(*args, **kwargs):
+        try:
+            dotimeit = kwargs['timeit']
+        except KeyError:
+            dotimeit = False
+        try:
+            verbose = kwargs['verbose']
+        except KeyError:
+            verbose = True
+        if verbose and dotimeit:
+            start = time.time()
+        result = func(*args,  **kwargs)
+        if verbose and dotimeit:
+            print_level(1, '{} executed in {} seconds'.format(
+                func, time.time()-start))
+        return result
+    return wrapper_function
+
 
 def write_red(msg):
     return '\033[1;31m{}\033[00m'.format(msg)
