@@ -210,14 +210,15 @@ def diff(
     ]:
         rel = safe_relative_error(pred, ref)
         abs_diff = np.abs(pred - ref)
+
         diffs[key] = {
             "rel": {
-                "mean": np.mean(rel, axis=0),
-                "max": np.max(rel, axis=0),
+                "mean": float(np.mean(rel)),
+                "max": float(np.max(rel)),
             },
             "abs": {
-                "mean": np.mean(abs_diff, axis=0),
-                "max": np.max(abs_diff, axis=0),
+                "mean": float(np.mean(abs_diff)),
+                "max": float(np.max(abs_diff)),
             },
         }
 
