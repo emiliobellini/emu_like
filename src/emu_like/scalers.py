@@ -70,6 +70,8 @@ class Scaler(object):
             return StandardScaler(scaler_type)
         elif scaler_type == 'LogStandardScaler':
             return LogStandardScaler(scaler_type)
+        elif scaler_type == 'MinusLogStandardScaler':
+            return MinusLogStandardScaler(scaler_type)
         elif scaler_type == 'MinMaxScaler':
             return MinMaxScaler(scaler_type)
         elif scaler_type == 'MinMaxCommonScaler':
@@ -222,6 +224,38 @@ class LogStandardScaler(Scaler):
 
     def inverse_transform(self, x_scaled):
         x = np.exp(self.skl_scaler.inverse_transform(x_scaled))
+        return x
+
+
+class MinusLogStandardScaler(Scaler):
+    """
+    Take the log of the features and then standardise them
+    by removing the mean and scaling to unit variance.
+    """
+
+    def __init__(self, name='MinusLogStandardScaler'):
+        Scaler.__init__(self, name)
+        self.skl_scaler = skl_pre.StandardScaler()
+        return
+
+    def fit(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_to_fit = self._replace_inf(x)
+        else:
+            x_to_fit = x
+        self.skl_scaler.fit(np.log(-x_to_fit))
+        return
+
+    def transform(self, x, replace_infinity=True):
+        if replace_infinity:
+            x_scaled = self._replace_inf(x)
+        else:
+            x_scaled = x
+        x_scaled = self.skl_scaler.transform(np.log(-x_scaled))
+        return x_scaled
+
+    def inverse_transform(self, x_scaled):
+        x = -np.exp(self.skl_scaler.inverse_transform(x_scaled))
         return x
 
 
