@@ -62,7 +62,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v
+python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v -f
 
 
 # ==== END OF JOB COMMANDS ===== #

@@ -56,6 +56,11 @@ def argument_parser():
         '--resume', '-r',
         help='Resume from a previous run.',
         action='store_true')
+    sample_parser.add_argument(
+        '--force', '-f',
+        help='Force sampling. If output folder exists resume sampling, '
+        'otherwise start from scratch.',
+        action='store_true')
 
     # Train arguments
     train_parser.add_argument(
@@ -69,6 +74,11 @@ def argument_parser():
     train_parser.add_argument(
         '--resume', '-r',
         help='Resume from a previous run.',
+        action='store_true')
+    train_parser.add_argument(
+        '--force', '-f',
+        help='Force training. If output folder exists resume training, '
+        'otherwise start from scratch.',
         action='store_true')
     train_parser.add_argument(
         '--additional_epochs', '-e',
@@ -91,7 +101,7 @@ def argument_parser():
         help='Verbose (default: False)',
         action='store_true')
 
-    # Sample arguments
+    # Export arguments
     export_parser.add_argument(
         '--input', '-i',
         type=str,

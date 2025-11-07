@@ -591,8 +591,9 @@ class FFNNEmu(Emulator):
             # Plot - Loss per epoch
             self._plot_loss_per_epoch(path=path)
 
-            # Model specific plots
-            data.y_model.plot(self, data, path=path)
+            # Model specific plots (TODO: take too much time)
+            if False:
+                data.y_model.plot(self, data, path=path)
 
         return
 

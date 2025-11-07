@@ -53,11 +53,14 @@ def get_tail(fname, lines=1):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('log_files', nargs='+')
+    # parser.add_argument('common_folder')
+    parser.add_argument('--exclude', '-e', type=int, default=-1)
     args = parser.parse_args()
 
     str_out = '\x1b[1;32m[info]\x1b[00m Writing output in '
     str_res = '\x1b[1;32m[info]\x1b[00m Resuming from '
 
+    # for output_folder in io.Folder(args.common_folder).list_subfolders():
     for log_file in args.log_files:
         if log_file.startswith('logs/e'):
             continue
@@ -70,10 +73,6 @@ if __name__ == '__main__':
                 output_folder = line.replace(str_res, '')
 
         # Load history
-        # history = np.genfromtxt(
-        #     os.path.join(output_folder, 'history_log.csv'),
-        #     delimiter=',',
-        #     skip_header=1)
         with open(os.path.join(output_folder, 'history_log.csv')) as csvfile:
             history = np.array(
                 list(csv.reader(csvfile, delimiter=',')))[1:].astype(float)
@@ -86,6 +85,9 @@ if __name__ == '__main__':
         idx_best = np.where(history[:, 3] == np.min(history[:, 3]))[0][0]
         best_epoch, learning_rate, loss, val_loss = history[idx_best]
         best_epoch = int(best_epoch)
+
+        if args.exclude > 0 and last_epoch-best_epoch >= args.exclude:
+            continue
 
         # Print stuff
         io.info('Folder {}'.format(output_folder))

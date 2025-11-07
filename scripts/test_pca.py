@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 
-"""Test PCA reconstruction errors for LCDM spectra."""
+"""Test PCA reconstruction errors for spectra."""
 
+import argparse
 import os
 from pathlib import Path
 
@@ -13,13 +14,8 @@ from emu_like.pca import PCA
 from emu_like.scalers import Scaler
 
 
-ROOT = '/data/emilio/emu_like'
-MODEL = 'lcdm'
+ROOT = '/ceph/hpc/data/s25r06-05-users'
 DATASET_RANGES = ['thin', 'std', 'ext']
-
-OUTPUT_DIR = Path('/home/embellin/emu_like/output/test_pca')
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
 
 SPECTRUM_CONFIGS = [
     ('pk_m', 'pk', 1, 600),
@@ -197,7 +193,9 @@ def get_modes_to_check(
     y_all,
     y_train,
     y_test,
-    data,
+    y_all_ref,
+    y_train_ref,
+    y_test_ref,
     y_scaler,
     y_pca,
     min_mode,
@@ -268,9 +266,9 @@ def get_modes_to_check(
             y_all_tmp,
             y_train_tmp,
             y_test_tmp,
-            data.y,
-            data.y_train,
-            data.y_test,
+            y_all_ref,
+            y_train_ref,
+            y_test_ref,
         )
 
         for dataset in ['all', 'train', 'test']:
@@ -356,14 +354,34 @@ def plot(diffs, y_pca, output_path, title):
     plt.close(fig)
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description='Test PCA reconstruction errors for spectra.',
+    )
+    parser.add_argument(
+        '-m',
+        '--model',
+        help='Name of the model directory under ROOT.',
+    )
+    return parser.parse_args()
+
+
 # -----------------MAIN-CALL-----------------------------------------
-if __name__ == '__main__':
-    for spectrum, spectrum_type, min_mode, n_modes in SPECTRUM_CONFIGS:
-        output_path = OUTPUT_DIR / f'{spectrum}_pca_errors.pdf'
-        if output_path.exists():
+def main():
+    args = parse_args()
+    model = args.model
+
+    output_dir = Path(
+        f'/ceph/hpc/home/bellinie/emu_like/output/test_pca/{model}')
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for spectrum, spectrum_type, min_mode, max_mode in SPECTRUM_CONFIGS:
+        output_path_x = output_dir / f'{spectrum}_x_pca_errors.pdf'
+        output_path_y = output_dir / f'{spectrum}_y_pca_errors.pdf'
+        if output_path_x.exists() and output_path_y.exists():
             print(
                 f'----> Skipping {spectrum}; output already present at '
-                f'{output_path}'
+                f'{output_path_x} and {output_path_y}'
             )
             continue
 
@@ -371,7 +389,7 @@ if __name__ == '__main__':
             Dataset().load(
                 path=os.path.join(
                     ROOT,
-                    f'{MODEL}/sample/{spectrum_type}_100_{dr}.fits',
+                    f'{model}/sample/{spectrum_type}_100_{dr}.fits',
                 ),
                 name=spectrum,
                 verbose=False,
@@ -382,28 +400,64 @@ if __name__ == '__main__':
 
         data.train_test_split(0.9, 1543, verbose=True)
 
+        # Test x
+        x_all, x_train, x_test, x_scaler = scale(
+            data.x, data.x_train, data.x_test
+        )
+        x_all, x_train, x_test, x_pca = pca(
+            data.x.shape[-1], x_all, x_train, x_test
+        )
+
+        diffs = get_modes_to_check(
+            x_all,
+            x_train,
+            x_test,
+            data.x,
+            data.x_train,
+            data.x_test,
+            x_scaler,
+            x_pca,
+            1,
+            data.x.shape[-1],
+            n_modes_to_check=data.x.shape[-1],
+        )
+
+        plot(
+            diffs,
+            x_pca,
+            output_path_x,
+            f'{spectrum} PCA reconstruction errors',
+        )
+
+        # Test y
         y_all, y_train, y_test, y_scaler = scale(
             data.y, data.y_train, data.y_test
         )
         y_all, y_train, y_test, y_pca = pca(
-            n_modes, y_all, y_train, y_test
+            max_mode, y_all, y_train, y_test
         )
 
         diffs = get_modes_to_check(
             y_all,
             y_train,
             y_test,
-            data,
+            data.y,
+            data.y_train,
+            data.y_test,
             y_scaler,
             y_pca,
             min_mode,
-            n_modes,
+            max_mode,
             n_modes_to_check=20,
         )
 
         plot(
             diffs,
             y_pca,
-            OUTPUT_DIR / f'{spectrum}_pca_errors.pdf',
+            output_path_y,
             f'{spectrum} PCA reconstruction errors',
         )
+
+
+if __name__ == '__main__':
+    main()

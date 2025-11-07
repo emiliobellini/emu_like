@@ -26,6 +26,13 @@ def train_emu(args):
     # Read params
     params = io.YamlFile(args.params_file).read()
 
+    # Force computation
+    if args.force:
+        if io.Folder(params['output']['path']).is_empty():
+            args.resume = False
+        else:
+            args.resume = True
+
     # If resume load parameters from output folder
     if args.resume:
         if args.verbose:

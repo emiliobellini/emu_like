@@ -42,6 +42,13 @@ def sample_emu(args):
     except KeyError:
         save_interval = None
 
+    # Force computation
+    if args.force:
+        if io.FitsFile(params['output']['path']).exists:
+            args.resume = True
+        else:
+            args.resume = False
+
     # If resume
     if args.resume:
         if args.verbose:
