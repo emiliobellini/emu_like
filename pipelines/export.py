@@ -40,8 +40,12 @@ def export_emu(args):
         emu = Emulator.choose_one('ffnn_emu', verbose=False)
         emu.load(in_path, verbose=False)
 
-        # Store necessary quantities
+        # Fix paths
         name = emu.y_model.spectra[0].name
+        dict_fname = '{}.joblib'.format(name)
+        model_fname = '{}.keras'.format(name)
+
+        # Store necessary quantities
         emu_dict = {
             'name': name,
             'x_names': emu.x_names,
@@ -50,18 +54,25 @@ def export_emu(args):
             'y_scaler': emu.y_scaler,
             'x_pca': emu.x_pca,
             'y_pca': emu.y_pca,
-            'model': emu.model,
             'ref': emu.y_model.y_ref[0][0],
             'z_array': emu.y_model.z_array,
             'k_array': emu.y_model.k_ranges[0],
             'ell_array': emu.y_model.ell_ranges[0],
             'class_vars': emu.y_model.params,
             'class_args': emu.y_model.args,
+            'model_path': model_fname,
         }
 
         # Save emulator
-        out_path = os.path.join(output.path, '{}.save'.format(name))
-        joblib.dump(emu_dict, out_path)
+        emu.model.save(
+            os.path.join(output.path, model_fname),
+            include_optimizer=False)
+
+        # Save dictionary
+        joblib.dump(
+            emu_dict,
+            os.path.join(output.path, dict_fname),
+            compress=3)
 
         if args.verbose:
             io.print_level(1, 'Saved {} emulator'.format(name))
