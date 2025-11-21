@@ -1,14 +1,25 @@
 import classy
-import numpy as np
+import emu_like.io as io
 import matplotlib.pyplot as plt
+import numpy as np
 import scipy.interpolate as interp
+import time
 
-def get_pk(cosmo, k, z=0):
+
+def get_pk_1(cosmo, k, z, nonlinear=False, only_cb=False):
+    """
+    Input units: k in h/Mpc, z redshift.
+    Output units: P(k) in (Mpc/h)^3
+    """
     # Get array of pk
     pk_array, k_array, z_array = cosmo.get_pk_and_k_and_z(
-        nonlinear=False,
-        only_clustering_species = False,
+        nonlinear=nonlinear,
+        only_clustering_species=only_cb,
         h_units=False)
+
+    # Adjust units
+    k_array /= cosmo.h()
+    pk_array *= cosmo.h()**3.
 
     # Flip z_array (for the interpolation it has to be increasing)
     z_array = np.flip(z_array)
@@ -18,102 +29,113 @@ def get_pk(cosmo, k, z=0):
     pk = interp.make_splrep(k_array, pk_array, s=0)(k)
 
     pk = interp.make_splrep(z_array, pk.T, s=0)(z)
+
     return pk
 
-cosmo = classy.Class()
-# 'lcdm_pk': [2.6041182  0.58768946 0.27363048 0.05497547 0.09483284]
-# 'lcdm_nu_cl': [0.70837614 0.31269437 0.0469087  3.07445564 0.95587349 0.05014624 0.09975079 0.02785967]
-params = {
-    'z_max_pk': 2.604118,
-    'h': 0.58768946,
-    'Omega_m': 0.27363048,
-    'Omega_b': 0.05497547,
-    'tau_reio': 0.09483284,
-    'm_ncdm': 0.02,
-    'ln_A_s_1e10': 3.044,
-    'n_s': 0.966,
 
-    'YHe': 0.24,
-    'N_ur': 0.,
-    'N_ncdm': 1,
-    'deg_ncdm': 3,
-    'k_per_decade_for_pk': 40,
-    'k_per_decade_for_bao': 80,
-    'l_logstep': 1.026,
-    'l_linstep': 25,
-    'perturbations_sampling_stepsize': 0.02,
-    'l_switch_limber': 20,
-    'accurate_lensing': 1,
-    'delta_l_max': 1000,
-    'output': 'tCl, dTk, pCl, lCl, mPk',
-    'l_max_scalars': 3000,
-    'lensing': 'yes',
-    'P_k_max_h/Mpc': 50.0,
-    'k_pivot': 0.05,
-    'modes': 's',
+def get_pk_2(cosmo, k, z, nonlinear=False, only_cb=False):
+    """
+    Input units: k in h/Mpc, z redshift.
+    Output units: P(k) in (Mpc/h)^3
+    """
+
+    if nonlinear is True and only_cb is True:
+        fun = cosmo.pk_cb
+    elif nonlinear is True and only_cb is False:
+        fun = cosmo.pk
+    elif nonlinear is False and only_cb is True:
+        fun = cosmo.pk_cb_lin
+    else:
+        fun = cosmo.pk_lin
+
+    pk = np.zeros((len(z), len(k)))
+
+    # Get array of pk
+    for nkv, kv in enumerate(k):
+        for nzv, zv in enumerate(z):
+            pk[nzv, nkv] = fun(kv*cosmo.h(), zv)
+
+    # Adjust units
+    pk *= cosmo.h()**3.
+
+    return pk
+
+
+def get_pk_3(cosmo, k, z, nonlinear=False, only_cb=False):
+    """
+    Input units: k in h/Mpc, z redshift.
+    Output units: P(k) in (Mpc/h)^3
+    """
+
+    if nonlinear is True and only_cb is True:
+        fun = cosmo.get_pk_cb
+    elif nonlinear is True and only_cb is False:
+        fun = cosmo.get_pk
+    elif nonlinear is False and only_cb is True:
+        fun = cosmo.get_pk_cb_lin
+    else:
+        fun = cosmo.get_pk_lin
+
+    n_mu = 1
+    n_z = len(z)
+    n_k = len(k)
+    k_3D = np.zeros((n_k, n_z, n_mu))
+    k_3D[:, 0, 0] = k * cosmo.h()
+    pk = fun(k_3D, z, n_k, n_z, 1) * cosmo.h()**3.
+
+    return pk[:, :, 0].T
+
+
+idx_data = -1
+
+# Load reference Pk from file
+fits = io.FitsFile('../emu_like/output/pk_001_thin_no_YHe.fits')
+
+x_data = fits.get_data('x_data')[idx_data]
+z = np.array([x_data[0]])
+params = {
+    'h': x_data[1],
+    'Omega_m': x_data[2],
+    'Omega_b': x_data[3],
+    'tau_reio': x_data[4],
 }
 
-cosmo.set(params)
-cosmo.compute()
-cl_1 = cosmo.raw_cl()
-cl_1l = cosmo.lensed_cl()
-k = np.logspace(-4., 1., num=600)
-pk_1 = get_pk(cosmo, k)
-exit()
+ref_k = fits.get_data('k_range_pk_m')
+ref_z = fits.get_data('z_array')
 
+pk_over_pk_ref = fits.get_data('pk_m')[idx_data]
+ref_pk = interp.make_splrep(ref_z, fits.get_data('ref_pk_m')[0].T, s=0)(z)
+pk_data = ref_pk * pk_over_pk_ref
+
+# Adjust parameters
+args = fits.get_header(0)['y_model']['args']
+args['z_pk'] = max(z)
+args['z_max_pk'] = max(z)
+
+# Init classy
 cosmo = classy.Class()
-params = {
-
-    'z_max_pk': 2.604118,
-    'h': 0.58768946,
-    'Omega_m': 0.27363048,
-    'Omega_b': 0.05497547,
-    'tau_reio': 0.09483284,
-    'm_ncdm': 0.02,
-    'ln_A_s_1e10': 3.044,
-    'n_s': 0.966,
-
-    'YHe': 0.24,
-    'N_ur': 0.,
-    'N_ncdm': 1,
-    'deg_ncdm': 3,
-    'k_per_decade_for_pk': 40,
-    'k_per_decade_for_bao': 80,
-    'l_logstep': 1.026,
-    'l_linstep': 25,
-    'perturbations_sampling_stepsize': 0.02,
-    'l_switch_limber': 20,
-    'accurate_lensing': 1,
-    'delta_l_max': 1000,
-    'output': 'tCl, dTk, pCl, lCl, mPk',
-    'l_max_scalars': 3000,
-    'lensing': 'yes',
-    'P_k_max_h/Mpc': 50.0,
-    'k_pivot': 0.05,
-    'modes': 's',
-}
-cosmo.set(params)
+cosmo.set(args | params)
 cosmo.compute()
-cl_2 = cosmo.raw_cl()
-cl_2l = cosmo.lensed_cl()
-pk_2 = get_pk(cosmo, k)
 
+# Compute Pk_1
+start = time.time()
+pk_1 = get_pk_1(cosmo, ref_k, z, nonlinear=False, only_cb=False)
+print('pk_1 run in {} secs'.format(time.time() - start))
+start = time.time()
+pk_2 = get_pk_2(cosmo, ref_k, z, nonlinear=False, only_cb=False)
+print('pk_2 run in {} secs'.format(time.time() - start))
+start = time.time()
+pk_3 = get_pk_3(cosmo, ref_k, z, nonlinear=False, only_cb=False)
+print('pk_3 run in {} secs'.format(time.time() - start))
 
-# plt.plot(cl_1['ell'], cl_1['ell']*(cl_1['ell']+1)/2/np.pi*cl_1['tt'])
-# plt.plot(cl_1['ell'], cl_1['ell']*(cl_1['ell']+1)/2/np.pi*cl_2['tt'], '--')
-# plt.plot(cl_1['ell'], cl_1['tt']/cl_2['tt'])
-# plt.plot(cl_1l['ell'], cl_1l['tt']/cl_2l['tt'], '--')
-
-# plt.plot(k, pk_1)
-# plt.plot(k, pk_2)
-plt.plot(k, pk_2/pk_1)
+plt.plot(ref_k, np.abs(pk_1[0]/pk_data[0] - 1.)*100., label='Class Pk 1')
+plt.plot(ref_k, np.abs(pk_2[0]/pk_data[0] - 1.)*100., label='Class Pk 2')
+plt.plot(ref_k, np.abs(pk_3[0]/pk_data[0] - 1.)*100., label='Class Pk 3')
+plt.xlabel('k [h/Mpc]')
+plt.ylabel('perc_rel_diff [%]')
 plt.xscale('log')
-# plt.yscale('log')
-plt.savefig('scripts/test.pdf')
-
-print(100*np.max(np.abs(pk_1/pk_2-1.)))
-print(100*np.min(np.abs(pk_1/pk_2-1.)))
-
-
-# print(100*np.max(np.abs(cl_1['tt']/cl_2['tt']-1.)))
-# print(100*np.min(np.abs(cl_1['tt']/cl_2['tt']-1.)))
+plt.yscale('log')
+plt.legend()
+plt.tight_layout()
+plt.savefig('output/test_pk_ref.pdf')
+plt.close()
