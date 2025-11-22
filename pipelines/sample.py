@@ -60,6 +60,8 @@ def sample_emu(args):
             params['output']['path'],
             timeout=timeout,
             save_interval=save_interval,
+            num_workers=args.num_workers,
+            chunk_size=args.chunk_size,
             verbose=args.verbose)
     # Otherwise
     else:
@@ -73,6 +75,8 @@ def sample_emu(args):
             output=params['output']['path'],
             timeout=timeout,
             save_interval=save_interval,
+            num_workers=args.num_workers,
+            chunk_size=args.chunk_size,
             verbose=args.verbose)
 
     return

@@ -61,6 +61,17 @@ def argument_parser():
         help='Force sampling. If output folder exists resume sampling, '
         'otherwise start from scratch.',
         action='store_true')
+    sample_parser.add_argument(
+        '--num-workers', '-j',
+        type=int,
+        default=1,
+        help='Number of worker processes for sampling (default: 1).')
+    sample_parser.add_argument(
+        '--chunk-size',
+        type=int,
+        default=None,
+        help='Chunk size used to dispatch work to workers '
+        '(default: executor default).')
 
     # Train arguments
     train_parser.add_argument(
