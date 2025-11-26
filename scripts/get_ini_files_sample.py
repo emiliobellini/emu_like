@@ -13,7 +13,7 @@ template_sh = """#!/bin/bash
 
 # ---- Resources configuration  ----
 #SBATCH --partition=cpu
-#SBATCH --mem=30G
+#SBATCH --mem=60G
 #SBATCH --time=TODO_TIME
 #SBATCH --output=logs/o%j.%x
 #SBATCH --error=logs/e%j.%x
@@ -60,8 +60,10 @@ cd /ceph/hpc/home/bellinie
 source ./venv/bin/activate
 cd emu_like
 
+NUM_WORKERS=8
+CHUNK_SIZE=${CHUNK_SIZE:-$((NUM_WORKERS*4))}
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v -f
+python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v -f --num-workers "${NUM_WORKERS}" --chunk-size "${CHUNK_SIZE}"
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -205,7 +207,6 @@ if __name__ == '__main__':
     ell_min = 2
     ell_max = 3000
 
-
     time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
 
     ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/sample/{}'.format(model)
@@ -214,9 +215,10 @@ if __name__ == '__main__':
     for spectrum in ['pk', 'cl']:
         for parameter_space in ['thin', 'std', 'ext']:
 
-
-            full_name = 'sample_{}_{}_{}_{}'.format(model, spectrum, n_samples_1000, parameter_space)
-            file_name = '{}_{}_{}'.format(spectrum, n_samples_1000, parameter_space)
+            full_name = 'sample_{}_{}_{}_{}'.format(
+                model, spectrum, n_samples_1000, parameter_space)
+            file_name = '{}_{}_{}'.format(
+                spectrum, n_samples_1000, parameter_space)
 
             # sh file
             with open(os.path.join(ini_folder, 'run_'+file_name+'.sh'), 'w') as fn:
@@ -276,4 +278,3 @@ if __name__ == '__main__':
 
             with open(os.path.join(ini_folder, file_name+'.yaml'), 'w') as fn:
                 yaml.safe_dump(template_yaml, fn, sort_keys=False)
-
