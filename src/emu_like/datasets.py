@@ -9,6 +9,7 @@
 import numpy as np
 import os
 import re
+from concurrent.futures import ProcessPoolExecutor
 import sklearn.model_selection as skl_ms
 import time
 import tqdm
@@ -17,6 +18,43 @@ from . import scalers as sc
 from . import pca
 from .x_samplers import XSampler
 from .y_models import YModel
+
+
+_worker_y_model = None
+
+
+def _init_y_model_worker(
+        y_name,
+        params,
+        outputs,
+        n_samples,
+        y_args,
+        load_path,
+        verbose):
+    """
+    Initializer for worker processes. Instantiates a YModel and optionally
+    loads auxiliary data (e.g., reference spectra).
+    """
+    global _worker_y_model
+    _worker_y_model = YModel.choose_one(
+        y_name,
+        params,
+        outputs,
+        n_samples,
+        verbose=verbose,
+        **(y_args or {}))
+    if load_path is not None:
+        _worker_y_model.load(fname=load_path, verbose=verbose)
+
+
+def _evaluate_one_sample(task):
+    """
+    Evaluate a single sample inside a worker process.
+    """
+    idx, x = task
+    if _worker_y_model is None:
+        raise RuntimeError('Worker model not initialized.')
+    return idx, _worker_y_model.evaluate(x, idx)
 
 
 class Dataset(object):
@@ -941,6 +979,8 @@ class DataCollection(object):
             output=None,
             timeout=None,
             save_interval=None,
+            num_workers=1,
+            chunk_size=None,
             debug=False,
             verbose=False):
         """
@@ -963,9 +1003,15 @@ class DataCollection(object):
           sampling;
         - save_interval (int, default=None): save every n steps. If None, it
           saves only at the end;
+        - num_workers (int, default: 1): number of worker processes to use;
+        - chunk_size (int, default: None): chunk size passed to the process
+          pool (defaults to executor behaviour);
         - debug (bool, default=False): if True print additional messages;
         - verbose (bool, default: False): verbosity.
         """
+
+        x_args = x_args or {}
+        y_args = y_args or {}
 
         # Preliminary checks on output
         save_it = False
@@ -1050,74 +1096,15 @@ class DataCollection(object):
         y_model.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
         self.y = y_model.y
 
-        # Start iteration in series
-        if timeout is not None:
-            start_time = time.time()
-        data_part = None
-        for nx, x in enumerate(tqdm.tqdm(self.x)):
-            # Evaluate model
-            if debug:
-                start_time_loop = time.time()
-                start_time_part = time.time()
-                io.print_level(0, 'Starting loop number {}'.format(nx))
-            y_one_line = y_model.evaluate(x, nx)
-            if debug:
-                io.print_level(1, 'Class executed in {:.2f} seconds'.format(
-                    time.time()-start_time_part))
-            self.counter_samples += 1
-
-            if any([np.isnan(yy).any() for yy in y_one_line]):
-                io.warning(' Found nans with parameters {}'.format(x))
-
-            # Append to array
-            if debug:
-                start_time_part = time.time()
+        def _append_data(data_part, y_one_line):
             if data_part is None:
-                data_part = y_one_line
-            else:
-                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(
-                    data_part, y_one_line)]
-            if debug:
-                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(
-                    time.time()-start_time_part))
+                return y_one_line
+            return [np.vstack([x1, x2])
+                    for x1, x2 in zip(data_part, y_one_line)]
 
-            # Save array
-            if save_it and isinstance(save_interval, int):
-                if np.mod(nx+1, save_interval) == 0:
-                    if debug:
-                        start_time_part = time.time()
-                    for nname, name in enumerate(self.y_keys):
-                        try:
-                            data = fits.get_data(name)
-                            data = np.vstack([data, data_part[nname]])
-                            fits.update(
-                                name=name,
-                                data=data,
-                            )
-                        except KeyError:
-                            fits.write(
-                                name=name,
-                                data=data_part[nname],
-                                header=self.y_headers[nname]
-                            )
-                    data_part = None
-                    if debug:
-                        io.print_level(1, 'Saved arrays in {:.2f} seconds'
-                                       ''.format(time.time()-start_time_part))
-
-            # Break in case
-            if timeout is not None:
-                if (time.time()-start_time)/60/60 > timeout:
-                    print('Reached maximum time!')
-                    break
-            if debug:
-                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(
-                    time.time()-start_time_loop))
-
-        # Final save in case
-        if save_it and data_part is not None:
-            if debug:
-                start_time_part = time.time()
+        def _flush_data(data_part):
+            if not save_it or data_part is None:
+                return None
             for nname, name in enumerate(self.y_keys):
                 try:
                     data = fits.get_data(name)
@@ -1132,9 +1119,99 @@ class DataCollection(object):
                         data=data_part[nname],
                         header=self.y_headers[nname]
                     )
-            if debug:
-                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(
-                    time.time()-start_time_part))
+            return None
+
+        if num_workers is None or num_workers < 1:
+            num_workers = 1
+        if chunk_size is not None and chunk_size < 1:
+            raise ValueError('chunk_size must be a positive integer')
+
+        if timeout is not None:
+            start_time = time.time()
+        data_part = None
+
+        def _store_in_memory(idx, y_one_line):
+            for nout, arr in enumerate(self.y):
+                arr[idx] = y_one_line[nout]
+
+        if num_workers == 1:
+            for nx, x in enumerate(tqdm.tqdm(self.x)):
+                if debug:
+                    start_time_loop = time.time()
+                    start_time_part = time.time()
+                    io.print_level(0, 'Starting loop number {}'.format(nx))
+                y_one_line = y_model.evaluate(x, nx)
+                if debug:
+                    io.print_level(
+                        1, 'Class executed in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+                self.counter_samples += 1
+
+                if any([np.isnan(yy).any() for yy in y_one_line]):
+                    io.warning(' Found nans with parameters {}'.format(x))
+
+                _store_in_memory(nx, y_one_line)
+                if debug:
+                    start_time_part = time.time()
+                data_part = _append_data(data_part, y_one_line)
+                if debug:
+                    io.print_level(
+                        1, 'Appended to data in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+
+                if save_it and isinstance(save_interval, int):
+                    if np.mod(nx+1, save_interval) == 0:
+                        if debug:
+                            start_time_part = time.time()
+                        data_part = _flush_data(data_part)
+                        if debug:
+                            io.print_level(
+                                1, 'Saved arrays in {:.2f} seconds'.format(
+                                    time.time()-start_time_part))
+
+                if timeout is not None:
+                    if (time.time()-start_time)/60/60 > timeout:
+                        print('Reached maximum time!')
+                        break
+                if debug:
+                    io.print_level(
+                        1, 'Loop executed in {:.2f} seconds'.format(
+                            time.time()-start_time_loop))
+        else:
+            with ProcessPoolExecutor(
+                    max_workers=num_workers,
+                    initializer=_init_y_model_worker,
+                    initargs=(y_name, params, y_outputs,
+                              self.n_samples, y_args, self.path, False)
+                    ) as pool:
+                iterator = pool.map(
+                    _evaluate_one_sample,
+                    ((idx, x) for idx, x in enumerate(self.x)),
+                    chunksize=chunk_size or 1)
+                iterator = tqdm.tqdm(iterator, total=self.n_samples)
+                for local_idx, result in enumerate(iterator):
+                    idx, y_one_line = result
+                    self.counter_samples += 1
+
+                    if any([np.isnan(yy).any() for yy in y_one_line]):
+                        io.warning(' Found nans with parameters {}'.format(
+                            self.x[idx]))
+
+                    _store_in_memory(idx, y_one_line)
+                    data_part = _append_data(data_part, y_one_line)
+
+                    if save_it and isinstance(save_interval, int):
+                        if np.mod(local_idx+1, save_interval) == 0:
+                            data_part = _flush_data(data_part)
+
+                    if timeout is not None:
+                        if (time.time()-start_time)/60/60 > timeout:
+                            print('Reached maximum time!')
+                            pool.shutdown(cancel_futures=True)
+                            break
+
+        if save_it and data_part is not None:
+            data_part = _flush_data(data_part)
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -1147,6 +1224,8 @@ class DataCollection(object):
             path,
             timeout=None,
             save_interval=None,
+            num_workers=1,
+            chunk_size=None,
             debug=False,
             verbose=False):
         """
@@ -1158,6 +1237,9 @@ class DataCollection(object):
           sampling;
         - save_interval (int, default=None): save every n steps. If None, it
           saves only at the end;
+        - num_workers (int, default: 1): number of worker processes to use;
+        - chunk_size (int, default: None): chunk size passed to the process
+          pool (defaults to executor behaviour);
         - debug (bool, default=False): if True print additional messages;
         - verbose (bool, default: False): verbosity.
 
@@ -1180,70 +1262,27 @@ class DataCollection(object):
                 io.warning('Dataset complete, nothing to resume!')
             return
 
+        if num_workers is None or num_workers < 1:
+            num_workers = 1
+        if chunk_size is not None and chunk_size < 1:
+            raise ValueError('chunk_size must be a positive integer')
+
         if timeout is not None:
             start_time = time.time()
 
         data_part = None
         start = self.counter_samples
-        for nx, x in enumerate(tqdm.tqdm(self.x[start:])):
-            # Evaluate model
-            if debug:
-                start_time_loop = time.time()
-                start_time_part = time.time()
-                io.print_level(0, 'Starting loop number {}'.format(nx))
-            y_one_line = self.y_model.evaluate(x, start + nx)
-            if debug:
-                io.print_level(1, 'Class executed in {:.2f} seconds'.format(
-                    time.time()-start_time_part))
-            self.counter_samples += 1
+        remaining = self.n_samples - start
 
-            if any([np.isnan(yy).any() for yy in y_one_line]):
-                io.warning(' Found nans with parameters {}'.format(x))
-
-            # Append to array
-            if debug:
-                start_time_part = time.time()
+        def _append_data(data_part, y_one_line):
             if data_part is None:
-                data_part = y_one_line
-            else:
-                data_part = [np.vstack([x1, x2]) for x1, x2 in zip(
-                    data_part, y_one_line)]
-            if debug:
-                io.print_level(1, 'Appended to data in {:.2f} seconds'.format(
-                    time.time()-start_time_part))
+                return y_one_line
+            return [np.vstack([x1, x2])
+                    for x1, x2 in zip(data_part, y_one_line)]
 
-            # Save array
-            if isinstance(save_interval, int):
-                if np.mod(nx+1, save_interval) == 0:
-                    if debug:
-                        start_time_part = time.time()
-                    fits = io.FitsFile(fname=path)
-                    data = [fits.get_data(name) for name in self.y_keys]
-                    data = [np.vstack([x1, x2]) for x1, x2 in zip(
-                        data, data_part)]
-                    for nname, name in enumerate(self.y_keys):
-                        fits.update(
-                            name=name,
-                            data=data[nname],
-                        )
-                    data_part = None
-                    if debug:
-                        io.print_level(1, 'Saved arrays in {:.2f} seconds'
-                                       ''.format(time.time()-start_time_part))
-
-            # Break in case
-            if timeout is not None:
-                if (time.time()-start_time)/60/60 > timeout:
-                    print('Reached maximum time!')
-                    break
-            if debug:
-                io.print_level(1, 'Loop executed in {:.2f} seconds'.format(
-                    time.time()-start_time_loop))
-
-        # Final save in case
-        if data_part is not None:
-            if debug:
-                start_time_part = time.time()
+        def _flush_data(data_part):
+            if data_part is None:
+                return None
             fits = io.FitsFile(fname=path)
             data = [fits.get_data(name) for name in self.y_keys]
             data = [np.vstack([x1, x2]) for x1, x2 in zip(data, data_part)]
@@ -1252,6 +1291,98 @@ class DataCollection(object):
                     name=name,
                     data=data[nname],
                 )
+            return None
+
+        def _store_in_memory(idx, y_one_line):
+            for nout, arr in enumerate(self.y):
+                arr[idx] = y_one_line[nout]
+
+        if num_workers == 1:
+            for nx, x in enumerate(tqdm.tqdm(self.x[start:])):
+                if debug:
+                    start_time_loop = time.time()
+                    start_time_part = time.time()
+                    io.print_level(0, 'Starting loop number {}'.format(nx))
+                y_one_line = self.y_model.evaluate(x, start + nx)
+                if debug:
+                    io.print_level(
+                        1, 'Class executed in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+                self.counter_samples += 1
+
+                if any([np.isnan(yy).any() for yy in y_one_line]):
+                    io.warning(' Found nans with parameters {}'.format(x))
+
+                _store_in_memory(start + nx, y_one_line)
+
+                if debug:
+                    start_time_part = time.time()
+                data_part = _append_data(data_part, y_one_line)
+                if debug:
+                    io.print_level(
+                        1, 'Appended to data in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+
+                if isinstance(save_interval, int):
+                    if np.mod(nx+1, save_interval) == 0:
+                        if debug:
+                            start_time_part = time.time()
+                        data_part = _flush_data(data_part)
+                        if debug:
+                            io.print_level(
+                                1, 'Saved arrays in {:.2f} seconds'.format(
+                                    time.time()-start_time_part))
+
+                if timeout is not None:
+                    if (time.time()-start_time)/60/60 > timeout:
+                        print('Reached maximum time!')
+                        break
+                if debug:
+                    io.print_level(
+                        1, 'Loop executed in {:.2f} seconds'.format(
+                            time.time()-start_time_loop))
+        else:
+            y_args = self.settings['y_model'].get('args', {}) or {}
+            y_outputs = self.settings['y_model'].get('outputs')
+            y_name = self.settings['y_model']['name']
+            params = self.settings['params']
+
+            with ProcessPoolExecutor(
+                    max_workers=num_workers,
+                    initializer=_init_y_model_worker,
+                    initargs=(y_name, params, y_outputs, self.n_samples,
+                              y_args, self.path, False)) as pool:
+                iterator = pool.map(
+                    _evaluate_one_sample,
+                    ((start + idx, x) for idx, x in enumerate(
+                        self.x[start:])),
+                    chunksize=chunk_size or 1)
+                iterator = tqdm.tqdm(iterator, total=remaining)
+                for local_idx, result in enumerate(iterator):
+                    idx, y_one_line = result
+                    self.counter_samples += 1
+
+                    if any([np.isnan(yy).any() for yy in y_one_line]):
+                        io.warning(' Found nans with parameters {}'.format(
+                            self.x[idx]))
+
+                    _store_in_memory(idx, y_one_line)
+                    data_part = _append_data(data_part, y_one_line)
+
+                    if isinstance(save_interval, int):
+                        if np.mod(local_idx+1, save_interval) == 0:
+                            data_part = _flush_data(data_part)
+
+                    if timeout is not None:
+                        if (time.time()-start_time)/60/60 > timeout:
+                            print('Reached maximum time!')
+                            pool.shutdown(cancel_futures=True)
+                            break
+
+        if data_part is not None:
+            if debug:
+                start_time_part = time.time()
+            data_part = _flush_data(data_part)
             if debug:
                 io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(
                     time.time()-start_time_part))

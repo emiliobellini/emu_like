@@ -20,8 +20,10 @@ class Scaler(object):
     have order 1 ranges). This main class has three
     main methods:
     - choose_one: redirects to the correct subclass
-    - load: load a scaler from a file
-    - save: save scaler to a file.
+    - load: load a scaler from a file;
+    - save: save scaler to a file;
+    - export: return a dictionary of the minimal attributes
+      to run the scaler.
 
     Each one of the other scalers (see below), should
     inherit from this and define three other methods:
@@ -162,6 +164,15 @@ class NoneScaler(Scaler):
     def inverse_transform(self, x):
         return x
 
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+        }
+        return scaler_dict
+
 
 class StandardScaler(Scaler):
     """
@@ -193,6 +204,19 @@ class StandardScaler(Scaler):
     def inverse_transform(self, x_scaled):
         x = self.skl_scaler.inverse_transform(x_scaled)
         return x
+
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+            'mean_': self.skl_scaler.mean_,
+            'scale_': self.skl_scaler.scale_,
+            'var_': self.skl_scaler.var_,
+            'n_samples_seen_': self.skl_scaler.n_samples_seen_,
+        }
+        return scaler_dict
 
 
 class LogStandardScaler(Scaler):
@@ -226,6 +250,19 @@ class LogStandardScaler(Scaler):
         x = np.exp(self.skl_scaler.inverse_transform(x_scaled))
         return x
 
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+            'mean_': self.skl_scaler.mean_,
+            'scale_': self.skl_scaler.scale_,
+            'var_': self.skl_scaler.var_,
+            'n_samples_seen_': self.skl_scaler.n_samples_seen_,
+        }
+        return scaler_dict
+
 
 class MinusLogStandardScaler(Scaler):
     """
@@ -257,6 +294,19 @@ class MinusLogStandardScaler(Scaler):
     def inverse_transform(self, x_scaled):
         x = -np.exp(self.skl_scaler.inverse_transform(x_scaled))
         return x
+
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+            'mean_': self.skl_scaler.mean_,
+            'scale_': self.skl_scaler.scale_,
+            'var_': self.skl_scaler.var_,
+            'n_samples_seen_': self.skl_scaler.n_samples_seen_,
+        }
+        return scaler_dict
 
 
 class MinMaxScaler(Scaler):
@@ -290,6 +340,21 @@ class MinMaxScaler(Scaler):
         x = self.skl_scaler.inverse_transform(x_scaled)
         return x
 
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+            'min_': self.skl_scaler.min_,
+            'scale_': self.skl_scaler.scale_,
+            'data_min_': self.skl_scaler.data_min_,
+            'data_max_': self.skl_scaler.data_max_,
+            'data_range_': self.skl_scaler.data_range_,
+            'n_samples_seen_': self.skl_scaler.n_samples_seen_,
+        }
+        return scaler_dict
+
 
 class MinMaxCommonScaler(Scaler):
     """
@@ -299,7 +364,6 @@ class MinMaxCommonScaler(Scaler):
 
     def __init__(self, name):
         Scaler.__init__(self, name='MinMaxCommonScaler')
-        self.skl_scaler = skl_pre.MinMaxScaler()
         return
 
     def fit(self, x, replace_infinity=True):
@@ -307,29 +371,40 @@ class MinMaxCommonScaler(Scaler):
             x_to_fit = self._replace_inf(x)
         else:
             x_to_fit = x
-        self.glob_min = np.min(x_to_fit)
-        self.glob_max = np.max(x_to_fit)
+        self.glob_min_ = np.min(x_to_fit)
+        self.glob_max_ = np.max(x_to_fit)
         return
 
     def transform(self, x, replace_infinity=True):
         if replace_infinity:
             x = self._replace_inf(x)
-        if self.glob_min == 0. and self.glob_max == 0.:
+        if self.glob_min_ == 0. and self.glob_max_ == 0.:
             x_scaled = x
-        elif self.glob_min == self.glob_max:
-            x_scaled = x/self.glob_max
+        elif self.glob_min_ == self.glob_max_:
+            x_scaled = x/self.glob_max_
         else:
-            x_scaled = (x - self.glob_min)/(self.glob_max - self.glob_min)
+            x_scaled = (x - self.glob_min_)/(self.glob_max_ - self.glob_min_)
         return x_scaled
 
     def inverse_transform(self, x_scaled):
-        if self.glob_min == 0. and self.glob_max == 0.:
+        if self.glob_min_ == 0. and self.glob_max_ == 0.:
             x = x_scaled
-        elif self.glob_min == self.glob_max:
-            x = x_scaled * self.glob_max
+        elif self.glob_min_ == self.glob_max_:
+            x = x_scaled * self.glob_max_
         else:
-            x = x_scaled * (self.glob_max - self.glob_min) + self.glob_min
+            x = x_scaled * (self.glob_max_ - self.glob_min_) + self.glob_min_
         return x
+
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+            'glob_min_': self.glob_min_,
+            'glob_max_': self.glob_max_,
+        }
+        return scaler_dict
 
 
 class MinMaxPlus1Scaler(Scaler):
@@ -363,6 +438,21 @@ class MinMaxPlus1Scaler(Scaler):
     def inverse_transform(self, x_scaled):
         x = self.skl_scaler.inverse_transform(x_scaled - 1.)
         return x
+
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+            'min_': self.skl_scaler.min_,
+            'scale_': self.skl_scaler.scale_,
+            'data_min_': self.skl_scaler.data_min_,
+            'data_max_': self.skl_scaler.data_max_,
+            'data_range_': self.skl_scaler.data_range_,
+            'n_samples_seen_': self.skl_scaler.n_samples_seen_,
+        }
+        return scaler_dict
 
 
 class ExpMinMaxScaler(Scaler):
@@ -398,3 +488,18 @@ class ExpMinMaxScaler(Scaler):
         x = np.log(x_scaled)
         x = self.skl_scaler.inverse_transform(x)
         return x
+
+    def export(self):
+        """
+        Export minimal scaler elements.
+        """
+        scaler_dict = {
+            'type': self.name,
+            'min_': self.skl_scaler.min_,
+            'scale_': self.skl_scaler.scale_,
+            'data_min_': self.skl_scaler.data_min_,
+            'data_max_': self.skl_scaler.data_max_,
+            'data_range_': self.skl_scaler.data_range_,
+            'n_samples_seen_': self.skl_scaler.n_samples_seen_,
+        }
+        return scaler_dict

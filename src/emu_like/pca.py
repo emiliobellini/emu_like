@@ -82,3 +82,20 @@ class PCA(object):
         """
         x = self.pca.inverse_transform(x_pca)
         return x
+
+    def export(self):
+        """
+        Export minimal PCA elements.
+        """
+        pca_dict = {
+            'n_components_': self.pca.n_components_,
+            'components_': self.pca.components_,
+            'mean_': self.pca.mean_,
+            'explained_variance_': self.pca.explained_variance_,
+            'explained_variance_ratio_': self.pca.explained_variance_ratio_,
+            'singular_values_': self.pca.singular_values_,
+            'n_samples_': self.pca.n_samples_,
+            'n_features_in_': self.pca.n_features_in_,
+            'noise_variance_': self.pca.noise_variance_,
+        }
+        return pca_dict
