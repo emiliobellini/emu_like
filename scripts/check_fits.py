@@ -1,4 +1,5 @@
 import argparse
+import numpy as np
 import emu_like.io as io
 
 # -----------------MAIN-CALL-----------------------------------------
@@ -18,6 +19,7 @@ if __name__ == '__main__':
 
     n_samples_run = None
     raised_warning = False
+    idxs_nan = []
     # Store ell, k, z, n_samples
     n_ells = {}
     n_k = {}
@@ -61,7 +63,8 @@ if __name__ == '__main__':
                     io.warning('{} has {} shape, expected {}'.format(
                         key, data.shape, expected_shape))
                 else:
-                    io.info('{} shape: {}'.format(key, expected_shape))
+                    io.print_level(
+                        1, '{} shape: {}'.format(key, expected_shape))
             elif is_cell is False:
                 expected_shape = (1, n_k[sub_key], n_z)
                 if data.shape != expected_shape:
@@ -90,6 +93,15 @@ if __name__ == '__main__':
                     'Mismatch between {} (n_samples_run={}) and {} '
                     '(n_samples_run={})'.format(
                         key, data.shape[0], ref_key, n_samples_run))
+            # Check nans
+            is_nan = np.any(np.isnan(data), axis=1)
+            idxs_nan.append(np.where(is_nan)[0])
+
+    if all([all(x == idxs_nan[0]) for x in idxs_nan]):
+        idxs_nan = idxs_nan[0]
+        io.print_level(1, 'Number of NAN: {}'.format(len(idxs_nan)))
+    else:
+        io.warning('Found NAN at different positions for different spectra')
 
     if raised_warning is False:
         io.print_level(
