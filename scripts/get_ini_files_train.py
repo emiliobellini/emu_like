@@ -88,6 +88,7 @@ template_yaml = {
             'dropout_rate': 0.,
             'optimizer': 'adam',
             'loss': None,
+            'loss_floor': None,
             'epochs': 100000,
             'batch_size': None,
             'patience': None,
@@ -134,7 +135,7 @@ spectra_config = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm'
+    model = 'lcdm_nu_k'
     timeout = 47
     learning_rate = 1.e-3
     neurons_hidden = [1024, 1024]
@@ -155,9 +156,11 @@ if __name__ == '__main__':
 
         # Loss function
         if num_y_pca is None:
-            loss = 'mean_squared_error'
+            loss = 'huber'
+            loss_floor = None
         else:
-            loss = 'mean_squared_error_pca'
+            loss = 'huber_pca'
+            loss_floor = 1.e-4
 
         full_name = 'train_{}_{}'.format(model, spectrum)
 
@@ -177,6 +180,7 @@ if __name__ == '__main__':
         template_yaml['emulator']['args']['learning_rate'] = learning_rate
         template_yaml['emulator']['args']['neurons_hidden'] = neurons_hidden
         template_yaml['emulator']['args']['loss'] = loss
+        template_yaml['emulator']['args']['loss_floor'] = loss_floor
         template_yaml['emulator']['args']['batch_size'] = batch_size
         template_yaml['emulator']['args']['patience'] = patience
         template_yaml['emulator']['args']['reduce_learning_rate'] = \
