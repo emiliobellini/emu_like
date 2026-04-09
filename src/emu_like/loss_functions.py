@@ -45,7 +45,11 @@ def mean_squared_error(**kwargs):
 def mean_squared_error_pca(**kwargs):
     """Return MSE weighted by PCA singular values with a lower bound."""
 
-    scale = _normalized_singular_values(kwargs, minimum=0.2)
+    if kwargs['floor'] is None:
+        floor = 0.2
+    else:
+        floor = kwargs['floor']
+    scale = _normalized_singular_values(kwargs, minimum=floor)
 
     @register_keras_serializable(
         package='emu_like',
@@ -63,7 +67,11 @@ def mean_squared_error_pca(**kwargs):
 def huber_pca(**kwargs):
     """Return Huber loss applied to PCA-weighted residuals."""
 
-    scale = _normalized_singular_values(kwargs)
+    if kwargs['floor'] is None:
+        floor = 0.2
+    else:
+        floor = kwargs['floor']
+    scale = _normalized_singular_values(kwargs, minimum=floor)
 
     @register_keras_serializable(package='emu_like', name='huber_pca')
     def loss(y_true, y_pred):
