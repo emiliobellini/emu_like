@@ -18,22 +18,22 @@ ROOT = '/ceph/hpc/data/s25r06-05-users'
 DATASET_RANGES = ['thin', 'std', 'ext']
 
 SPECTRUM_CONFIGS = [
-    ('pk_m', 'pk', 1, 600),
-    ('pk_cb', 'pk', 1, 600),
-    ('pk_weyl', 'pk', 1, 600),
-    ('fk_m', 'pk', 1, 600),
-    ('fk_cb', 'pk', 1, 600),
-    ('fk_weyl', 'pk', 1, 600),
-    ('cl_TT_lensed', 'cl', 1, 2999),
-    ('cl_TE_lensed', 'cl', 1, 2999),
-    ('cl_EE_lensed', 'cl', 1, 2999),
-    ('cl_BB_lensed', 'cl', 1, 2999),
-    ('cl_pp_lensed', 'cl', 1, 2999),
-    ('cl_Tp_lensed', 'cl', 1, 2999),
+    ('pk_m', 'pk', 1, 600, 'StandardScaler', 'LogStandardScaler'),
+    ('pk_cb', 'pk', 1, 600, 'StandardScaler', 'LogStandardScaler'),
+    ('pk_weyl', 'pk', 1, 600, 'StandardScaler', 'LogStandardScaler'),
+    ('fk_m', 'pk', 1, 600, 'StandardScaler', 'StandardScaler'),
+    ('fk_cb', 'pk', 1, 600, 'StandardScaler', 'StandardScaler'),
+    ('fk_weyl', 'pk', 1, 600, 'StandardScaler', 'StandardScaler'),
+    ('cl_TT_lensed', 'cl', 1, 1500, 'StandardScaler', 'LogStandardScaler'),
+    ('cl_TE_lensed', 'cl', 1, 500, 'StandardScaler', 'StandardScaler'),
+    ('cl_EE_lensed', 'cl', 1, 1500, 'StandardScaler', 'LogStandardScaler'),
+    ('cl_BB_lensed', 'cl', 1, 1000, 'StandardScaler', 'LogStandardScaler'),
+    ('cl_pp_lensed', 'cl', 1, 1000, 'StandardScaler', 'LogStandardScaler'),
+    ('cl_Tp_lensed', 'cl', 1, 500, 'StandardScaler', 'StandardScaler'),
 ]
 
 
-def scale(y, y_train, y_test):
+def scale(y, y_train, y_test, y_scaler_fname):
     """Scale the provided splits with a min-max scaler fitted on training data.
 
     Args:
@@ -47,7 +47,7 @@ def scale(y, y_train, y_test):
             fitted scaler instance.
     """
 
-    y_scaler = Scaler.choose_one('MinMaxScaler')
+    y_scaler = Scaler.choose_one(y_scaler_fname)
     y_scaler.fit(y_train)
 
     y_all_scaled = y_scaler.transform(y)
@@ -375,7 +375,7 @@ def main():
         f'/ceph/hpc/home/bellinie/emu_like/output/test_pca/{model}')
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for spectrum, spectrum_type, min_mode, max_mode in SPECTRUM_CONFIGS:
+    for spectrum, spectrum_type, min_mode, max_mode, x_scaler_name, y_scaler_name in SPECTRUM_CONFIGS:
         output_path_x = output_dir / f'{spectrum}_x_pca_errors.pdf'
         output_path_y = output_dir / f'{spectrum}_y_pca_errors.pdf'
         if output_path_x.exists() and output_path_y.exists():
@@ -397,12 +397,13 @@ def main():
             for dr in DATASET_RANGES
         ]
         data = Dataset.join(data, verbose=True)
+        data.remove_non_finite()
 
         data.train_test_split(0.9, 1543, verbose=True)
 
         # Test x
         x_all, x_train, x_test, x_scaler = scale(
-            data.x, data.x_train, data.x_test
+            data.x, data.x_train, data.x_test, x_scaler_name
         )
         x_all, x_train, x_test, x_pca = pca(
             data.x.shape[-1], x_all, x_train, x_test
@@ -431,7 +432,7 @@ def main():
 
         # Test y
         y_all, y_train, y_test, y_scaler = scale(
-            data.y, data.y_train, data.y_test
+            data.y, data.y_train, data.y_test, y_scaler_name
         )
         y_all, y_train, y_test, y_pca = pca(
             max_mode, y_all, y_train, y_test

@@ -3,26 +3,31 @@ import csv
 import numpy as np
 import os
 import emu_like.io as io
+from itertools import islice
 
+
+# def get_head(fname, lines=1):
+#     """
+#     Imitates the bash head command
+#     """
+#     with open(fname, 'r') as f:
+#         f.seek(0, 2)     # go to end of file
+#         total_bytes = f.tell()
+#         lines_found, total_bytes_scanned = 0, 0
+#         while (lines+1 > lines_found and
+#                 total_bytes > total_bytes_scanned):
+#             byte_block = min(1024, total_bytes-total_bytes_scanned)
+#             f.seek(total_bytes_scanned, 0)
+#             total_bytes_scanned += byte_block
+#             lines_found += f.read(byte_block).count('\n')
+#         f.seek(0, 0)
+#         line_list = list(f.readlines(total_bytes_scanned))
+#         line_list = [x.rstrip() for x in line_list[:lines]]
+#     return line_list
 
 def get_head(fname, lines=1):
-    """
-    Imitates the bash head command
-    """
-    with open(fname, 'r') as f:
-        f.seek(0, 2)     # go to end of file
-        total_bytes = f.tell()
-        lines_found, total_bytes_scanned = 0, 0
-        while (lines+1 > lines_found and
-                total_bytes > total_bytes_scanned):
-            byte_block = min(1024, total_bytes-total_bytes_scanned)
-            f.seek(total_bytes_scanned, 0)
-            total_bytes_scanned += byte_block
-            lines_found += f.read(byte_block).count('\n')
-        f.seek(0, 0)
-        line_list = list(f.readlines(total_bytes_scanned))
-        line_list = [x.rstrip() for x in line_list[:lines]]
-    return line_list
+    with open(fname, "r", encoding="utf-8", errors="replace") as f:
+        return [line.rstrip("\n") for line in islice(f, lines)]
 
 
 def get_tail(fname, lines=1):
@@ -77,14 +82,12 @@ if __name__ == '__main__':
             history = np.array(
                 list(csv.reader(csvfile, delimiter=',')))[1:].astype(float)
 
-        # Last epoch
-        last_epoch = int(history[-1, 0])
-        last_learning_rate = history[-1, 1]
-
         # Best epoch
-        idx_best = np.where(history[:, 3] == np.min(history[:, 3]))[0][0]
+        idx_best = np.where(history[:, 3] == np.min(history[:, 3]))[0][-1]
         best_epoch, learning_rate, loss, val_loss = history[idx_best]
+        last_epoch, last_learning_rate, last_loss, last_val_loss = history[-1]
         best_epoch = int(best_epoch)
+        last_epoch = int(last_epoch)
 
         if args.exclude > 0 and last_epoch-best_epoch >= args.exclude:
             continue
@@ -97,6 +100,9 @@ if __name__ == '__main__':
             last_epoch-best_epoch))
         io.print_level(1, 'Learning rate: {:.2e} (best), {:.2e} (last)'.format(
             learning_rate, last_learning_rate))
-        io.print_level(1, 'Loss: {:.2e}'.format(loss))
-        io.print_level(1, 'Validation Loss: {:.2e}'.format(val_loss))
+        io.print_level(1, 'Loss: {:.2e} (best), {:.2e} (last)'.format(
+            loss, last_loss))
+        io.print_level(
+            1, 'Validation Loss: {:.2e} (best), {:.2e} (last)'.format(
+                val_loss, last_val_loss))
         print()
