@@ -200,9 +200,9 @@ class FFNNEmu(Emulator):
         content = params_file.content or {}
         emulator_block = content.get('emulator', {}) or {}
         args_block = emulator_block.get('args', {}) or {}
-        return args_block.get('loss'), args_block.get('loss_floor', None)
+        return args_block.get('loss'), args_block.get('loss_floor', None), args_block.get('loss_delta', None)
 
-    def _build_custom_loss(self, loss_name, loss_floor, y_pca):
+    def _build_custom_loss(self, loss_name, loss_floor, loss_delta, y_pca):
         """Recreate a registered custom loss callable from disk assets."""
         if not loss_name or not hasattr(lf, loss_name):
             return None
@@ -213,7 +213,7 @@ class FFNNEmu(Emulator):
             )
         loss_factory = getattr(lf, loss_name)
         data_stub = SimpleNamespace(y_pca=y_pca)
-        return loss_factory(data=data_stub, floor=loss_floor)
+        return loss_factory(data=data_stub, floor=loss_floor, delta=loss_delta)
 
     def load(self, path, model_to_load='best', still_training=True,
              verbose=False):
@@ -244,7 +244,7 @@ class FFNNEmu(Emulator):
         custom_objects = None
         preloaded_y_pca = None
         if still_training:
-            stored_loss, stored_floor = self._stored_loss_name_and_floor(path)
+            stored_loss, stored_floor, stored_delta = self._stored_loss_name_and_floor(path)
             if stored_loss and hasattr(lf, stored_loss):
                 y_pca_path = os.path.join(path, self.y_pca_fname)
                 if not os.path.isfile(y_pca_path):
@@ -254,7 +254,7 @@ class FFNNEmu(Emulator):
                     )
                 preloaded_y_pca = PCA.load(y_pca_path, verbose=verbose)
                 custom_loss = self._build_custom_loss(
-                    stored_loss, stored_floor, preloaded_y_pca)
+                    stored_loss, stored_floor, stored_delta, preloaded_y_pca)
                 if custom_loss is not None:
                     custom_objects = {
                         'loss': custom_loss,
@@ -479,7 +479,9 @@ class FFNNEmu(Emulator):
         # Get loss function
         try:
             loss_function = eval('lf.'+params['loss'])(
-                data=data, floor=params.get('loss_floor', None))
+                data=data,
+                floor=params.get('loss_floor', None),
+                delta=params.get('loss_delta', None))
         except AttributeError:
             loss_function = params['loss']
 
