@@ -567,6 +567,10 @@ class FFNNEmu(Emulator):
             initial_epoch = self.epochs[-1] + 1
         else:
             initial_epoch = 0
+            # Save immediately architecture to resume
+            # training in case of crashes
+            if path:
+                self.save(path)
         self.model.fit(
             data.x_train,
             data.y_train,
