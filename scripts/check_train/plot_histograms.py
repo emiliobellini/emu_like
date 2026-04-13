@@ -6,6 +6,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import re
 import time
 import yaml
 from tabulate import tabulate
@@ -185,12 +186,24 @@ class EmuData(object):
         return self.mean_rel_diff.argsort()[::-1]
 
 
-def show_summary(root, diff='rel', vlines=[0.01, 0.05, 0.1, 1.], save_dir='.'):
+def show_summary(
+        root,
+        diff='rel',
+        vlines=[0.01, 0.05, 0.1, 1.],
+        save_dir='.',
+        compare_to_all=False
+        ):
     with open(os.path.join(root, 'params.yaml')) as f:
         params = yaml.safe_load(f)
 
     spectrum = params['datasets']['name']
     dataset_paths = params['datasets']['paths']
+    if compare_to_all:
+        path, fname = os.path.split(dataset_paths[0])
+        fname = fname.split('_')
+        fname[-1] = '{}.fits'
+        fname = '_'.join(fname)
+        dataset_paths = [os.path.join(path, fname.format(dt)) for dt in ['thin', 'std', 'ext']]
 
     ranges = []
     for p in dataset_paths:
@@ -259,8 +272,14 @@ def show_summary(root, diff='rel', vlines=[0.01, 0.05, 0.1, 1.], save_dir='.'):
 
     fig.suptitle(spectrum, fontsize=20)
     plt.tight_layout()
-    fig.savefig(os.path.join(save_dir, 'histograms_summary.png'), dpi=150, bbox_inches='tight')
+
+    if os.path.split(root)[-1] == '':
+        fname = 'hist_{}.png'.format(os.path.basename(os.path.dirname(root)))
+    else:
+        fname = 'hist_{}.png'.format(os.path.basename(root))
+    fig.savefig(os.path.join(save_dir, fname), dpi=150, bbox_inches='tight')
     plt.close(fig)
+    print(f"Saved {fname}")
 
     print(tabulate(tab, headers=headers, tablefmt='orgtbl'))
 
@@ -302,16 +321,23 @@ def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05
         axs[0, ndr].legend()
 
     plt.tight_layout()
-    fig.savefig(os.path.join(save_dir, 'histograms_worst_modes.png'), dpi=150, bbox_inches='tight')
+
+    if os.path.split(root)[-1] == '':
+        fname = 'hist_worst_modes_{}.png'.format(os.path.basename(os.path.dirname(root)))
+    else:
+        fname = 'hist_worst_modes_{}.png'.format(os.path.basename(root))
+    fig.savefig(os.path.join(save_dir, fname), dpi=150, bbox_inches='tight')
     plt.close(fig)
+    print(f"Saved {fname}")
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Plot emulator error histograms and worst modes.')
     parser.add_argument(
-        '--root',
+        '--roots',
+        '-r',
         type=str,
-        default='/ceph/hpc/data/s25r06-05-users/test/hub_f4_d2',
+        nargs='+',
         help='Path to the emulator root folder.')
     parser.add_argument(
         '--save-dir',
@@ -323,6 +349,15 @@ if __name__ == '__main__':
     save_dir = args.save_dir or os.path.dirname(os.path.abspath(__file__))
     os.makedirs(save_dir, exist_ok=True)
 
-    emudata, spectrum, diff = show_summary(args.root, save_dir=save_dir)
-    plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, save_dir=save_dir)
-    print(f"\nFigures saved to {save_dir}")
+    # Find all folders containing history_log.csv in the provided roots
+    roots = []
+    for root in args.roots:
+        for folder, folders, files in os.walk(root):
+            if 'history_log.csv' in files:
+                roots.append(folder)
+    
+    for root in roots:
+
+        emudata, spectrum, diff = show_summary(root, save_dir=save_dir, compare_to_all=True)
+        plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, save_dir=save_dir)
+        print(f"\nFigures saved to {save_dir}")

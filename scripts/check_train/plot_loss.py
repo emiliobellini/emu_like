@@ -42,6 +42,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Plot loss per epoch for training runs.')
     parser.add_argument(
         '--roots',
+        '-r',
         type=str,
         nargs='+',
         help='Paths to training run folders containing history_log.csv.')
@@ -55,5 +56,12 @@ if __name__ == '__main__':
     save_dir = args.save_dir or os.path.dirname(os.path.abspath(__file__))
     os.makedirs(save_dir, exist_ok=True)
 
-    plot_loss(args.roots, save_dir=save_dir)
+    # Find all folders containing history_log.csv in the provided roots
+    roots = []
+    for root in args.roots:
+        for folder, folders, files in os.walk(root):
+            if 'history_log.csv' in files:
+                roots.append(folder)
+
+    plot_loss(roots, save_dir=save_dir)
     print(f"\nFigures saved to {save_dir}")
