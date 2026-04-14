@@ -25,6 +25,7 @@ def train_emu(args):
 
     # Read params
     params = io.YamlFile(args.params_file).read()
+    datasets_paths = params['datasets']['paths']
 
     # Force computation
     if args.force:
@@ -40,6 +41,7 @@ def train_emu(args):
             io.print_level(1, 'Ignoring {}'.format(args.params_file))
         # Read params from output folder
         params = io.YamlFile(root=params['output']['path']).read()
+        params['datasets']['paths'] = datasets_paths
     # Otherwise
     else:
         # Check if output folder is empty, otherwise stop
