@@ -60,10 +60,8 @@ cd /ceph/hpc/home/bellinie
 source ./venv/bin/activate
 cd emu_like
 
-NUM_WORKERS=8
-CHUNK_SIZE=${CHUNK_SIZE:-$((NUM_WORKERS*4))}
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v -f --num-workers "${NUM_WORKERS}" --chunk-size "${CHUNK_SIZE}"
+python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v -f
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -194,7 +192,7 @@ args = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm'
+    model = 'lcdm_k'
     n_samples_1000 = 100
     timeout = 47
     save_interval = 1000
