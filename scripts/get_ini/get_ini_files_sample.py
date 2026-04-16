@@ -192,7 +192,7 @@ args = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm_k'
+    model = 'lcdm'
     n_samples_1000 = 100
     timeout = 47
     save_interval = 1000
