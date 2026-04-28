@@ -200,7 +200,12 @@ class FFNNEmu(Emulator):
         content = params_file.content or {}
         emulator_block = content.get('emulator', {}) or {}
         args_block = emulator_block.get('args', {}) or {}
-        return args_block.get('loss'), args_block.get('loss_floor', None), args_block.get('loss_delta', None)
+        out = (
+            args_block.get('loss'),
+            args_block.get('loss_floor', None),
+            args_block.get('loss_delta', None)
+            )
+        return out
 
     def _build_custom_loss(self, loss_name, loss_floor, loss_delta, y_pca):
         """Recreate a registered custom loss callable from disk assets."""
@@ -244,7 +249,8 @@ class FFNNEmu(Emulator):
         custom_objects = None
         preloaded_y_pca = None
         if still_training:
-            stored_loss, stored_floor, stored_delta = self._stored_loss_name_and_floor(path)
+            stored_loss, stored_floor, stored_delta =\
+                self._stored_loss_name_and_floor(path)
             if stored_loss and hasattr(lf, stored_loss):
                 y_pca_path = os.path.join(path, self.y_pca_fname)
                 if not os.path.isfile(y_pca_path):

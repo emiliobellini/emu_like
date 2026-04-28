@@ -38,7 +38,7 @@ def export_emu(args):
 
         # Load emulator
         emu = Emulator.choose_one('ffnn_emu', verbose=False)
-        emu.load(in_path, verbose=False)
+        emu.load(in_path, still_training=False, verbose=False)
 
         # Fix paths
         name = emu.y_model.spectra[0].name
@@ -62,6 +62,15 @@ def export_emu(args):
             'class_args': emu.y_model.args,
             'model_path': model_fname,
         }
+
+        # Add parameter files
+        all_params = io.Folder(in_path).list_files(patterns='.+yaml')
+        for param in all_params:
+            tmp = io.YamlFile(param).read().content
+            if os.path.basename(param) == 'params.yaml':
+                emu_dict['training_params'] = tmp
+            else:
+                emu_dict[os.path.basename(param).split('.')[0]] = tmp
 
         # Save emulator
         emu.model.save(
