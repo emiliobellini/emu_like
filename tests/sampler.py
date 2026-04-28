@@ -86,7 +86,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('sample_file', type=str)
     parser.add_argument('--n_rands', '-n', type=int, default=10)
-    parser.add_argument('--threshold', '-t', type=float, default=1e-16)
+    parser.add_argument('--threshold', '-t', type=float, default=1e-15)
     parser.add_argument(
         '--evaluator',
         choices=['class', 'ymodel'],

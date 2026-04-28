@@ -89,6 +89,7 @@ template_yaml = {
             'optimizer': 'adam',
             'loss': None,
             'loss_floor': None,
+            'loss_delta': None,
             'epochs': 100000,
             'batch_size': None,
             'patience': None,
@@ -158,9 +159,11 @@ if __name__ == '__main__':
         if num_y_pca is None:
             loss = 'huber'
             loss_floor = None
+            loss_delta = None
         else:
             loss = 'huber_pca'
             loss_floor = 1.e-4
+            loss_delta = 1.e-2
 
         full_name = 'train_{}_{}'.format(model, spectrum)
 
@@ -181,6 +184,7 @@ if __name__ == '__main__':
         template_yaml['emulator']['args']['neurons_hidden'] = neurons_hidden
         template_yaml['emulator']['args']['loss'] = loss
         template_yaml['emulator']['args']['loss_floor'] = loss_floor
+        template_yaml['emulator']['args']['loss_delta'] = loss_delta
         template_yaml['emulator']['args']['batch_size'] = batch_size
         template_yaml['emulator']['args']['patience'] = patience
         template_yaml['emulator']['args']['reduce_learning_rate'] = \
