@@ -6,6 +6,7 @@
 
 """
 
+import os
 import emu_like.io as io
 from emu_like.emu import Emulator
 from emu_like.datasets import Dataset
@@ -90,6 +91,17 @@ def train_emu(args):
             columns_y=pars_dat['columns_y'],
             verbose=False)
             for path in pars_dat['paths']]
+        # Save sampler yaml file in output folder
+        for path in pars_dat['paths']:
+            root_data, fname_data = os.path.split(path)
+            fname_data = os.path.splitext(fname_data)[0] + '.yaml'
+            params_data = io.YamlFile(
+                fname=fname_data,
+                root=root_data).read()
+            params_data.write(
+                fname='dataset_{}'.format(fname_data),
+                root=params['output']['path'],
+                verbose=args.verbose)
     # 2) unique text files for x and y
     elif has_paths:
         data = [Dataset().load_external(

@@ -65,6 +65,11 @@ def sample_emu(args):
             verbose=args.verbose)
     # Otherwise
     else:
+        # Write parameters in output folder
+        params.write(
+            fname='{}.yaml'.format(params['output']['path'].split('.')[0]),
+            verbose=args.verbose)
+        # Sample the dataset
         data.sample(
             params=params['params'],
             x_name=params['x_sampler']['name'],
