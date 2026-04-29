@@ -136,12 +136,12 @@ spectra_config = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm_nu_k'
+    model = 'lcdm'
     timeout = 47
     learning_rate = 1.e-3
     neurons_hidden = [1024, 1024]
     batch_size = 128
-    patience = 2000
+    patience = 1000
     reduce_learning_rate = True
     n_samples_1000 = 100
     data_root = '/ceph/hpc/data/s25r06-05-users/'
@@ -157,11 +157,11 @@ if __name__ == '__main__':
 
         # Loss function
         if num_y_pca is None:
-            loss = 'huber'
+            loss = 'mean_squared_error'
             loss_floor = None
             loss_delta = None
         else:
-            loss = 'huber_pca'
+            loss = 'mean_squared_error_pca'
             loss_floor = 1.e-4
             loss_delta = 1.e-2
 
