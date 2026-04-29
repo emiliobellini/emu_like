@@ -140,6 +140,7 @@ class FFNNEmu(Emulator):
             reduce_on_plateau = keras.callbacks.ReduceLROnPlateau(
                 monitor='val_loss',
                 factor=0.5,
+                min_delta=0.,
                 patience=max(1, patience // 2),
                 verbose=verbose)
 
