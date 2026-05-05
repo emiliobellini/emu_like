@@ -14,8 +14,8 @@ def plot_loss(roots, save_dir='.'):
         data = np.genfromtxt(path, delimiter=',', names=True)
 
         fig, ax = plt.subplots(figsize=(8, 5))
-        ax.plot(data['epoch'], data['loss'], label='loss')
         ax.plot(data['epoch'], data['val_loss'], label='val_loss')
+        ax.plot(data['epoch'], data['loss'], label='loss')
 
         for idx in range(1, len(data['learning_rate'])):
             if data['learning_rate'][idx] != data['learning_rate'][idx - 1]:
@@ -24,6 +24,7 @@ def plot_loss(roots, save_dir='.'):
 
         ax.set_xlabel('Epoch')
         ax.set_ylabel('Loss')
+        # ax.set_xscale('log')
         ax.set_yscale('log')
         ax.set_title(os.path.basename(root))
         ax.legend()

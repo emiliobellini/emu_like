@@ -180,8 +180,8 @@ class FFNNEmu(Emulator):
         Plot - Loss per epoch. Arguments:
         - path (str, default: None): save plot to path
         """
-        plt.semilogy(self.epochs, self.loss, label='training data')
         plt.semilogy(self.epochs, self.val_loss, label='validation data')
+        plt.semilogy(self.epochs, self.loss, label='training data')
         plt.xlabel('epoch')
         plt.ylabel(self.model.loss)
         plt.legend()
