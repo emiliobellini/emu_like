@@ -188,7 +188,6 @@ class EmuData(object):
 
 def show_summary(
         root,
-        diff='rel',
         vlines=[0.01, 0.05, 0.1, 1.],
         save_dir='.',
         compare_to_all=False
@@ -197,6 +196,23 @@ def show_summary(
         params = yaml.safe_load(f)
 
     spectrum = params['datasets']['name']
+
+    spectra_diff = {
+        'pk_m': 'rel',
+        'pk_cb': 'rel',
+        'pk_weyl': 'rel',
+        'fk_m': 'rel',
+        'fk_cb': 'rel',
+        'fk_weyl': 'rel',
+        'cl_TT_lensed': 'rel',
+        'cl_TE_lensed': 'abs',
+        'cl_EE_lensed': 'rel',
+        'cl_BB_lensed': 'rel',
+        'cl_Tp_lensed': 'abs',
+        'cl_pp_lensed': 'rel',
+    }
+    diff = spectra_diff[spectrum]
+
     dataset_paths = params['datasets']['paths']
     if compare_to_all:
         path, fname = os.path.split(dataset_paths[0])
@@ -341,6 +357,7 @@ if __name__ == '__main__':
         help='Path to the emulator root folder.')
     parser.add_argument(
         '--save-dir',
+        '-s',
         type=str,
         default='/ceph/hpc/home/bellinie/emu_like/output',
         help='Directory to save figures. Defaults to script directory.')

@@ -48,6 +48,7 @@ if __name__ == '__main__':
         help='Paths to training run folders containing history_log.csv.')
     parser.add_argument(
         '--save-dir',
+        '-s',
         type=str,
         default='/ceph/hpc/home/bellinie/emu_like/output',
         help='Directory to save figures. Defaults to script directory.')

@@ -141,7 +141,7 @@ if __name__ == '__main__':
     learning_rate = 1.e-3
     neurons_hidden = [1024, 1024]
     batch_size = 128
-    patience = 1000
+    patience = 2000
     reduce_learning_rate = True
     n_samples_1000 = 100
     data_root = '/ceph/hpc/data/s25r06-05-users/'
