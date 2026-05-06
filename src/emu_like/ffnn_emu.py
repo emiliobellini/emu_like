@@ -269,27 +269,36 @@ class FFNNEmu(Emulator):
                         'function': custom_loss,
                     }
 
-        # Load last model
+        # Load history
+        try:
+            fname = os.path.join(path, self.log_fname)
+            history = np.genfromtxt(fname, delimiter=',', skip_header=1)
+            self.epochs = [int(x) for x in history[:, 0]]
+            self.learning_rate = list(history[:, 1])
+            self.loss = list(history[:, 2])
+            self.val_loss = list(history[:, 3])
+        except FileNotFoundError:
+            pass
+
+        # Load model
+        fname = os.path.join(path, self.model_fname)
+        self.model = keras.models.load_model(
+            fname,
+            compile=still_training,
+            custom_objects=custom_objects)
         if model_to_load == 'best':
-            fname = os.path.join(path, self.model_fname)
-            self.model = keras.models.load_model(
-                fname,
-                compile=still_training,
-                custom_objects=custom_objects)
+            epoch = {
+                'epoch': self.epochs[np.argmin(np.array(self.val_loss))]
+                }
         elif isinstance(model_to_load, int):
-            fname = os.path.join(path, self.model_fname)
-            self.model = keras.models.load_model(
-                fname,
-                compile=still_training,
-                custom_objects=custom_objects)
             epoch = {'epoch': model_to_load}
-            fname = os.path.join(
-                path,
-                self.checkpoint_folder,
-                self.checkpoint_fname.format(**epoch))
-            self.model.load_weights(fname)
         else:
             raise Exception('Model not recognised!')
+        fname = os.path.join(
+            path,
+            self.checkpoint_folder,
+            self.checkpoint_fname.format(**epoch))
+        self.model.load_weights(fname)
 
         if verbose:
             io.print_level(1, 'From: {}'.format(fname))
@@ -323,17 +332,6 @@ class FFNNEmu(Emulator):
         self.x_names = params['x_names']
         self.y_names = params['y_names']
         self.x_ranges = params['x_ranges']
-
-        # Load history
-        try:
-            fname = os.path.join(path, self.log_fname)
-            history = np.genfromtxt(fname, delimiter=',', skip_header=1)
-            self.epochs = [int(x) for x in history[:, 0]]
-            self.learning_rate = list(history[:, 1])
-            self.loss = list(history[:, 2])
-            self.val_loss = list(history[:, 3])
-        except FileNotFoundError:
-            pass
 
         # Init y_model
         self.y_model = YModel.choose_one(
