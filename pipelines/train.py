@@ -53,6 +53,7 @@ def train_emu(args):
             # Save params
             params.write(
                 root=params['output']['path'],
+                skip_if_exists=True,
                 verbose=args.verbose)
         else:
             raise Exception(
@@ -101,6 +102,7 @@ def train_emu(args):
             params_data.write(
                 fname='dataset_{}'.format(fname_data),
                 root=params['output']['path'],
+                skip_if_exists=True,
                 verbose=args.verbose)
     # 2) unique text files for x and y
     elif has_paths:

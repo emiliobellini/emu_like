@@ -614,7 +614,7 @@ class YamlFile(object):
         return self
 
     def write(self, fname=None, root=None, header=None, overwrite=False,
-              verbose=False):
+              skip_if_exists=False, verbose=False):
         """
         Save parameter to path, with the header if specified.
         Arguments:
@@ -622,6 +622,8 @@ class YamlFile(object):
         - root (str, default: None): root where to save the file;
         - header (str, optional): string to be prepended to destination file;
         - overwrite (bool, default: False): overwrite already existing file;
+        - skip_if_exists (bool, default: False): skip writing if file
+          already exists;
         - verbose (bool, default: False): verbosity.
         """
         # Define path
@@ -637,6 +639,11 @@ class YamlFile(object):
         self.exists = os.path.isfile(self.path)
 
         if self.exists and not overwrite:
+            if skip_if_exists:
+                if verbose:
+                    print_level(1, 'File {} already exists, skipping writing.'.format(
+                        self.path))
+                return
             raise FileNotFoundError(
                 'The file you want to read ({}) already exists!'.format(
                     self.path))
