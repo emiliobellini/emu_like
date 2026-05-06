@@ -287,18 +287,34 @@ class FFNNEmu(Emulator):
             compile=still_training,
             custom_objects=custom_objects)
         if model_to_load == 'best':
-            epoch = {
-                'epoch': self.epochs[np.argmin(np.array(self.val_loss))]
-                }
+            idxs = np.argsort(np.array(self.val_loss))
+            try:
+                epoch = {
+                    'epoch': self.epochs[idxs[0]+1]
+                    }
+                fname = os.path.join(
+                    path,
+                    self.checkpoint_folder,
+                    self.checkpoint_fname.format(**epoch))
+                self.model.load_weights(fname)
+            except FileNotFoundError:
+                epoch = {
+                    'epoch': self.epochs[idxs[1]+1]
+                    }
+                fname = os.path.join(
+                    path,
+                    self.checkpoint_folder,
+                    self.checkpoint_fname.format(**epoch))
+                self.model.load_weights(fname)
         elif isinstance(model_to_load, int):
             epoch = {'epoch': model_to_load}
+            fname = os.path.join(
+                path,
+                self.checkpoint_folder,
+                self.checkpoint_fname.format(**epoch))
+            self.model.load_weights(fname)
         else:
             raise Exception('Model not recognised!')
-        fname = os.path.join(
-            path,
-            self.checkpoint_folder,
-            self.checkpoint_fname.format(**epoch))
-        self.model.load_weights(fname)
 
         if verbose:
             io.print_level(1, 'From: {}'.format(fname))
