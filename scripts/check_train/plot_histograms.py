@@ -5,11 +5,12 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
+import scipy.interpolate as interp
 import os
-import re
 import time
 import yaml
 from tabulate import tabulate
+import classy
 import emu_like.io as io
 from emu_like.ffnn_emu import FFNNEmu
 
@@ -24,6 +25,9 @@ class EmuData(object):
         self.rel_diff = None
         self.mean_abs_diff = None
         self.mean_rel_diff = None
+        self.x_data = None
+        self.y_data = None
+        self.y_emu = None
 
     def _scale_x(self, x):
         return self.emu.x_scaler.transform(x)
@@ -139,22 +143,28 @@ class EmuData(object):
                      select_pca_modes_emu=None, select_pca_modes_data=None, time_emu=False):
         if want_pca and select_pca_modes_emu != select_pca_modes_data:
             raise ValueError('Inconsistent dimensions for absolute difference.')
-        y_emu = self.get_y_emu(x_emu, want_scaling=want_scaling, want_pca=want_pca,
-                               select_pca_modes=select_pca_modes_emu, timeit=time_emu)
-        y_data = self.get_y_data(y_data, want_scaling=want_scaling, want_pca=want_pca,
-                                 select_pca_modes=select_pca_modes_data)
-        self.abs_diff = y_emu - y_data
+        self.x_data = x_emu
+        self.y_data = self.get_y_data(
+            y_data, want_scaling=want_scaling, want_pca=want_pca,
+            select_pca_modes=select_pca_modes_data)
+        self.y_emu = self.get_y_emu(
+            x_emu, want_scaling=want_scaling, want_pca=want_pca,
+            select_pca_modes=select_pca_modes_emu, timeit=time_emu)
+        self.abs_diff = self.y_emu - self.y_data
         return self.abs_diff
 
     def get_rel_diff(self, x_emu, y_data, want_scaling=False, want_pca=False,
                      select_pca_modes_emu=None, select_pca_modes_data=None, time_emu=False):
         if want_pca and select_pca_modes_emu != select_pca_modes_data:
             raise ValueError('Inconsistent dimensions for relative difference.')
-        y_emu = self.get_y_emu(x_emu, want_scaling=want_scaling, want_pca=want_pca,
-                               select_pca_modes=select_pca_modes_emu, timeit=time_emu)
-        y_data = self.get_y_data(y_data, want_scaling=want_scaling, want_pca=want_pca,
-                                 select_pca_modes=select_pca_modes_data)
-        self.rel_diff = y_emu / y_data - 1.
+        self.x_data = x_emu
+        self.y_data = self.get_y_data(
+            y_data, want_scaling=want_scaling, want_pca=want_pca,
+            select_pca_modes=select_pca_modes_data)
+        self.y_emu = self.get_y_emu(
+            x_emu, want_scaling=want_scaling, want_pca=want_pca,
+            select_pca_modes=select_pca_modes_emu, timeit=time_emu)
+        self.rel_diff = self.y_emu / self.y_data - 1.
         return self.rel_diff
 
     def get_mean_abs_diff(self, x_emu=None, y_data=None, want_scaling=False, want_pca=False,
@@ -185,6 +195,45 @@ class EmuData(object):
             raise Exception('Calculate mean_rel_diff first')
         return self.mean_rel_diff.argsort()[::-1]
 
+    def get_y_class(self, idxs):
+
+        cosmo = classy.Class()
+        class_params = self.emu.y_model.class_params
+        spectrum = self.emu.y_model.spectra[0]
+        ref_spectrum_array = self.emu.y_model.y_ref[0][0]
+
+        # 1) Infer the maximum redshift
+        if spectrum.is_pk:
+            z_max = {'z_max_pk': self.emu.y_model._get_z_max()}
+            z_array = self.emu.y_model.z_array
+            k_range = self.emu.y_model.k_ranges[0]
+            # Init output array
+            y_class = np.zeros((len(idxs), len(k_range)))
+        else:
+            z_max = {}
+            ell_range = self.emu.y_model.ell_ranges[0]
+            # Init output array
+            y_class = np.zeros((len(idxs), len(ell_range)))
+
+        # Iterate over indices
+        for nx, x in enumerate(self.x_data[idxs]):
+
+            # Fix parameters
+            for key, val in zip(self.emu.x_names, x):
+                class_params[key] = val
+            cosmo.set(class_params)
+            # Comppute class
+            cosmo.compute()
+
+            # Interpolate over z or not
+            if spectrum.is_cl:
+                y_class[nx, :] = spectrum.get(cosmo)/ref_spectrum_array
+            else:
+                y_ref = interp.make_splrep(
+                    z_array, ref_spectrum_array.T, s=0)(class_params['z_pk']).T
+                y_class[nx, :] = spectrum.get(cosmo, z=class_params['z_pk'])/y_ref
+
+        return y_class
 
 def show_summary(
         root,
@@ -232,7 +281,7 @@ def show_summary(
     headers = ['range']
     headers += ['>{}%'.format(val) for val in vlines]
     headers += ['Time emu (s)', 'Time total (s)']
-    headers += ['Epochs (best/tot)', 'Loss', 'Val Loss', 'LR']
+    headers += ['Epochs (best/tot)', 'Loss', 'Val Loss', 'LR', '# NaN']
     tab = []
 
     emudata = {}
@@ -257,6 +306,13 @@ def show_summary(
         dataset = io.FitsFile(path)
         x_data = dataset.get_data('x_data')
         y_data = dataset.get_data(spectrum)
+        n_nans = x_data.shape[0]
+        # Get mask nans
+        mask_nans = np.all(~np.isnan(y_data), axis=1)
+        # Filter nans
+        x_data = x_data[mask_nans]
+        y_data = y_data[mask_nans]
+        n_nans -= x_data.shape[0]
 
         result = fun(
             x_emu=x_data, y_data=y_data,
@@ -273,6 +329,7 @@ def show_summary(
         tab_line += ['{:.2e}'.format(losses[idx_best])]
         tab_line += ['{:.2e}'.format(val_losses[idx_best])]
         tab_line += ['{:.2e}'.format(learning_rates[idx_best])]
+        tab_line += ['{}'.format(n_nans)]
         tab.append(tab_line)
 
         axs[0, ndr].hist(np.log10(result), log=True, bins=20)
@@ -297,7 +354,14 @@ def show_summary(
     plt.close(fig)
     print(f"Saved {fname}")
 
-    print(tabulate(tab, headers=headers, tablefmt='orgtbl'))
+    summary_table = tabulate(tab, headers=headers, tablefmt='orgtbl')
+    print(summary_table)
+
+    with open(os.path.join(save_dir, 'summary_tables.txt'), 'a') as outputfile:
+        outputfile.write(spectrum)
+        outputfile.write('\n')
+        outputfile.write(summary_table)
+        outputfile.write('\n\n')
 
     return emudata, spectrum, diff
 
@@ -305,7 +369,7 @@ def show_summary(
 def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05, 0.1, 1.], save_dir='.'):
     ranges = list(emudata.keys())
     n_ranges = len(ranges)
-    fig, axs = plt.subplots(1, n_ranges, figsize=(6 * n_ranges, 4), squeeze=False)
+    fig, axs = plt.subplots(1 + n_modes_kept, n_ranges, figsize=(6 * n_ranges, 6 + 4*n_modes_kept), squeeze=False)
     fig.suptitle('Worst modes - {}'.format(spectrum), fontsize=20, y=1.0)
 
     for ndr, dr in enumerate(ranges):
@@ -320,14 +384,24 @@ def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05
             diffs = emudata[dr].abs_diff[idxs]
         else:
             raise ValueError('Difference type not recognized!')
+        y_emu = emudata[dr].y_emu[idxs]
+        y_data = emudata[dr].y_data[idxs]
+        y_class = emudata[dr].get_y_class(idxs)
 
         for val in vlines:
             axs[0, ndr].axhline(emudata[dr].max_y_data * val, c='k', lw=0.1)
 
-        for ndiff, d in enumerate(diffs):
-            axs[0, ndr].plot(np.abs(d) * 100., label='rank: {}, idx: {}'.format(ndiff + 1, idxs[ndiff]))
+        for nmode in range(n_modes_kept):
+            # On the first row plot relative/absolute differences for all modes
+            axs[0, ndr].plot(np.abs(diffs[nmode]) * 100., label='Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
             axs[0, ndr].set_yscale('log')
             axs[0, ndr].set_title('{} - {}'.format(spectrum, dr), fontsize=18)
+
+            # On the other rows plot individual modes: data, emulated, class
+            axs[1 + nmode, ndr].plot(y_data[nmode], label='Data')
+            axs[1 + nmode, ndr].plot(y_emu[nmode], linestyle='--', label='Emulated')
+            axs[1 + nmode, ndr].plot(y_class[nmode], linestyle=':', label='Class')
+            axs[1 + nmode, ndr].set_ylabel('Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
 
         if diff == 'rel':
             axs[0, 0].set_ylabel('rel diff [%]')
@@ -335,6 +409,7 @@ def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05
             axs[0, 0].set_ylabel('abs diff')
 
         axs[0, ndr].legend()
+    axs[1, 0].legend()
 
     plt.tight_layout()
 
