@@ -2,10 +2,10 @@
 
 import argparse
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+matplotlib.use('Agg')
 
 
 def plot_loss(roots, save_dir='.'):
@@ -13,9 +13,22 @@ def plot_loss(roots, save_dir='.'):
         path = os.path.join(root, 'history_log.csv')
         data = np.genfromtxt(path, delimiter=',', names=True)
 
+        # Best validation loss
+        best_idx = np.argmin(data['val_loss'])
+        best_epoch = data['epoch'][best_idx]
+        best_val_loss = data['val_loss'][best_idx]
+        best_loss = data['loss'][best_idx]
+        last_epoch = data['epoch'][-1]
+
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.plot(data['epoch'], data['val_loss'], label='val_loss')
         ax.plot(data['epoch'], data['loss'], label='loss')
+
+        # Plot best epoch
+        ax.plot(best_epoch, best_val_loss, 'ro',
+                label='Best val_loss: {:.2e}'.format(best_val_loss))
+        ax.plot(best_epoch, best_loss, 'go',
+                label='Loss at best val_loss: {:.2e}'.format(best_loss))
 
         for idx in range(1, len(data['learning_rate'])):
             if data['learning_rate'][idx] != data['learning_rate'][idx - 1]:
@@ -26,21 +39,28 @@ def plot_loss(roots, save_dir='.'):
         ax.set_ylabel('Loss')
         # ax.set_xscale('log')
         ax.set_yscale('log')
-        ax.set_title(os.path.basename(root))
+        ax.set_title('{}. Epochs without improvement {} (Last epoch: {})'
+                     ''.format(
+                         os.path.basename(root),
+                         int(last_epoch-best_epoch),
+                         int(last_epoch)))
         ax.legend()
         plt.tight_layout()
 
         if os.path.split(root)[-1] == '':
-            fname = 'loss_{}.png'.format(os.path.basename(os.path.dirname(root)))
+            fname = 'loss_{}.png'.format(
+                os.path.basename(os.path.dirname(root)))
         else:
             fname = 'loss_{}.png'.format(os.path.basename(root))
-        fig.savefig(os.path.join(save_dir, fname), dpi=150, bbox_inches='tight')
+        fig.savefig(os.path.join(save_dir, fname),
+                    dpi=150, bbox_inches='tight')
         plt.close(fig)
         print(f"Saved {fname}")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Plot loss per epoch for training runs.')
+    parser = argparse.ArgumentParser(
+        description='Plot loss per epoch for training runs.')
     parser.add_argument(
         '--roots',
         '-r',

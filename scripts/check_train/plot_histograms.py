@@ -2,7 +2,6 @@
 
 import argparse
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.interpolate as interp
@@ -13,6 +12,7 @@ from tabulate import tabulate
 import classy
 import emu_like.io as io
 from emu_like.ffnn_emu import FFNNEmu
+matplotlib.use('Agg')
 
 
 class EmuData(object):
@@ -53,7 +53,14 @@ class EmuData(object):
     def _inverse_pca_y(self, y):
         return self.emu.y_pca.inverse_transform(y)
 
-    def get_y_emu(self, x, want_scaling=False, want_pca=False, select_pca_modes=None, timeit=False):
+    def get_y_emu(
+            self,
+            x,
+            want_scaling=False,
+            want_pca=False,
+            select_pca_modes=None,
+            timeit=False):
+
         if timeit:
             start_all = time.time()
 
@@ -63,13 +70,18 @@ class EmuData(object):
         n_samples = x.shape[0]
 
         if want_scaling and not has_scaling:
-            raise ValueError('Cannot keep scaled units: y is already unscaled.')
+            raise ValueError(
+                'Cannot keep scaled units: y is already unscaled.')
         if want_pca and not has_pca:
-            raise ValueError('Cannot request PCA output: emulator has no PCA transform.')
+            raise ValueError(
+                'Cannot request PCA output: emulator has no PCA transform.')
         if want_pca_selection and not has_pca:
-            raise ValueError('Cannot select PCA modes: emulator has no PCA transform.')
+            raise ValueError(
+                'Cannot select PCA modes: emulator has no PCA transform.')
         if want_pca and has_scaling and not want_scaling:
-            raise ValueError('Cannot stay in PCA space while undoing scaling when PCA was built on scaled data.')
+            raise ValueError(
+                'Cannot stay in PCA space while undoing scaling when '
+                'PCA was built on scaled data.')
 
         if x.ndim == 1:
             x = x[np.newaxis, :]
@@ -106,19 +118,29 @@ class EmuData(object):
 
         return result
 
-    def get_y_data(self, y, want_scaling=False, want_pca=False, select_pca_modes=None):
+    def get_y_data(
+            self,
+            y,
+            want_scaling=False,
+            want_pca=False,
+            select_pca_modes=None):
         has_pca = self.emu.y_pca is not None
         has_scaling = self.emu.y_scaler is not None
         want_pca_selection = select_pca_modes is not None
 
         if want_scaling and not has_scaling:
-            raise ValueError('Cannot use scaled units: emulator has no scaling transform.')
+            raise ValueError(
+                'Cannot use scaled units: emulator has no scaling transform.')
         if want_pca and not has_pca:
-            raise ValueError('Cannot request PCA output: emulator has no PCA transform.')
+            raise ValueError(
+                'Cannot request PCA output: emulator has no PCA transform.')
         if want_pca_selection and not has_pca:
-            raise ValueError('Cannot select PCA modes: emulator has no PCA transform.')
+            raise ValueError(
+                'Cannot select PCA modes: emulator has no PCA transform.')
         if want_pca and has_scaling and not want_scaling:
-            raise ValueError('Cannot stay in PCA space while undoing scaling when PCA was built on scaled data.')
+            raise ValueError(
+                'Cannot stay in PCA space while undoing scaling when PCA '
+                'was built on scaled data.')
 
         result = y
         if want_scaling or (want_pca_selection and has_scaling):
@@ -139,10 +161,19 @@ class EmuData(object):
             result = result[0]
         return result
 
-    def get_abs_diff(self, x_emu, y_data, want_scaling=False, want_pca=False,
-                     select_pca_modes_emu=None, select_pca_modes_data=None, time_emu=False):
+    def get_abs_diff(
+            self,
+            x_emu,
+            y_data,
+            want_scaling=False,
+            want_pca=False,
+            select_pca_modes_emu=None,
+            select_pca_modes_data=None,
+            time_emu=False):
+
         if want_pca and select_pca_modes_emu != select_pca_modes_data:
-            raise ValueError('Inconsistent dimensions for absolute difference.')
+            raise ValueError(
+                'Inconsistent dimensions for absolute difference.')
         self.x_data = x_emu
         self.y_data = self.get_y_data(
             y_data, want_scaling=want_scaling, want_pca=want_pca,
@@ -153,10 +184,19 @@ class EmuData(object):
         self.abs_diff = self.y_emu - self.y_data
         return self.abs_diff
 
-    def get_rel_diff(self, x_emu, y_data, want_scaling=False, want_pca=False,
-                     select_pca_modes_emu=None, select_pca_modes_data=None, time_emu=False):
+    def get_rel_diff(
+            self,
+            x_emu,
+            y_data,
+            want_scaling=False,
+            want_pca=False,
+            select_pca_modes_emu=None,
+            select_pca_modes_data=None,
+            time_emu=False):
+
         if want_pca and select_pca_modes_emu != select_pca_modes_data:
-            raise ValueError('Inconsistent dimensions for relative difference.')
+            raise ValueError(
+                'Inconsistent dimensions for relative difference.')
         self.x_data = x_emu
         self.y_data = self.get_y_data(
             y_data, want_scaling=want_scaling, want_pca=want_pca,
@@ -167,21 +207,47 @@ class EmuData(object):
         self.rel_diff = self.y_emu / self.y_data - 1.
         return self.rel_diff
 
-    def get_mean_abs_diff(self, x_emu=None, y_data=None, want_scaling=False, want_pca=False,
-                          select_pca_modes_emu=None, select_pca_modes_data=None, time_emu=False):
+    def get_mean_abs_diff(
+            self,
+            x_emu=None,
+            y_data=None,
+            want_scaling=False,
+            want_pca=False,
+            select_pca_modes_emu=None,
+            select_pca_modes_data=None,
+            time_emu=False):
+
         if x_emu is not None and y_data is not None:
-            self.abs_diff = self.get_abs_diff(x_emu, y_data, want_scaling=want_scaling,
-                                              want_pca=want_pca, select_pca_modes_emu=select_pca_modes_emu,
-                                              select_pca_modes_data=select_pca_modes_data, time_emu=time_emu)
+            self.abs_diff = self.get_abs_diff(
+                x_emu,
+                y_data,
+                want_scaling=want_scaling,
+                want_pca=want_pca,
+                select_pca_modes_emu=select_pca_modes_emu,
+                select_pca_modes_data=select_pca_modes_data,
+                time_emu=time_emu)
         self.mean_abs_diff = np.sqrt(np.mean(self.abs_diff**2., axis=1))
         return self.mean_abs_diff
 
-    def get_mean_rel_diff(self, x_emu=None, y_data=None, want_scaling=False, want_pca=False,
-                          select_pca_modes_emu=None, select_pca_modes_data=None, time_emu=False):
+    def get_mean_rel_diff(
+            self,
+            x_emu=None,
+            y_data=None,
+            want_scaling=False,
+            want_pca=False,
+            select_pca_modes_emu=None,
+            select_pca_modes_data=None,
+            time_emu=False):
+
         if x_emu is not None and y_data is not None:
-            self.rel_diff = self.get_rel_diff(x_emu, y_data, want_scaling=want_scaling,
-                                              want_pca=want_pca, select_pca_modes_emu=select_pca_modes_emu,
-                                              select_pca_modes_data=select_pca_modes_data, time_emu=time_emu)
+            self.rel_diff = self.get_rel_diff(
+                x_emu,
+                y_data,
+                want_scaling=want_scaling,
+                want_pca=want_pca,
+                select_pca_modes_emu=select_pca_modes_emu,
+                select_pca_modes_data=select_pca_modes_data,
+                time_emu=time_emu)
         self.mean_rel_diff = np.sqrt(np.mean(self.rel_diff**2., axis=1))
         return self.mean_rel_diff
 
@@ -204,13 +270,13 @@ class EmuData(object):
 
         # 1) Infer the maximum redshift
         if spectrum.is_pk:
-            z_max = {'z_max_pk': self.emu.y_model._get_z_max()}
+            # z_max = {'z_max_pk': self.emu.y_model._get_z_max()}
             z_array = self.emu.y_model.z_array
             k_range = self.emu.y_model.k_ranges[0]
             # Init output array
             y_class = np.zeros((len(idxs), len(k_range)))
         else:
-            z_max = {}
+            # z_max = {}
             ell_range = self.emu.y_model.ell_ranges[0]
             # Init output array
             y_class = np.zeros((len(idxs), len(ell_range)))
@@ -231,9 +297,11 @@ class EmuData(object):
             else:
                 y_ref = interp.make_splrep(
                     z_array, ref_spectrum_array.T, s=0)(class_params['z_pk']).T
-                y_class[nx, :] = spectrum.get(cosmo, z=class_params['z_pk'])/y_ref
+                y_class[nx, :] = spectrum.get(
+                    cosmo, z=class_params['z_pk'])/y_ref
 
         return y_class
+
 
 def show_summary(
         root,
@@ -241,6 +309,7 @@ def show_summary(
         save_dir='.',
         compare_to_all=False
         ):
+
     with open(os.path.join(root, 'params.yaml')) as f:
         params = yaml.safe_load(f)
 
@@ -268,7 +337,8 @@ def show_summary(
         fname = fname.split('_')
         fname[-1] = '{}.fits'
         fname = '_'.join(fname)
-        dataset_paths = [os.path.join(path, fname.format(dt)) for dt in ['thin', 'std', 'ext']]
+        dataset_paths = [os.path.join(path, fname.format(dt))
+                         for dt in ['thin', 'std', 'ext']]
 
     ranges = []
     for p in dataset_paths:
@@ -276,7 +346,8 @@ def show_summary(
         ranges.append((dr, p))
 
     n_ranges = len(ranges)
-    fig, axs = plt.subplots(1, n_ranges, figsize=(6 * n_ranges, 4), squeeze=False)
+    fig, axs = plt.subplots(
+        1, n_ranges, figsize=(6 * n_ranges, 4), squeeze=False)
 
     headers = ['range']
     headers += ['>{}%'.format(val) for val in vlines]
@@ -321,7 +392,8 @@ def show_summary(
             time_emu=True)
 
         tab_line = [dr]
-        tab_line += ['{:.3f}%'.format(len(result[result > val / 100.]) / len(result) * 100.)
+        tab_line += ['{:.3f}%'.format(
+            len(result[result > val / 100.]) / len(result) * 100.)
                      for val in vlines]
         tab_line += ['{:.1e}'.format(emudata[dr].time_emu)]
         tab_line += ['{:.1e}'.format(emudata[dr].time_all)]
@@ -357,7 +429,8 @@ def show_summary(
     summary_table = tabulate(tab, headers=headers, tablefmt='orgtbl')
     print(summary_table)
 
-    with open(os.path.join(save_dir, 'summary_tables.txt'), 'a') as outputfile:
+    out_fname = os.path.join(save_dir, 'summary_table_{}.txt'.format(spectrum))
+    with open(out_fname, 'w') as outputfile:
         outputfile.write(spectrum)
         outputfile.write('\n')
         outputfile.write(summary_table)
@@ -366,10 +439,21 @@ def show_summary(
     return emudata, spectrum, diff
 
 
-def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05, 0.1, 1.], save_dir='.'):
+def plot_worst_modes(
+        emudata,
+        spectrum,
+        diff,
+        n_modes_kept=3,
+        vlines=[0.01, 0.05, 0.1, 1.],
+        save_dir='.'):
+
     ranges = list(emudata.keys())
     n_ranges = len(ranges)
-    fig, axs = plt.subplots(1 + n_modes_kept, n_ranges, figsize=(6 * n_ranges, 6 + 4*n_modes_kept), squeeze=False)
+    fig, axs = plt.subplots(
+        1 + n_modes_kept,
+        n_ranges,
+        figsize=(6 * n_ranges, 6 + 4*n_modes_kept),
+        squeeze=False)
     fig.suptitle('Worst modes - {}'.format(spectrum), fontsize=20, y=1.0)
 
     for ndr, dr in enumerate(ranges):
@@ -393,15 +477,20 @@ def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05
 
         for nmode in range(n_modes_kept):
             # On the first row plot relative/absolute differences for all modes
-            axs[0, ndr].plot(np.abs(diffs[nmode]) * 100., label='Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
+            axs[0, ndr].plot(
+                np.abs(diffs[nmode]) * 100.,
+                label='Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
             axs[0, ndr].set_yscale('log')
             axs[0, ndr].set_title('{} - {}'.format(spectrum, dr), fontsize=18)
 
             # On the other rows plot individual modes: data, emulated, class
             axs[1 + nmode, ndr].plot(y_data[nmode], label='Data')
-            axs[1 + nmode, ndr].plot(y_emu[nmode], linestyle='--', label='Emulated')
-            axs[1 + nmode, ndr].plot(y_class[nmode], linestyle=':', label='Class')
-            axs[1 + nmode, ndr].set_ylabel('Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
+            axs[1 + nmode, ndr].plot(
+                y_emu[nmode], linestyle='--', label='Emulated')
+            axs[1 + nmode, ndr].plot(
+                y_class[nmode], linestyle=':', label='Class')
+            axs[1 + nmode, ndr].set_ylabel(
+                'Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
 
         if diff == 'rel':
             axs[0, 0].set_ylabel('rel diff [%]')
@@ -414,7 +503,8 @@ def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05
     plt.tight_layout()
 
     if os.path.split(root)[-1] == '':
-        fname = 'hist_worst_modes_{}.png'.format(os.path.basename(os.path.dirname(root)))
+        fname = 'hist_worst_modes_{}.png'.format(
+            os.path.basename(os.path.dirname(root)))
     else:
         fname = 'hist_worst_modes_{}.png'.format(os.path.basename(root))
     fig.savefig(os.path.join(save_dir, fname), dpi=150, bbox_inches='tight')
@@ -423,7 +513,8 @@ def plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, vlines=[0.01, 0.05
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Plot emulator error histograms and worst modes.')
+    parser = argparse.ArgumentParser(
+        description='Plot emulator error histograms and worst modes.')
     parser.add_argument(
         '--roots',
         '-r',
@@ -447,9 +538,11 @@ if __name__ == '__main__':
         for folder, folders, files in os.walk(root):
             if 'history_log.csv' in files:
                 roots.append(folder)
-    
+
     for root in roots:
 
-        emudata, spectrum, diff = show_summary(root, save_dir=save_dir, compare_to_all=True)
-        plot_worst_modes(emudata, spectrum, diff, n_modes_kept=3, save_dir=save_dir)
-        print(f"\nFigures saved to {save_dir}")
+        emudata, spectrum, diff = show_summary(
+            root, save_dir=save_dir, compare_to_all=True)
+        plot_worst_modes(
+            emudata, spectrum, diff, n_modes_kept=3, save_dir=save_dir)
+        print(f"\nFigures saved to {save_dir}\n")
