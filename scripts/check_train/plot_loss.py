@@ -71,7 +71,7 @@ if __name__ == '__main__':
         '--save-dir',
         '-s',
         type=str,
-        default='/ceph/hpc/home/bellinie/emu_like/output',
+        default='output',
         help='Directory to save figures. Defaults to script directory.')
     args = parser.parse_args()
 
