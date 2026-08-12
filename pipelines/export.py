@@ -72,6 +72,17 @@ def export_emu(args):
             else:
                 emu_dict[os.path.basename(param).split('.')[0]] = tmp
 
+        # Add as a separate entry the ranges for each dataset
+        emu_dict_keys = list(emu_dict.keys())
+        for key in emu_dict_keys:
+            if 'dataset' in key:
+                key_dr = 'x_ranges_{}'.format(key.split('_')[-1])
+                vals = [[
+                    emu_dict[key]['params'][x_name]['prior']['min'],
+                    emu_dict[key]['params'][x_name]['prior']['max']]
+                    for x_name in emu_dict['x_names']]
+                emu_dict[key_dr] = vals
+
         # Save emulator
         emu.model.save(
             os.path.join(output.path, model_fname),
