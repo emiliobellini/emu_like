@@ -537,7 +537,7 @@ class FFNNEmu(Emulator):
             idxs = np.argsort(np.array(self.val_loss))
             try:
                 epoch = {
-                    'epoch': self.epochs[idxs[0]+1]
+                    'epoch': self.epochs[idxs[0]] + 1
                     }
                 fname = os.path.join(
                     path,
@@ -546,7 +546,7 @@ class FFNNEmu(Emulator):
                 self.model.load_weights(fname)
             except FileNotFoundError:
                 epoch = {
-                    'epoch': self.epochs[idxs[1]+1]
+                    'epoch': self.epochs[idxs[1]] + 1
                     }
                 fname = os.path.join(
                     path,
