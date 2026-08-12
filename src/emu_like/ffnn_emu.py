@@ -39,6 +39,173 @@ class LearningRateLogger(keras.callbacks.Callback):
             logs['learning_rate'] = value
 
 
+class RelativeEarlyStopping(keras.callbacks.Callback):
+    """Early stopping based on relative improvements of a monitored metric.
+
+    For ``mode='min'`` (default), an epoch is considered improved only if:
+    ``best - current > max(min_abs_delta, min_rel_delta * abs(best))``.
+    """
+
+    def __init__(
+            self,
+            monitor='val_loss',
+            patience=0,
+            min_rel_delta=1e-3,
+            min_abs_delta=1e-14,
+            mode='min',
+            restore_best_weights=True,
+            verbose=0):
+        super().__init__()
+        if mode not in ['min', 'max']:
+            raise ValueError("mode must be either 'min' or 'max'")
+        self.monitor = monitor
+        self.patience = patience
+        self.min_rel_delta = min_rel_delta
+        self.min_abs_delta = min_abs_delta
+        self.mode = mode
+        self.restore_best_weights = restore_best_weights
+        self.verbose = verbose
+
+        self.wait = 0
+        self.best = None
+        self.best_weights = None
+
+    def _is_improvement(self, current):
+        if self.best is None:
+            return True
+
+        dynamic_delta = max(
+            self.min_abs_delta,
+            self.min_rel_delta * abs(self.best)
+        )
+
+        if self.mode == 'min':
+            return (self.best - current) > dynamic_delta
+        return (current - self.best) > dynamic_delta
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        current = logs.get(self.monitor)
+        if current is None:
+            return
+
+        if self._is_improvement(current):
+            self.best = current
+            self.wait = 0
+            if self.restore_best_weights:
+                self.best_weights = self.model.get_weights()
+            return
+
+        self.wait += 1
+        if self.wait >= self.patience:
+            self.model.stop_training = True
+            if self.restore_best_weights and self.best_weights is not None:
+                self.model.set_weights(self.best_weights)
+            if self.verbose:
+                print(
+                    f'\nEpoch {epoch + 1}: early stopping '
+                    f'({self.monitor} did not improve relatively)'
+                )
+
+
+class RelativeReduceLROnPlateau(keras.callbacks.Callback):
+    """Reduce learning rate when monitored metric stops improving relatively.
+
+    For ``mode='min'`` (default), an epoch is considered improved only if:
+    ``best - current > max(min_abs_delta, min_rel_delta * abs(best))``.
+    """
+
+    def __init__(
+            self,
+            monitor='val_loss',
+            factor=0.5,
+            patience=10,
+            min_rel_delta=1e-3,
+            min_abs_delta=1e-14,
+            cooldown=0,
+            min_lr=0.0,
+            mode='min',
+            verbose=0):
+        super().__init__()
+        if factor >= 1.0:
+            raise ValueError('factor must be < 1.0')
+        if mode not in ['min', 'max']:
+            raise ValueError("mode must be either 'min' or 'max'")
+
+        self.monitor = monitor
+        self.factor = factor
+        self.patience = patience
+        self.min_rel_delta = min_rel_delta
+        self.min_abs_delta = min_abs_delta
+        self.cooldown = cooldown
+        self.min_lr = min_lr
+        self.mode = mode
+        self.verbose = verbose
+
+        self.best = None
+        self.wait = 0
+        self.cooldown_counter = 0
+
+    def _is_improvement(self, current):
+        if self.best is None:
+            return True
+
+        dynamic_delta = max(
+            self.min_abs_delta,
+            self.min_rel_delta * abs(self.best)
+        )
+
+        if self.mode == 'min':
+            return (self.best - current) > dynamic_delta
+        return (current - self.best) > dynamic_delta
+
+    def _get_current_lr(self):
+        lr = self.model.optimizer.learning_rate
+        try:
+            lr = tf.keras.backend.get_value(lr)
+        except Exception:
+            pass
+        return float(lr)
+
+    def _set_lr(self, new_lr):
+        try:
+            tf.keras.backend.set_value(self.model.optimizer.learning_rate,
+                                       new_lr)
+        except Exception:
+            self.model.optimizer.learning_rate = new_lr
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        current = logs.get(self.monitor)
+        if current is None:
+            return
+
+        if self._is_improvement(current):
+            self.best = current
+            self.wait = 0
+            return
+
+        if self.cooldown_counter > 0:
+            self.cooldown_counter -= 1
+            return
+
+        self.wait += 1
+        if self.wait < self.patience:
+            return
+
+        old_lr = self._get_current_lr()
+        new_lr = max(old_lr * self.factor, self.min_lr)
+        if new_lr < old_lr:
+            self._set_lr(new_lr)
+            if self.verbose:
+                print(
+                    f'\nEpoch {epoch + 1}: reducing learning rate '
+                    f'from {old_lr:.4e} to {new_lr:.4e}'
+                )
+        self.wait = 0
+        self.cooldown_counter = self.cooldown
+
+
 class FFNNEmu(Emulator):
     """
     Feed Forward Neural Network emulator.
@@ -86,8 +253,14 @@ class FFNNEmu(Emulator):
         self.data_fname = 'data.fits'
         return
 
-    def _callbacks(self, path=None, patience=None, timeout=None,
-                   reduce_learning_rate=True, verbose=False):
+    def _callbacks(
+            self,
+            path=None,
+            patience=None,
+            timeout=None,
+            reduce_learning_rate=True,
+            relative_improvement=True,
+            verbose=False):
         """
         Define and initialise callbacks.
         Arguments:
@@ -95,18 +268,25 @@ class FFNNEmu(Emulator):
           that require saving some output will be ignored;
         - patience (int, default: None): number of epochs (int) before
           early stopping without improvements;
-        - reduce_learning_rate (bool, default: True): reduce learning rate on
-          plateau;
         - timeout (float, default None): after this time (in hours)
           stop the training;
+        - reduce_learning_rate (bool, default: True): reduce learning rate on
+          plateau;
+        - relative_improvement (bool, default: True): use relative improvement
+          instead of absolute improvement for early stopping and learning
+          rate reduction;
         - verbose (bool, default: False): verbosity.
 
         Callbacks implemented:
         - Checkpoint: save the weights of a model each time that
           loss function is improved;
-        - Logfile: saves a log file in the main directory
+        - Logfile: saves a log file in the main directory;
+        - Reduce Learning Rate on Plateau: reduce the learning rate if the
+          loss function does not improve for a certain number of epochs;
         - Early Stopping: stop earlier if loss of the validation
-          dataset does not improve for a certain number of epochs.
+          dataset does not improve for a certain number of epochs;
+        - Time Early Stopping: stop earlier if the training time exceeds
+          a certain number of hours.
         """
         if verbose is True:
             n_verbose = 1
@@ -136,26 +316,49 @@ class FFNNEmu(Emulator):
             fname = os.path.join(path, self.log_fname)
             csv_logger = keras.callbacks.CSVLogger(fname, append=True)
 
+        # Reduce learning rate on plateau
         if reduce_learning_rate:
-            reduce_on_plateau = keras.callbacks.ReduceLROnPlateau(
-                monitor='val_loss',
-                factor=0.5,
-                min_delta=0.,
-                patience=max(1, patience // 2),
-                verbose=verbose)
+            if relative_improvement is True:
+                reduce_on_plateau = RelativeReduceLROnPlateau(
+                    monitor='val_loss',
+                    factor=0.5,
+                    patience=max(1, patience // 2),
+                    min_rel_delta=1e-3,
+                    min_abs_delta=1e-14,
+                    cooldown=0,
+                    min_lr=0.0,
+                    mode='min',
+                    verbose=verbose)
+            else:
+                reduce_on_plateau = keras.callbacks.ReduceLROnPlateau(
+                    monitor='val_loss',
+                    factor=0.5,
+                    min_delta=0.,
+                    patience=max(1, patience // 2),
+                    verbose=verbose)
 
         # Early Stopping
-        # TODO: understand what should be passed by the user
         if patience is not None:
-            early_stopping = keras.callbacks.EarlyStopping(
-                monitor="val_loss",
-                min_delta=0,
-                patience=patience,
-                verbose=n_verbose,
-                mode="auto",
-                baseline=None,
-                restore_best_weights=True,
-            )
+            if relative_improvement is True:
+                early_stopping = RelativeEarlyStopping(
+                    monitor="val_loss",
+                    patience=patience,
+                    min_rel_delta=1e-3,
+                    min_abs_delta=1e-14,
+                    verbose=n_verbose,
+                    mode='min',
+                    restore_best_weights=True,
+                )
+            else:
+                early_stopping = keras.callbacks.EarlyStopping(
+                    monitor="val_loss",
+                    min_delta=0,
+                    patience=patience,
+                    verbose=n_verbose,
+                    mode="auto",
+                    baseline=None,
+                    restore_best_weights=True,
+                )
 
         # Time Early Stopping
         if timeout is not None:
@@ -539,9 +742,18 @@ class FFNNEmu(Emulator):
 
         return
 
-    def train(self, data, epochs, learning_rate, patience=100,
-              path=None, timeout=None, reduce_learning_rate=True,
-              get_plots=False, verbose=False):
+    def train(
+            self,
+            data,
+            epochs,
+            learning_rate,
+            patience=100,
+            path=None,
+            timeout=None,
+            reduce_learning_rate=True,
+            relative_improvement=True,
+            get_plots=False,
+            verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -551,7 +763,7 @@ class FFNNEmu(Emulator):
           used to train the emulator;
         - epochs (int): epochs to run;
         - learning_rate (float): learning rate;
-        - patience (intm default: 100): number of epochs (int) before
+        - patience (int, default: 100): number of epochs (int) before
           early stopping without improvements;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
@@ -559,6 +771,9 @@ class FFNNEmu(Emulator):
           stop the training;
         - reduce_learning_rate (bool, default: True): reduce learning rate on
           plateau;
+        - relative_improvement (bool, default: True): use relative improvement
+          instead of absolute improvement for early stopping and learning
+          rate reduction;
         - get_plots (bool, default: False): get loss vs epoch plot;
         - verbose (bool, default: False): verbosity.
         """
@@ -579,6 +794,7 @@ class FFNNEmu(Emulator):
             patience=patience,
             timeout=timeout,
             reduce_learning_rate=reduce_learning_rate,
+            relative_improvement=relative_improvement,
             verbose=verbose)
 
         self.model.optimizer.learning_rate = learning_rate

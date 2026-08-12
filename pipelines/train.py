@@ -209,6 +209,7 @@ def train_emu(args):
         path=pars_out['path'],
         timeout=timeout,
         reduce_learning_rate=pars_emu['args']['reduce_learning_rate'],
+        relative_improvement=pars_emu['args']['relative_improvement'],
         get_plots=True,
         verbose=args.verbose)
 
