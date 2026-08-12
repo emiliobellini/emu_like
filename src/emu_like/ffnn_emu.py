@@ -66,9 +66,10 @@ class RelativeEarlyStopping(keras.callbacks.Callback):
         self.restore_best_weights = restore_best_weights
         self.verbose = verbose
 
-        self.wait = 0
         self.best = None
-        self.best_weights = None
+        self.absolute_best = None
+        self.absolute_best_weights = None
+        self.wait = 0
 
     def _is_improvement(self, current):
         if self.best is None:
@@ -86,26 +87,69 @@ class RelativeEarlyStopping(keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         logs = logs or {}
         current = logs.get(self.monitor)
+
         if current is None:
             return
+
+        # Track the absolute best for weight restoration.
+        is_absolute_improvement = (
+            self.absolute_best is None
+            or (
+                self.mode == 'min'
+                and current < self.absolute_best
+            )
+            or (
+                self.mode == 'max'
+                and current > self.absolute_best
+            )
+        )
+
+        if is_absolute_improvement:
+            self.absolute_best = current
+            if self.restore_best_weights:
+                self.absolute_best_weights = self.model.get_weights()
 
         if self._is_improvement(current):
             self.best = current
             self.wait = 0
-            if self.restore_best_weights:
-                self.best_weights = self.model.get_weights()
             return
 
         self.wait += 1
         if self.wait >= self.patience:
             self.model.stop_training = True
-            if self.restore_best_weights and self.best_weights is not None:
-                self.model.set_weights(self.best_weights)
             if self.verbose:
                 print(
                     f'\nEpoch {epoch + 1}: early stopping '
                     f'({self.monitor} did not improve relatively)'
                 )
+
+    def on_train_end(self, logs=None):
+        if (
+            self.restore_best_weights
+            and self.absolute_best_weights is not None
+        ):
+            self.model.set_weights(self.absolute_best_weights)
+
+
+class TimeBasedEarlyStopping(keras.callbacks.Callback):
+    def __init__(self, max_time_hours, verbose=False):
+        super().__init__()
+        self.max_time_hours = max_time_hours
+        self.start_time = None
+        self.verbose = verbose
+
+    def on_train_begin(self, logs=None):
+        self.start_time = time.time()
+
+    def on_epoch_end(self, epoch, logs=None):
+        current_time = time.time()
+        elapsed_time = current_time - self.start_time
+
+        if elapsed_time > self.max_time_hours*60.*60.:
+            self.model.stop_training = True
+            if self.verbose:
+                print(f'\nEarly stopping: {elapsed_time:.2f}s'
+                      ' > {self.max_time_hours*60.*60.}s')
 
 
 class RelativeReduceLROnPlateau(keras.callbacks.Callback):
@@ -889,24 +933,3 @@ class FFNNEmu(Emulator):
             y = self.y_scaler.inverse_transform(y_scaled)[0]
 
         return y
-
-
-class TimeBasedEarlyStopping(keras.callbacks.Callback):
-    def __init__(self, max_time_hours, verbose=False):
-        super().__init__()
-        self.max_time_hours = max_time_hours
-        self.start_time = None
-        self.verbose = verbose
-
-    def on_train_begin(self, logs=None):
-        self.start_time = time.time()
-
-    def on_epoch_end(self, epoch, logs=None):
-        current_time = time.time()
-        elapsed_time = current_time - self.start_time
-
-        if elapsed_time > self.max_time_hours*60.*60.:
-            self.model.stop_training = True
-            if self.verbose:
-                print(f'\nEarly stopping: {elapsed_time:.2f}s'
-                      ' > {self.max_time_hours*60.*60.}s')
