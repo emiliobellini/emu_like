@@ -6,7 +6,6 @@
 
 """
 
-import os
 import emu_like.io as io
 from emu_like.emu import Emulator
 from emu_like.datasets import Dataset
@@ -26,50 +25,76 @@ def train_emu(args):
 
     # Read params
     params = io.YamlFile(args.params_file).read()
-    datasets_paths = params['datasets']['paths']
 
-    # Force computation
+    # Replace CLI arguments
+    if args.epochs is not None:
+        params['emulator']['args']['epochs'] = args.epochs
+    if args.timeout is not None:
+        params['output']['timeout'] = args.timeout
+
+    # Call the right emulator
+    emu = Emulator.choose_one(
+        params['emulator']['name'],
+        verbose=args.verbose)
+
+    # Decide whether to resume or not
+    output_is_empty = io.Folder(params['output']['path']).is_empty()
+    resume_requested = args.resume_strict or args.resume_warm
     if args.force:
-        if io.Folder(params['output']['path']).is_empty():
-            args.resume = False
-        else:
-            args.resume = True
-
-    # If resume load parameters from output folder
-    if args.resume:
-        if args.verbose:
-            io.info('Resuming from {}.'.format(params['output']['path']))
-            io.print_level(1, 'Ignoring {}'.format(args.params_file))
-        # Read params from output folder
-        params = io.YamlFile(root=params['output']['path']).read()
-        params['datasets']['paths'] = datasets_paths
-    # Otherwise
+        # Resume with the selected policy only when previous output exists.
+        should_resume = not output_is_empty
+    elif resume_requested:
+        if output_is_empty:
+            raise FileNotFoundError(
+                'Cannot resume: output folder is empty.'
+            )
+        should_resume = True
     else:
-        # Check if output folder is empty, otherwise stop
-        if io.Folder(params['output']['path']).is_empty():
-            if args.verbose:
-                io.info("Writing output in {}".format(
-                    params['output']['path']))
-            # Save params
-            params.write(
-                root=params['output']['path'],
-                skip_if_exists=True,
-                verbose=args.verbose)
+        if not output_is_empty:
+            raise RuntimeError(
+                'Output folder is not empty. Select --resume-strict or '
+                '--resume-warm, optionally with --force.'
+            )
+        should_resume = False
+
+    # Checks: if resume_strict or resume_warm, check that
+    # the relevant files exist in the output folder and
+    # the parameters are consistent.
+    if should_resume:
+        emu.check_files(
+            params['output']['path'],
+            params['datasets']['paths'],
+            verbose=args.verbose
+        )
+        emu.check_parameters(
+            params,
+            resume_strict=args.resume_strict,
+            resume_warm=args.resume_warm,
+            verbose=args.verbose
+        )
+    else:
+        # Save the parameters to the output folder
+        emu.save_parameters(
+            params['output']['path'],
+            params,
+            verbose=args.verbose,
+        )
+
+    # Print init messages
+    if args.verbose:
+        if should_resume and args.resume_strict:
+            io.info('Resuming emulator in strict mode from {}.'.format(
+                params['output']['path']))
+        elif should_resume and args.resume_warm:
+            io.info('Resuming emulator in warm mode from {}.'.format(
+                params['output']['path']))
         else:
-            raise Exception(
-                'Output folder not empty! Exiting to avoid corruption of '
-                'precious data! If you want to resume a previous run use '
-                'the --resume (-r) option.')
+            io.info('Starting training emulator.')
 
     # Local variables
     pars_out = params['output']
     pars_emu = params['emulator']
     pars_dat = params['datasets']
-
-    # Call the right emulator
-    emu = Emulator.choose_one(
-        pars_emu['name'],
-        verbose=args.verbose)
 
     # Test datasets input paths
     has_paths = pars_dat['paths'] is not None
@@ -92,18 +117,6 @@ def train_emu(args):
             columns_y=pars_dat['columns_y'],
             verbose=False)
             for path in pars_dat['paths']]
-        # Save sampler yaml file in output folder
-        for path in pars_dat['paths']:
-            root_data, fname_data = os.path.split(path)
-            fname_data = os.path.splitext(fname_data)[0] + '.yaml'
-            params_data = io.YamlFile(
-                fname=fname_data,
-                root=root_data).read()
-            params_data.write(
-                fname='dataset_{}'.format(fname_data),
-                root=params['output']['path'],
-                skip_if_exists=True,
-                verbose=args.verbose)
     # 2) unique text files for x and y
     elif has_paths:
         data = [Dataset().load_external(
@@ -160,7 +173,7 @@ def train_emu(args):
         verbose=args.verbose)
 
     # If resume
-    if args.resume:
+    if should_resume:
         # Load emulator
         emu.load(pars_out['path'], model_to_load='best', verbose=args.verbose)
     # Otherwise
@@ -182,29 +195,11 @@ def train_emu(args):
     except KeyError:
         timeout = None
 
-    # Update number of epochs to run
-    if args.resume and args.additional_epochs < 0:
-        epochs = max(pars_emu['args']['epochs'] - emu.epochs[-1], 0)
-    elif args.resume and args.additional_epochs > 0:
-        epochs = args.additional_epochs
-    elif args.additional_epochs < 0:
-        epochs = pars_emu['args']['epochs']
-    else:
-        epochs = pars_emu['args']['epochs'] + args.additional_epochs
-
-    # Update initial learning rate
-    if args.resume and args.learning_rate < 0:
-        learning_rate = emu.learning_rate[-1]
-    elif args.learning_rate > 0:
-        learning_rate = args.learning_rate
-    else:
-        learning_rate = pars_emu['args']['learning_rate']
-
     # Train the emulator
     emu.train(
         data,
-        epochs,
-        learning_rate,
+        pars_emu['args']['epochs'],
+        pars_emu['args']['learning_rate'],
         patience=pars_emu['args']['patience'],
         path=pars_out['path'],
         timeout=timeout,

@@ -295,6 +295,7 @@ class FFNNEmu(Emulator):
         self.checkpoint_fname = 'checkpoint_epoch{epoch:04d}.weights.h5'
         self.log_fname = 'history_log.csv'
         self.data_fname = 'data.fits'
+        self.dataset_params_fname = 'dataset_{}'
         return
 
     def _callbacks(
@@ -468,6 +469,104 @@ class FFNNEmu(Emulator):
         data_stub = SimpleNamespace(y_pca=y_pca)
         return loss_factory(data=data_stub, floor=loss_floor, delta=loss_delta)
 
+    def check_files(self, path, datasets_paths, verbose=False):
+        """
+        Check that the files needed to resume training exist.
+        Arguments:
+            path (str): path to the emulator folder;
+            datasets_paths (list): paths to the dataset files;
+            verbose (bool, default: False): verbosity.
+        """
+        # Check that the output folder exists
+        output_folder = io.Folder(path)
+        if not output_folder.exists:
+            raise FileNotFoundError(
+                'Output folder {} does not exist. Cannot resume!'
+                ''.format(path)
+            )
+
+        # List of required files
+        required_files = [
+            io.YamlFile().default_name,
+            self.x_scaler_fname,
+            self.y_scaler_fname,
+            self.x_pca_fname,
+            self.y_pca_fname,
+            self.model_fname,
+            self.log_fname,
+            self.data_fname,
+        ]
+
+        # Check that the necessary files exist in the output folder
+        for fname in [output_folder.join(fname) for fname in required_files]:
+            if fname not in output_folder.list_files():
+                raise FileNotFoundError(
+                    'Required file {} does not exist. Cannot resume!'
+                    ''.format(fname)
+                )
+
+        if verbose:
+            io.info('All required files exist in {}'.format(path))
+        return
+
+    def check_parameters(
+            self,
+            params,
+            resume_strict=False,
+            resume_warm=False,
+            verbose=False):
+        """
+        Check the parameters for the emulator.
+        Arguments:
+            params (dict): the parameters for the emulator.
+            resume_strict (bool, default: False): whether to resume strictly.
+            resume_warm (bool, default: False): whether to resume warm.
+            verbose (bool, default: False): verbosity.
+        """
+
+        # Load the parameters from the output folder
+        params_ref = io.YamlFile(io.Folder(
+            params['output']['path']).join(io.YamlFile().default_name)).read()
+
+        # Parameters that can be different
+        if resume_strict:
+            ignored_paths = {
+                ('output', 'timeout'),
+                ('emulator', 'args', 'epochs'),
+            }
+        elif resume_warm:
+            ignored_paths = {
+                ('output', 'timeout'),
+                ('emulator', 'args', 'epochs'),
+                ('emulator', 'args', 'patience'),
+                ('emulator', 'args', 'learning_rate'),
+                ('emulator', 'args', 'reduce_learning_rate'),
+                ('emulator', 'args', 'relative_improvement'),
+                ('datasets', 'paths'),
+                ('datasets', 'remove_non_finite'),
+                ('datasets', 'frac_train'),
+                ('datasets', 'train_test_random_seed'),
+            }
+        else:
+            return
+
+        differences = params.nested_differences(
+            params_ref,
+            ignored_paths=ignored_paths,
+        )
+
+        if differences:
+            raise ValueError(
+                'Parameters in {} differ from those in {}. Cannot resume!'
+                '\nDifferences: {}'.format(
+                    params.path, params_ref.path, differences)
+            )
+
+        if verbose:
+            io.info('Parameters in {} are consistent with those in {}'
+                    ''.format(params.path, params_ref.path))
+        return
+
     def load(self, path, model_to_load='best', still_training=True,
              verbose=False):
         """
@@ -609,16 +708,92 @@ class FFNNEmu(Emulator):
 
         return self
 
-    def save(self, path, verbose=False):
+    def save_parameters(
+            self,
+            path,
+            params,
+            dataset_param_files=(),
+            overwrite=False,
+            verbose=False):
+        """
+        Create the output directory and save training provenance.
+        Arguments:
+        - path (str): output path;
+        - params (dict): parameters for the emulator;
+        - dataset_param_files (list of io.YamlFile, default: ()): list of
+          dataset parameter files to save;
+        - overwrite (bool, default: False): whether to overwrite existing
+          files;
+        - verbose (bool, default: False): verbosity."""
+
+        io.Folder(path).create(verbose=verbose)
+
+        # Save emulator parameters to params.yaml
+        params.write(
+            root=path,
+            overwrite=overwrite,
+            skip_if_exists=not overwrite,
+            verbose=verbose,
+        )
+
+        # Save dataset parameters to dataset_*.yaml
+        for dataset_path in params['datasets']['paths']:
+            root_data, fname_data = os.path.split(dataset_path)
+            fname_data = os.path.splitext(fname_data)[0] + '.yaml'
+            basename = os.path.basename(fname_data)
+            # Read
+            params_data = io.YamlFile(
+                fname=fname_data,
+                root=root_data).read()
+            # Write
+            params_data.write(
+                fname=self.dataset_params_fname.format(basename),
+                root=path,
+                skip_if_exists=not overwrite,
+                verbose=verbose)
+        return
+
+    def save(
+            self,
+            path,
+            params=None,
+            dataset_param_files=(),
+            overwrite_parameters=False,
+            verbose=False):
+        """
+        Save the complete emulator and its provenance.
+        Arguments:
+        - path (str): output path;
+        - params (dict, default: None): parameters for the emulator;
+        - dataset_param_files (list of io.YamlFile, default: ()): list of
+          dataset parameter files to save;
+        - overwrite_parameters (bool, default: False): whether to overwrite
+          existing parameter files;
+        - verbose (bool, default: False): verbosity.
+        """
+
+        if verbose:
+            io.print_level(1, 'Saving output at: {}'.format(path))
+
+        if params is not None:
+            self.save_parameters(
+                path,
+                params,
+                dataset_param_files=dataset_param_files,
+                overwrite=overwrite_parameters,
+                verbose=verbose,
+            )
+
+        self._save_state(path, verbose=verbose)
+        return
+
+    def _save_state(self, path, verbose=False):
         """
         Save the emulator to path.
         Arguments:
         - path (str): output path;
         - verbose (bool, default: False): verbosity.
         """
-
-        if verbose:
-            io.print_level(1, 'Saving output at: {}'.format(path))
 
         # Create main folder
         io.Folder(path).create(verbose=verbose)
@@ -655,7 +830,7 @@ class FFNNEmu(Emulator):
         except AttributeError:
             io.warning('y_pca not loaded yet, impossible to save it!')
 
-        # Save last model
+        # Save model
         fname = os.path.join(path, self.model_fname)
         if verbose:
             io.info('Saving model at {}'.format(fname))
@@ -687,6 +862,9 @@ class FFNNEmu(Emulator):
 
         # Save y_model to the same file
         self.y_model.save(self.data_fname, root=path, verbose=verbose)
+
+        if verbose:
+            io.info('Emulator saved at {}'.format(path))
 
         return
 
@@ -873,7 +1051,7 @@ class FFNNEmu(Emulator):
 
         # Save emulator
         if path:
-            self.save(path)
+            self.save(path, verbose=verbose)
 
         if get_plots:
             # Plot - Loss per epoch
