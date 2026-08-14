@@ -62,7 +62,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v -f
+python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v -f -r
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -137,7 +137,7 @@ spectra_config = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm_k'
+    model = 'lcdm'
     timeout = 47
     learning_rate = 1.e-3
     neurons_hidden = [1024, 1024]
