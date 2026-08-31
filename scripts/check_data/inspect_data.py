@@ -1,7 +1,6 @@
 import argparse
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 from emu_like.datasets import Dataset
 
 
@@ -128,7 +127,8 @@ def plot_mode_density(
     Parameters
     ----------
     samples : np.ndarray
-        Array of shape (n_s, n_k); each column holds the n_s samples of one mode.
+        Array of shape (n_s, n_k); each column holds the n_s
+        samples of one mode.
     mode_values : array-like or None
         Optional x-axis ticks for the modes. Defaults to simple indices.
     n_bins : int
@@ -167,7 +167,8 @@ def plot_mode_density(
         X += 1
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    contour = ax.contourf(X, Y, density, levels=levels, cmap=cmap, extend='min')
+    contour = ax.contourf(
+        X, Y, density, levels=levels, cmap=cmap, extend='min')
     contour.cmap.set_under(zero_color)     # color for density == 0
     contour.changed()
 
@@ -225,7 +226,6 @@ if __name__ == '__main__':
     if args.name is None:
         raise ValueError(
             'No spectrum name provided. Use --name to specify the spectrum.')
-
 
     # Load data
     data = [Dataset().load(
