@@ -62,7 +62,7 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v -f
+python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v -f -r
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -96,6 +96,7 @@ template_yaml = {
             'want_output_layer': True,
             'learning_rate': None,
             'reduce_learning_rate': None,
+            'relative_improvement': None,
         },
     },
     'datasets': {
@@ -143,10 +144,18 @@ if __name__ == '__main__':
     batch_size = 128
     patience = 2000
     reduce_learning_rate = True
+    relative_improvement = True
     n_samples_1000 = 100
     data_root = '/ceph/hpc/data/s25r06-05-users/'
     time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
     num_x_pca = None
+
+    # Hard-coded scalers
+    if model == 'lcdm_k' or model == 'lcdm_nu_k':
+        spectra_config['pk_weyl'] = ('pk', None, 'StandardScaler')
+        spectra_config['fk_cb'] = ('pk', None, 'None')
+        spectra_config['fk_m'] = ('pk', None, 'None')
+        spectra_config['fk_weyl'] = ('pk', None, 'None')
 
     ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/train/{}'.format(
         model)
@@ -189,6 +198,8 @@ if __name__ == '__main__':
         template_yaml['emulator']['args']['patience'] = patience
         template_yaml['emulator']['args']['reduce_learning_rate'] = \
             reduce_learning_rate
+        template_yaml['emulator']['args']['relative_improvement'] = \
+            relative_improvement
         template_yaml['datasets']['name'] = spectrum
         template_yaml['datasets']['paths'] = [os.path.join(
             data_root, '{}/sample/{}_{}_{}.fits'.format(

@@ -39,6 +39,217 @@ class LearningRateLogger(keras.callbacks.Callback):
             logs['learning_rate'] = value
 
 
+class RelativeEarlyStopping(keras.callbacks.Callback):
+    """Early stopping based on relative improvements of a monitored metric.
+
+    For ``mode='min'`` (default), an epoch is considered improved only if:
+    ``best - current > max(min_abs_delta, min_rel_delta * abs(best))``.
+    """
+
+    def __init__(
+            self,
+            monitor='val_loss',
+            patience=0,
+            min_rel_delta=1e-3,
+            min_abs_delta=1e-14,
+            mode='min',
+            restore_best_weights=True,
+            verbose=0):
+        super().__init__()
+        if mode not in ['min', 'max']:
+            raise ValueError("mode must be either 'min' or 'max'")
+        self.monitor = monitor
+        self.patience = patience
+        self.min_rel_delta = min_rel_delta
+        self.min_abs_delta = min_abs_delta
+        self.mode = mode
+        self.restore_best_weights = restore_best_weights
+        self.verbose = verbose
+
+        self.best = None
+        self.absolute_best = None
+        self.absolute_best_weights = None
+        self.wait = 0
+
+    def _is_improvement(self, current):
+        if self.best is None:
+            return True
+
+        dynamic_delta = max(
+            self.min_abs_delta,
+            self.min_rel_delta * abs(self.best)
+        )
+
+        if self.mode == 'min':
+            return (self.best - current) > dynamic_delta
+        return (current - self.best) > dynamic_delta
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        current = logs.get(self.monitor)
+
+        if current is None:
+            return
+
+        # Track the absolute best for weight restoration.
+        is_absolute_improvement = (
+            self.absolute_best is None
+            or (
+                self.mode == 'min'
+                and current < self.absolute_best
+            )
+            or (
+                self.mode == 'max'
+                and current > self.absolute_best
+            )
+        )
+
+        if is_absolute_improvement:
+            self.absolute_best = current
+            if self.restore_best_weights:
+                self.absolute_best_weights = self.model.get_weights()
+
+        if self._is_improvement(current):
+            self.best = current
+            self.wait = 0
+            return
+
+        self.wait += 1
+        if self.wait >= self.patience:
+            self.model.stop_training = True
+            if self.verbose:
+                print(
+                    f'\nEpoch {epoch + 1}: early stopping '
+                    f'({self.monitor} did not improve relatively)'
+                )
+
+    def on_train_end(self, logs=None):
+        if (
+            self.restore_best_weights
+            and self.absolute_best_weights is not None
+        ):
+            self.model.set_weights(self.absolute_best_weights)
+
+
+class TimeBasedEarlyStopping(keras.callbacks.Callback):
+    def __init__(self, max_time_hours, verbose=False):
+        super().__init__()
+        self.max_time_hours = max_time_hours
+        self.start_time = None
+        self.verbose = verbose
+
+    def on_train_begin(self, logs=None):
+        self.start_time = time.time()
+
+    def on_epoch_end(self, epoch, logs=None):
+        current_time = time.time()
+        elapsed_time = current_time - self.start_time
+
+        if elapsed_time > self.max_time_hours*60.*60.:
+            self.model.stop_training = True
+            if self.verbose:
+                print(f'\nEarly stopping: {elapsed_time:.2f}s'
+                      ' > {self.max_time_hours*60.*60.}s')
+
+
+class RelativeReduceLROnPlateau(keras.callbacks.Callback):
+    """Reduce learning rate when monitored metric stops improving relatively.
+
+    For ``mode='min'`` (default), an epoch is considered improved only if:
+    ``best - current > max(min_abs_delta, min_rel_delta * abs(best))``.
+    """
+
+    def __init__(
+            self,
+            monitor='val_loss',
+            factor=0.5,
+            patience=10,
+            min_rel_delta=1e-3,
+            min_abs_delta=1e-14,
+            cooldown=0,
+            min_lr=0.0,
+            mode='min',
+            verbose=0):
+        super().__init__()
+        if factor >= 1.0:
+            raise ValueError('factor must be < 1.0')
+        if mode not in ['min', 'max']:
+            raise ValueError("mode must be either 'min' or 'max'")
+
+        self.monitor = monitor
+        self.factor = factor
+        self.patience = patience
+        self.min_rel_delta = min_rel_delta
+        self.min_abs_delta = min_abs_delta
+        self.cooldown = cooldown
+        self.min_lr = min_lr
+        self.mode = mode
+        self.verbose = verbose
+
+        self.best = None
+        self.wait = 0
+        self.cooldown_counter = 0
+
+    def _is_improvement(self, current):
+        if self.best is None:
+            return True
+
+        dynamic_delta = max(
+            self.min_abs_delta,
+            self.min_rel_delta * abs(self.best)
+        )
+
+        if self.mode == 'min':
+            return (self.best - current) > dynamic_delta
+        return (current - self.best) > dynamic_delta
+
+    def _get_current_lr(self):
+        lr = self.model.optimizer.learning_rate
+        try:
+            lr = tf.keras.backend.get_value(lr)
+        except Exception:
+            pass
+        return float(lr)
+
+    def _set_lr(self, new_lr):
+        try:
+            tf.keras.backend.set_value(self.model.optimizer.learning_rate,
+                                       new_lr)
+        except Exception:
+            self.model.optimizer.learning_rate = new_lr
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        current = logs.get(self.monitor)
+        if current is None:
+            return
+
+        if self._is_improvement(current):
+            self.best = current
+            self.wait = 0
+            return
+
+        if self.cooldown_counter > 0:
+            self.cooldown_counter -= 1
+            return
+
+        self.wait += 1
+        if self.wait < self.patience:
+            return
+
+        old_lr = self._get_current_lr()
+        new_lr = max(old_lr * self.factor, self.min_lr)
+        if new_lr < old_lr:
+            self._set_lr(new_lr)
+            if self.verbose:
+                print(
+                    f'\nEpoch {epoch + 1}: reducing learning rate '
+                    f'from {old_lr:.4e} to {new_lr:.4e}'
+                )
+        self.wait = 0
+        self.cooldown_counter = self.cooldown
+
+
 class FFNNEmu(Emulator):
     """
     Feed Forward Neural Network emulator.
@@ -84,10 +295,17 @@ class FFNNEmu(Emulator):
         self.checkpoint_fname = 'checkpoint_epoch{epoch:04d}.weights.h5'
         self.log_fname = 'history_log.csv'
         self.data_fname = 'data.fits'
+        self.dataset_params_fname = 'dataset_{}'
         return
 
-    def _callbacks(self, path=None, patience=None, timeout=None,
-                   reduce_learning_rate=True, verbose=False):
+    def _callbacks(
+            self,
+            path=None,
+            patience=None,
+            timeout=None,
+            reduce_learning_rate=True,
+            relative_improvement=True,
+            verbose=False):
         """
         Define and initialise callbacks.
         Arguments:
@@ -95,18 +313,25 @@ class FFNNEmu(Emulator):
           that require saving some output will be ignored;
         - patience (int, default: None): number of epochs (int) before
           early stopping without improvements;
-        - reduce_learning_rate (bool, default: True): reduce learning rate on
-          plateau;
         - timeout (float, default None): after this time (in hours)
           stop the training;
+        - reduce_learning_rate (bool, default: True): reduce learning rate on
+          plateau;
+        - relative_improvement (bool, default: True): use relative improvement
+          instead of absolute improvement for early stopping and learning
+          rate reduction;
         - verbose (bool, default: False): verbosity.
 
         Callbacks implemented:
         - Checkpoint: save the weights of a model each time that
           loss function is improved;
-        - Logfile: saves a log file in the main directory
+        - Logfile: saves a log file in the main directory;
+        - Reduce Learning Rate on Plateau: reduce the learning rate if the
+          loss function does not improve for a certain number of epochs;
         - Early Stopping: stop earlier if loss of the validation
-          dataset does not improve for a certain number of epochs.
+          dataset does not improve for a certain number of epochs;
+        - Time Early Stopping: stop earlier if the training time exceeds
+          a certain number of hours.
         """
         if verbose is True:
             n_verbose = 1
@@ -136,26 +361,49 @@ class FFNNEmu(Emulator):
             fname = os.path.join(path, self.log_fname)
             csv_logger = keras.callbacks.CSVLogger(fname, append=True)
 
+        # Reduce learning rate on plateau
         if reduce_learning_rate:
-            reduce_on_plateau = keras.callbacks.ReduceLROnPlateau(
-                monitor='val_loss',
-                factor=0.5,
-                min_delta=0.,
-                patience=max(1, patience // 2),
-                verbose=verbose)
+            if relative_improvement is True:
+                reduce_on_plateau = RelativeReduceLROnPlateau(
+                    monitor='val_loss',
+                    factor=0.5,
+                    patience=max(1, patience // 2),
+                    min_rel_delta=1e-3,
+                    min_abs_delta=1e-14,
+                    cooldown=0,
+                    min_lr=0.0,
+                    mode='min',
+                    verbose=verbose)
+            else:
+                reduce_on_plateau = keras.callbacks.ReduceLROnPlateau(
+                    monitor='val_loss',
+                    factor=0.5,
+                    min_delta=0.,
+                    patience=max(1, patience // 2),
+                    verbose=verbose)
 
         # Early Stopping
-        # TODO: understand what should be passed by the user
         if patience is not None:
-            early_stopping = keras.callbacks.EarlyStopping(
-                monitor="val_loss",
-                min_delta=0,
-                patience=patience,
-                verbose=n_verbose,
-                mode="auto",
-                baseline=None,
-                restore_best_weights=True,
-            )
+            if relative_improvement is True:
+                early_stopping = RelativeEarlyStopping(
+                    monitor="val_loss",
+                    patience=patience,
+                    min_rel_delta=1e-3,
+                    min_abs_delta=1e-14,
+                    verbose=n_verbose,
+                    mode='min',
+                    restore_best_weights=True,
+                )
+            else:
+                early_stopping = keras.callbacks.EarlyStopping(
+                    monitor="val_loss",
+                    min_delta=0,
+                    patience=patience,
+                    verbose=n_verbose,
+                    mode="auto",
+                    baseline=None,
+                    restore_best_weights=True,
+                )
 
         # Time Early Stopping
         if timeout is not None:
@@ -220,6 +468,104 @@ class FFNNEmu(Emulator):
         loss_factory = getattr(lf, loss_name)
         data_stub = SimpleNamespace(y_pca=y_pca)
         return loss_factory(data=data_stub, floor=loss_floor, delta=loss_delta)
+
+    def check_files(self, path, datasets_paths, verbose=False):
+        """
+        Check that the files needed to resume training exist.
+        Arguments:
+            path (str): path to the emulator folder;
+            datasets_paths (list): paths to the dataset files;
+            verbose (bool, default: False): verbosity.
+        """
+        # Check that the output folder exists
+        output_folder = io.Folder(path)
+        if not output_folder.exists:
+            raise FileNotFoundError(
+                'Output folder {} does not exist. Cannot resume!'
+                ''.format(path)
+            )
+
+        # List of required files
+        required_files = [
+            io.YamlFile().default_name,
+            self.x_scaler_fname,
+            self.y_scaler_fname,
+            self.x_pca_fname,
+            self.y_pca_fname,
+            self.model_fname,
+            self.log_fname,
+            self.data_fname,
+        ]
+
+        # Check that the necessary files exist in the output folder
+        for fname in [output_folder.join(fname) for fname in required_files]:
+            if fname not in output_folder.list_files():
+                raise FileNotFoundError(
+                    'Required file {} does not exist. Cannot resume!'
+                    ''.format(fname)
+                )
+
+        if verbose:
+            io.info('All required files exist in {}'.format(path))
+        return
+
+    def check_parameters(
+            self,
+            params,
+            resume_strict=False,
+            resume_warm=False,
+            verbose=False):
+        """
+        Check the parameters for the emulator.
+        Arguments:
+            params (dict): the parameters for the emulator.
+            resume_strict (bool, default: False): whether to resume strictly.
+            resume_warm (bool, default: False): whether to resume warm.
+            verbose (bool, default: False): verbosity.
+        """
+
+        # Load the parameters from the output folder
+        params_ref = io.YamlFile(io.Folder(
+            params['output']['path']).join(io.YamlFile().default_name)).read()
+
+        # Parameters that can be different
+        if resume_strict:
+            ignored_paths = {
+                ('output', 'timeout'),
+                ('emulator', 'args', 'epochs'),
+            }
+        elif resume_warm:
+            ignored_paths = {
+                ('output', 'timeout'),
+                ('emulator', 'args', 'epochs'),
+                ('emulator', 'args', 'patience'),
+                ('emulator', 'args', 'learning_rate'),
+                ('emulator', 'args', 'reduce_learning_rate'),
+                ('emulator', 'args', 'relative_improvement'),
+                ('datasets', 'paths'),
+                ('datasets', 'remove_non_finite'),
+                ('datasets', 'frac_train'),
+                ('datasets', 'train_test_random_seed'),
+            }
+        else:
+            return
+
+        differences = params.nested_differences(
+            params_ref,
+            ignored_paths=ignored_paths,
+        )
+
+        if differences:
+            raise ValueError(
+                'Parameters in {} differ from those in {}. Cannot resume!'
+                '\nDifferences: {}'.format(
+                    params.path, params_ref.path, differences)
+            )
+
+        if verbose:
+            io.info('Parameters in {} are consistent with those in {}'
+                    ''.format(params.path, params_ref.path))
+        return
 
     def load(self, path, model_to_load='best', still_training=True,
              verbose=False):
@@ -290,7 +636,7 @@ class FFNNEmu(Emulator):
             idxs = np.argsort(np.array(self.val_loss))
             try:
                 epoch = {
-                    'epoch': self.epochs[idxs[0]+1]
+                    'epoch': self.epochs[idxs[0]] + 1
                     }
                 fname = os.path.join(
                     path,
@@ -299,7 +645,7 @@ class FFNNEmu(Emulator):
                 self.model.load_weights(fname)
             except FileNotFoundError:
                 epoch = {
-                    'epoch': self.epochs[idxs[1]+1]
+                    'epoch': self.epochs[idxs[1]] + 1
                     }
                 fname = os.path.join(
                     path,
@@ -362,16 +708,92 @@ class FFNNEmu(Emulator):
 
         return self
 
-    def save(self, path, verbose=False):
+    def save_parameters(
+            self,
+            path,
+            params,
+            dataset_param_files=(),
+            overwrite=False,
+            verbose=False):
+        """
+        Create the output directory and save training provenance.
+        Arguments:
+        - path (str): output path;
+        - params (dict): parameters for the emulator;
+        - dataset_param_files (list of io.YamlFile, default: ()): list of
+          dataset parameter files to save;
+        - overwrite (bool, default: False): whether to overwrite existing
+          files;
+        - verbose (bool, default: False): verbosity."""
+
+        io.Folder(path).create(verbose=verbose)
+
+        # Save emulator parameters to params.yaml
+        params.write(
+            root=path,
+            overwrite=overwrite,
+            skip_if_exists=not overwrite,
+            verbose=verbose,
+        )
+
+        # Save dataset parameters to dataset_*.yaml
+        for dataset_path in params['datasets']['paths']:
+            root_data, fname_data = os.path.split(dataset_path)
+            fname_data = os.path.splitext(fname_data)[0] + '.yaml'
+            basename = os.path.basename(fname_data)
+            # Read
+            params_data = io.YamlFile(
+                fname=fname_data,
+                root=root_data).read()
+            # Write
+            params_data.write(
+                fname=self.dataset_params_fname.format(basename),
+                root=path,
+                skip_if_exists=not overwrite,
+                verbose=verbose)
+        return
+
+    def save(
+            self,
+            path,
+            params=None,
+            dataset_param_files=(),
+            overwrite_parameters=False,
+            verbose=False):
+        """
+        Save the complete emulator and its provenance.
+        Arguments:
+        - path (str): output path;
+        - params (dict, default: None): parameters for the emulator;
+        - dataset_param_files (list of io.YamlFile, default: ()): list of
+          dataset parameter files to save;
+        - overwrite_parameters (bool, default: False): whether to overwrite
+          existing parameter files;
+        - verbose (bool, default: False): verbosity.
+        """
+
+        if verbose:
+            io.print_level(1, 'Saving output at: {}'.format(path))
+
+        if params is not None:
+            self.save_parameters(
+                path,
+                params,
+                dataset_param_files=dataset_param_files,
+                overwrite=overwrite_parameters,
+                verbose=verbose,
+            )
+
+        self._save_state(path, verbose=verbose)
+        return
+
+    def _save_state(self, path, verbose=False):
         """
         Save the emulator to path.
         Arguments:
         - path (str): output path;
         - verbose (bool, default: False): verbosity.
         """
-
-        if verbose:
-            io.print_level(1, 'Saving output at: {}'.format(path))
 
         # Create main folder
         io.Folder(path).create(verbose=verbose)
@@ -408,7 +830,7 @@ class FFNNEmu(Emulator):
         except AttributeError:
             io.warning('y_pca not loaded yet, impossible to save it!')
 
-        # Save last model
+        # Save model
         fname = os.path.join(path, self.model_fname)
         if verbose:
             io.info('Saving model at {}'.format(fname))
@@ -440,6 +862,9 @@ class FFNNEmu(Emulator):
 
         # Save y_model to the same file
         self.y_model.save(self.data_fname, root=path, verbose=verbose)
+
+        if verbose:
+            io.info('Emulator saved at {}'.format(path))
 
         return
 
@@ -539,9 +964,18 @@ class FFNNEmu(Emulator):
 
         return
 
-    def train(self, data, epochs, learning_rate, patience=100,
-              path=None, timeout=None, reduce_learning_rate=True,
-              get_plots=False, verbose=False):
+    def train(
+            self,
+            data,
+            epochs,
+            learning_rate,
+            patience=100,
+            path=None,
+            timeout=None,
+            reduce_learning_rate=True,
+            relative_improvement=True,
+            get_plots=False,
+            verbose=False):
         """
         Train the emulator.
         Arguments:
@@ -551,7 +985,7 @@ class FFNNEmu(Emulator):
           used to train the emulator;
         - epochs (int): epochs to run;
         - learning_rate (float): learning rate;
-        - patience (intm default: 100): number of epochs (int) before
+        - patience (int, default: 100): number of epochs (int) before
           early stopping without improvements;
         - path (str, default: None): output path. If None,
           the emulator will not be saved;
@@ -559,6 +993,9 @@ class FFNNEmu(Emulator):
           stop the training;
         - reduce_learning_rate (bool, default: True): reduce learning rate on
           plateau;
+        - relative_improvement (bool, default: True): use relative improvement
+          instead of absolute improvement for early stopping and learning
+          rate reduction;
         - get_plots (bool, default: False): get loss vs epoch plot;
         - verbose (bool, default: False): verbosity.
         """
@@ -579,6 +1016,7 @@ class FFNNEmu(Emulator):
             patience=patience,
             timeout=timeout,
             reduce_learning_rate=reduce_learning_rate,
+            relative_improvement=relative_improvement,
             verbose=verbose)
 
         self.model.optimizer.learning_rate = learning_rate
@@ -613,7 +1051,7 @@ class FFNNEmu(Emulator):
 
         # Save emulator
         if path:
-            self.save(path)
+            self.save(path, verbose=verbose)
 
         if get_plots:
             # Plot - Loss per epoch
@@ -673,24 +1111,3 @@ class FFNNEmu(Emulator):
             y = self.y_scaler.inverse_transform(y_scaled)[0]
 
         return y
-
-
-class TimeBasedEarlyStopping(keras.callbacks.Callback):
-    def __init__(self, max_time_hours, verbose=False):
-        super().__init__()
-        self.max_time_hours = max_time_hours
-        self.start_time = None
-        self.verbose = verbose
-
-    def on_train_begin(self, logs=None):
-        self.start_time = time.time()
-
-    def on_epoch_end(self, epoch, logs=None):
-        current_time = time.time()
-        elapsed_time = current_time - self.start_time
-
-        if elapsed_time > self.max_time_hours*60.*60.:
-            self.model.stop_training = True
-            if self.verbose:
-                print(f'\nEarly stopping: {elapsed_time:.2f}s'
-                      ' > {self.max_time_hours*60.*60.}s')

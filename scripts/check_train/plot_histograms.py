@@ -306,9 +306,25 @@ class EmuData(object):
 def show_summary(
         root,
         vlines=[0.01, 0.05, 0.1, 1.],
-        save_dir='.',
+        save_dir=None,
         compare_to_all=False
         ):
+
+    # Fix save directory
+    if save_dir is None:
+        save_path_hist = os.path.join(root, 'histograms.png')
+        save_path_sum = os.path.join(root, 'summary_table.txt')
+    else:
+        if os.path.split(root)[-1] == '':
+            fname_hist = 'histograms_{}.png'.format(
+                os.path.basename(os.path.dirname(root)))
+            fname_sum = 'summary_table_{}.txt'.format(
+                os.path.basename(os.path.dirname(root)))
+        else:
+            fname_hist = 'histograms_{}.png'.format(os.path.basename(root))
+            fname_sum = 'summary_table_{}.txt'.format(os.path.basename(root))
+        save_path_hist = os.path.join(save_dir, fname_hist)
+        save_path_sum = os.path.join(save_dir, fname_sum)
 
     with open(os.path.join(root, 'params.yaml')) as f:
         params = yaml.safe_load(f)
@@ -418,19 +434,14 @@ def show_summary(
     fig.suptitle(spectrum, fontsize=20)
     plt.tight_layout()
 
-    if os.path.split(root)[-1] == '':
-        fname = 'hist_{}.png'.format(os.path.basename(os.path.dirname(root)))
-    else:
-        fname = 'hist_{}.png'.format(os.path.basename(root))
-    fig.savefig(os.path.join(save_dir, fname), dpi=150, bbox_inches='tight')
+    fig.savefig(save_path_hist, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"Saved {fname}")
+    print(f"Saved {save_path_hist}")
 
     summary_table = tabulate(tab, headers=headers, tablefmt='orgtbl')
     print(summary_table)
 
-    out_fname = os.path.join(save_dir, 'summary_table_{}.txt'.format(spectrum))
-    with open(out_fname, 'w') as outputfile:
+    with open(save_path_sum, 'w') as outputfile:
         outputfile.write(spectrum)
         outputfile.write('\n')
         outputfile.write(summary_table)
@@ -440,12 +451,24 @@ def show_summary(
 
 
 def plot_worst_modes(
+        root,
         emudata,
         spectrum,
         diff,
         n_modes_kept=3,
         vlines=[0.01, 0.05, 0.1, 1.],
-        save_dir='.'):
+        save_dir=None):
+
+    # Fix save directory
+    if save_dir is None:
+        save_path = os.path.join(root, 'worst_modes.png')
+    else:
+        if os.path.split(root)[-1] == '':
+            fname = 'worst_modes_{}.png'.format(
+                os.path.basename(os.path.dirname(root)))
+        else:
+            fname = 'worst_modes_{}.png'.format(os.path.basename(root))
+        save_path = os.path.join(save_dir, fname)
 
     ranges = list(emudata.keys())
     n_ranges = len(ranges)
@@ -502,14 +525,9 @@ def plot_worst_modes(
 
     plt.tight_layout()
 
-    if os.path.split(root)[-1] == '':
-        fname = 'hist_worst_modes_{}.png'.format(
-            os.path.basename(os.path.dirname(root)))
-    else:
-        fname = 'hist_worst_modes_{}.png'.format(os.path.basename(root))
-    fig.savefig(os.path.join(save_dir, fname), dpi=150, bbox_inches='tight')
+    fig.savefig(save_path, dpi=150, bbox_inches='tight')
     plt.close(fig)
-    print(f"Saved {fname}")
+    print(f"Saved {save_path}")
 
 
 if __name__ == '__main__':
@@ -525,12 +543,11 @@ if __name__ == '__main__':
         '--save-dir',
         '-s',
         type=str,
-        default='/ceph/hpc/home/bellinie/emu_like/output',
         help='Directory to save figures. Defaults to script directory.')
     args = parser.parse_args()
 
-    save_dir = args.save_dir or os.path.dirname(os.path.abspath(__file__))
-    os.makedirs(save_dir, exist_ok=True)
+    if args.save_dir is not None:
+        os.makedirs(args.save_dir, exist_ok=True)
 
     # Find all folders containing history_log.csv in the provided roots
     roots = []
@@ -542,7 +559,13 @@ if __name__ == '__main__':
     for root in roots:
 
         emudata, spectrum, diff = show_summary(
-            root, save_dir=save_dir, compare_to_all=True)
+            root,
+            save_dir=args.save_dir,
+            compare_to_all=True)
+
         plot_worst_modes(
-            emudata, spectrum, diff, n_modes_kept=3, save_dir=save_dir)
-        print(f"\nFigures saved to {save_dir}\n")
+            root,
+            emudata,
+            spectrum, diff,
+            n_modes_kept=3,
+            save_dir=args.save_dir)

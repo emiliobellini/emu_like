@@ -49,10 +49,6 @@ def argument_parser():
         type=str,
         help='Parameters file (.yaml)')
     sample_parser.add_argument(
-        '--verbose', '-v',
-        help='Verbose (default: False)',
-        action='store_true')
-    sample_parser.add_argument(
         '--resume', '-r',
         help='Resume from a previous run.',
         action='store_true')
@@ -72,6 +68,10 @@ def argument_parser():
         default=None,
         help='Chunk size used to dispatch work to workers '
         '(default: executor default).')
+    sample_parser.add_argument(
+        '--verbose', '-v',
+        help='Verbose (default: False)',
+        action='store_true')
 
     # Train arguments
     train_parser.add_argument(
@@ -79,28 +79,37 @@ def argument_parser():
         type=str,
         help='Parameters file (.yaml)')
     train_parser.add_argument(
+        '--resume-strict', '-r',
+        action='store_true',
+        help='Resume using the stored optimization problem. Only runtime '
+             'settings and the number of epochs may change.')
+    train_parser.add_argument(
+        '--resume-warm', '-w',
+        action='store_true',
+        help='Initialize from stored model weights while using the datasets, '
+             'preprocessing, loss, and training policy from PARAMS_FILE.')
+    train_parser.add_argument(
+        '--force', '-f',
+        help='If the output folder is not empty, resume using the selected '
+             'resume mode; otherwise start a new training. Requires either '
+             '--resume-strict or --resume-warm.',
+        action='store_true')
+    train_parser.add_argument(
+        '--epochs', '-e',
+        type=int,
+        default=None,
+        help='Number of epochs to run in this invocation. If omitted, use '
+             'the value selected by the resume mode.')
+    train_parser.add_argument(
+        '--timeout', '-t',
+        type=float,
+        default=None,
+        help='Timeout for training. If omitted, use the value selected '
+             'by the resume mode.')
+    train_parser.add_argument(
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')
-    train_parser.add_argument(
-        '--resume', '-r',
-        help='Resume from a previous run.',
-        action='store_true')
-    train_parser.add_argument(
-        '--force', '-f',
-        help='Force training. If output folder exists resume training, '
-        'otherwise start from scratch.',
-        action='store_true')
-    train_parser.add_argument(
-        '--additional_epochs', '-e',
-        type=int,
-        default=-1,
-        help='Number of additional epochs (int)')
-    train_parser.add_argument(
-        '--learning_rate', '-lr',
-        type=float,
-        default=-1.,
-        help='New learning rate (float)')
 
     # MCMC arguments
     mcmc_parser.add_argument(
@@ -126,7 +135,27 @@ def argument_parser():
         help='Verbose (default: False)',
         action='store_true')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Cross-argument checks - Train mode
+    if args.mode == 'train':
+        if args.resume_strict and args.resume_warm:
+            parser.error(
+                '--resume-strict and --resume-warm cannot be used together.')
+        if args.force and not (args.resume_strict or args.resume_warm):
+            parser.error(
+                '--force requires either --resume-strict or --resume-warm.')
+        if args.epochs is not None and args.epochs <= 0:
+            parser.error('--epochs must be a positive integer.')
+
+    # Cross-argument checks - Export mode
+    if args.mode == 'export':
+        if args.input is None:
+            parser.error('--input is required for export mode.')
+        if args.output is None:
+            parser.error('--output is required for export mode.')
+
+    return args
 
 
 # ------------------- Folder -------------------------------------------------#
@@ -641,8 +670,10 @@ class YamlFile(object):
         if self.exists and not overwrite:
             if skip_if_exists:
                 if verbose:
-                    print_level(1, 'File {} already exists, skipping writing.'.format(
-                        self.path))
+                    print_level(
+                        1,
+                        'File {} already exists, skipping writing.'.format(
+                            self.path))
                 return
             raise FileNotFoundError(
                 'The file you want to read ({}) already exists!'.format(
@@ -664,6 +695,44 @@ class YamlFile(object):
         if verbose:
             print_level(1, 'Saved parameters at: {}'.format(self.path))
         return
+
+    def nested_differences(self, reference, ignored_paths=()):
+        """Return differences between this YAML file and another.
+
+        Paths are tuples such as ('emulator', 'args', 'epochs').
+        Ignoring a path ignores that value or entire subtree.
+        """
+        if isinstance(reference, YamlFile):
+            reference = reference.content
+
+        ignored_paths = set(ignored_paths)
+        missing = object()
+
+        def compare(current, reference, path=()):
+            if path in ignored_paths:
+                return []
+
+            if isinstance(current, dict) and isinstance(reference, dict):
+                differences = []
+
+                # Preserve a predictable key order.
+                keys = dict.fromkeys(list(current) + list(reference))
+
+                for key in keys:
+                    differences.extend(compare(
+                        current.get(key, missing),
+                        reference.get(key, missing),
+                        path + (key,),
+                    ))
+
+                return differences
+
+            if current != reference:
+                return [(path, current, reference)]
+
+            return []
+
+        return compare(self.content, reference)
 
 
 # ------------------- Scripts ------------------------------------------------#
