@@ -1,6 +1,7 @@
 import argparse
 import matplotlib.pyplot as plt
 import numpy as np
+import os
 from emu_like.datasets import Dataset
 
 
@@ -118,6 +119,7 @@ def plot_mode_density(
         zero_color='lightgray',
         logy=False,
         logx=False,
+        yabs=False,
         xlim=None,
         ylim=None,
         save_path=None):
@@ -137,22 +139,60 @@ def plot_mode_density(
         Number of contour levels for plt.contourf.
     cmap : str
         Matplotlib colormap name for the filled contours.
+    logy : bool
+        Use a logarithmic y-axis and logarithmically spaced density bins.
+    yabs : bool
+        Plot the density of ``abs(samples)``. If ``ylim`` spans zero, it is
+        converted to ``(0, max(abs(ylim)))``; entirely negative limits are
+        reversed after taking their absolute value.
     """
     if samples.ndim != 2:
         raise ValueError('samples must be a 2D array (n_s, n_k)')
+
+    if n_bins < 1:
+        raise ValueError('n_bins must be at least 1')
 
     n_s, n_k = samples.shape
     if mode_values is None:
         mode_values = np.arange(n_k)
 
-    print(samples.min(), samples.max())
-    y_edges = np.linspace(samples.min(), samples.max(), n_bins + 1)
-    y_centers = 0.5 * (y_edges[:-1] + y_edges[1:])
+    # Apply transformations before computing the histogram. Applying abs only
+    # to the plotting coordinates folds a signed, non-monotonic y grid without
+    # combining the corresponding positive and negative densities.
+    plotted_samples = np.abs(samples) if yabs else samples
+    finite_samples = plotted_samples[np.isfinite(plotted_samples)]
+    if finite_samples.size == 0:
+        raise ValueError('samples contain no finite values')
 
-    density = np.empty((n_bins, n_k))
+    if logy:
+        positive_samples = finite_samples[finite_samples > 0]
+        if positive_samples.size == 0:
+            raise ValueError('logy=True requires at least one non-zero sample')
+        y_min = positive_samples.min()
+        y_max = positive_samples.max()
+        if y_min == y_max:
+            y_min /= np.sqrt(10.)
+            y_max *= np.sqrt(10.)
+        y_edges = np.geomspace(y_min, y_max, n_bins + 1)
+        y_centers = np.sqrt(y_edges[:-1] * y_edges[1:])
+    else:
+        y_min = finite_samples.min()
+        y_max = finite_samples.max()
+        if y_min == y_max:
+            padding = 0.5 if y_min == 0 else 0.01 * abs(y_min)
+            y_min -= padding
+            y_max += padding
+        y_edges = np.linspace(y_min, y_max, n_bins + 1)
+        y_centers = 0.5 * (y_edges[:-1] + y_edges[1:])
+
+    density = np.zeros((n_bins, n_k))
+    bin_widths = np.diff(y_edges)
     for j in range(n_k):
-        hist, _ = np.histogram(samples[:, j], bins=y_edges, density=True)
-        density[:, j] = hist
+        values = plotted_samples[:, j]
+        values = values[np.isfinite(values)]
+        hist, _ = np.histogram(values, bins=y_edges)
+        if hist.sum() > 0:
+            density[:, j] = hist / (hist.sum() * bin_widths)
 
     positive = density[density > 0]
     if positive.size == 0:
@@ -173,7 +213,7 @@ def plot_mode_density(
     contour.changed()
 
     ax.set_xlabel('Mode index' if mode_values is None else 'Mode')
-    ax.set_ylabel('Sample value')
+    ax.set_ylabel('Absolute sample value' if yabs else 'Sample value')
     if logy:
         ax.set_yscale('log')
     if logx:
@@ -181,7 +221,18 @@ def plot_mode_density(
     if xlim is not None:
         ax.set_xlim(xlim)
     if ylim is not None:
-        ax.set_ylim(ylim)
+        plot_ylim = list(ylim)
+        if yabs:
+            raw_finite = samples[np.isfinite(samples)]
+            lower = raw_finite.min() if plot_ylim[0] is None else plot_ylim[0]
+            upper = raw_finite.max() if plot_ylim[1] is None else plot_ylim[1]
+            if lower <= 0 <= upper:
+                plot_ylim = [0., max(abs(lower), abs(upper))]
+            else:
+                plot_ylim = sorted((abs(lower), abs(upper)))
+        if logy and (plot_ylim[0] is None or plot_ylim[0] <= 0):
+            plot_ylim[0] = y_centers[0]
+        ax.set_ylim(plot_ylim)
     cbar = fig.colorbar(contour, ax=ax)
     cbar.set_label('Density')
     if save_path is not None:
@@ -260,20 +311,21 @@ if __name__ == '__main__':
     # Stack training and testing data
     x, y = stack_train_test(data)
 
-    # # Plot mode density
-    # plot_mode_density(
-    #     y,
-    #     mode_values=None,
-    #     n_bins=200,
-    #     n_levels=30,
-    #     cmap='viridis',
-    #     zero_color='lightgray',
-    #     logy=False,
-    #     logx=True,
-    #     # xlim=[0.9, None],
-    #     # ylim=[-200.,200.],
-    #     save_path=os.path.join(args.output_folder, fname))
+    # Plot mode density
+    plot_mode_density(
+        y,
+        mode_values=None,
+        n_bins=200,
+        n_levels=30,
+        cmap='viridis',
+        zero_color='lightgray',
+        # yabs=True,
+        # logy=True,
+        logx=True,
+        # xlim=[0.9, None],
+        # ylim=[-200.,200.],
+        save_path=os.path.join(args.output_folder, fname))
 
-    plt.plot(np.arange(y.shape[1])+1, y[:3].T)
-    plt.xscale('log')
-    plt.savefig('output/test.png')
+    # plt.plot(np.arange(y.shape[1])+1, y[:3].T)
+    # plt.xscale('log')
+    # plt.savefig('output/test.png')
