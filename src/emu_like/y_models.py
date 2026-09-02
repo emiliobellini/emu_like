@@ -101,6 +101,11 @@ class YModel(object):
         else:
             raise Exception('YModel not recognised!')
 
+    @staticmethod
+    def join(y_models):
+        """Placeholder for combining multiple YModel instances."""
+        return None
+
     def get_n_y(self):
         """
         Get n_y.

@@ -644,79 +644,75 @@ class Dataset(object):
     @staticmethod
     def join(datasets, verbose=False):
         """
-        Join a list of datasets into a unique one.
-        This defines the minimum number of attributes
-        required to use a dataset for tranining, i.e.
-        x, y, n_x, n_y, n_samples, x_names and y_names.
-        Before joining them it checks that n_x and n_y are
-        the same for each dataset.
+        Join compatible datasets into a new Dataset.
+
         Arguments:
         - datasets (list of Dataset): list of Dataset classes (already loaded);
         - verbose (bool, default: False): verbosity.
         """
+
+        if not datasets:
+            raise ValueError('At least one Dataset is required')
 
         if verbose:
             io.info('Joining datasets')
             for dataset in datasets:
                 io.print_level(1, '{}'.format(dataset.path))
 
-        data = Dataset()
+        first = datasets[0]
 
-        # Name
-        data.name = datasets[0].name
+        # Attributes that must remain the same.
+        common_attributes = (
+            'name', 'n_x', 'n_y', 'x_names', 'y_names', 'x_key',
+            'y_header')
+        for attribute in common_attributes:
+            reference = getattr(first, attribute)
+            if not all(getattr(dataset, attribute) == reference
+                       for dataset in datasets[1:]):
+                raise ValueError(
+                    'Datasets can not be joined because {} differs'
+                    ''.format(attribute))
 
-        # n_x
-        if all(s.n_x == datasets[0].n_x for s in datasets):
-            data.n_x = datasets[0].n_x
+        # Attributes that are stacked, summed, or concatenated.
+        x = np.vstack([dataset.x for dataset in datasets])
+        y = np.vstack([dataset.y for dataset in datasets])
+        n_samples = sum(dataset.n_samples for dataset in datasets)
+        paths = [path for dataset in datasets for path in dataset.path]
+        stored_non_finites = [
+            dataset.non_finites_x for dataset in datasets
+            if dataset.non_finites_x is not None]
+        non_finites_x = (
+            np.vstack(stored_non_finites) if stored_non_finites else None)
+
+        # Attributes requiring a specific combination rule.
+        if all(dataset.x_ranges is not None for dataset in datasets):
+            x_ranges = [[
+                min(dataset.x_ranges[index][0] for dataset in datasets),
+                max(dataset.x_ranges[index][1] for dataset in datasets)]
+                for index in range(first.n_x)]
         else:
-            raise ValueError('Datasets can not be joined as they have '
-                             'different number of x variables')
+            x_ranges = None
+        y_model = YModel.join(
+            [dataset.y_model for dataset in datasets])
 
-        # n_y
-        if all(s.n_y == datasets[0].n_y for s in datasets):
-            data.n_y = datasets[0].n_y
-        else:
-            raise ValueError('Datasets can not be joined as they have '
-                             'different number of x variables')
-
-        # x array
-        total = tuple([s.x for s in datasets])
-        data.x = np.vstack(total)
-
-        # y array
-        total = tuple([s.y for s in datasets])
-        data.y = np.vstack(total)
-
-        # x and y names
-        data.x_names = datasets[0].x_names
-        data.y_names = datasets[0].y_names
-        data.x_key = datasets[0].x_key
-
-        # n_samples
-        data.n_samples = sum([s.n_samples for s in datasets])
-
-        # y_model.
-        # NOTE: we are assuming that all datsets are sharing the
-        # same y_model, which is taken from the first one.
-        data.y_model = datasets[0].y_model
-
-        data.x_ranges = []
-        for nname, _ in enumerate(data.x_names):
-            data.x_ranges.append(
-                [min([dat.x_ranges[nname][0] for dat in datasets]),
-                 max([dat.x_ranges[nname][1] for dat in datasets])]
-            )
-
-        # Adjust params
-        for var in datasets[0].y_model.params:
-            mins = [dat.y_model.params[var]['prior']['min']
-                    for dat in datasets]
-            maxs = [dat.y_model.params[var]['prior']['max']
-                    for dat in datasets]
-            data.y_model.params[var]['prior']['min'] = min(mins)
-            data.y_model.params[var]['prior']['max'] = max(maxs)
-
-        return data
+        # Splits, transformations, x_sampler, and settings are intentionally
+        # reset: they describe individual source datasets, not the joined one.
+        return Dataset(
+            name=first.name,
+            x=x,
+            y=y,
+            n_x=first.n_x,
+            n_y=first.n_y,
+            n_samples=n_samples,
+            x_names=copy.deepcopy(first.x_names),
+            y_names=copy.deepcopy(first.y_names),
+            y_model=y_model,
+            x_ranges=x_ranges,
+            path=paths,
+            y_header=copy.deepcopy(first.y_header),
+            non_finites_x=non_finites_x,
+            x_key=first.x_key,
+        )
 
     def train_test_split(self, frac_train, seed, verbose=False):
         """
