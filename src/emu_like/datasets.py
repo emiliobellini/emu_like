@@ -103,7 +103,10 @@ class Dataset(object):
             y_scaler=None,
             x_pca=None,
             y_pca=None,
-            path=None
+            path=None,
+            y_header=None,
+            x_sampler=None,
+            non_finites_x=None
             ):
         """
         Placeholders.
@@ -128,6 +131,11 @@ class Dataset(object):
         self.x_names = x_names  # List of names of x data
         self.y_names = y_names  # List of names of y data
         self.x_key = None  # Name of the x image in fits file
+        self.y_header = y_header  # Header for y file
+
+        # Optional helpers and diagnostics
+        self.x_sampler = x_sampler
+        self.non_finites_x = non_finites_x
 
         # y_model
         self.y_model = y_model
@@ -357,12 +365,23 @@ class Dataset(object):
                 self.settings['params'][name]['prior']['max']]
                 for name in self.x_names]
 
+        # Select exactly one configured output before initializing y_model.
+        configured_outputs = self.settings['y_model']['outputs']
+        if name is None and isinstance(configured_outputs, dict):
+            if len(configured_outputs) != 1:
+                raise ValueError(
+                    'Dataset name is required when the file contains {} '
+                    'outputs: {}'.format(
+                        len(configured_outputs),
+                        list(configured_outputs.keys())))
+            name = next(iter(configured_outputs))
+
         # Init y_model
-        if name is None:
-            dataset_settings = None
-        else:
+        if isinstance(configured_outputs, dict):
             dataset_settings = {
-                name: self.settings['y_model']['outputs'][name]}
+                name: configured_outputs[name]}
+        else:
+            dataset_settings = configured_outputs
         y_model = YModel.choose_one(
             self.settings['y_model']['name'],
             self.settings['params'],
@@ -377,9 +396,17 @@ class Dataset(object):
             verbose=False,
         )
 
-        # Store y name
+        # Infer the conventional key used by single-output simple models.
         if name is None:
+            if len(y_model.y_keys) != 1:
+                raise ValueError(
+                    'Dataset requires exactly one output, but y_model '
+                    'contains {}'.format(len(y_model.y_keys)))
             name = y_model.y_keys[0]
+        elif name not in y_model.y_keys:
+            raise ValueError(
+                'Output {} is not available; choose from {}'
+                ''.format(name, y_model.y_keys))
         self.name = name
 
         # Load y data
@@ -387,9 +414,36 @@ class Dataset(object):
         self.y = y_model.y
 
         # Get remaining y attributes
-        self.n_y = y_model.get_n_y()
-        self.y_names = y_model.get_y_names()
-        self.y_headers = y_model.get_y_headers()
+        model_n_y = y_model.get_n_y()
+        if len(model_n_y) != 1:
+            raise ValueError(
+                'Dataset requires exactly one output, but y_model '
+                'contains {}'.format(len(model_n_y)))
+        self.n_y = self.y.shape[1]
+        if model_n_y[0] != self.n_y:
+            raise ValueError(
+                'The y array has {} columns, but y_model expects {}'
+                ''.format(self.n_y, model_n_y[0]))
+        model_y_names = y_model.y_names
+        if not model_y_names:
+            model_y_names = y_model.get_y_names()
+        if len(model_y_names) != 1:
+            raise ValueError(
+                'Dataset requires exactly one y_names entry, but y_model '
+                'contains {}'.format(len(model_y_names)))
+        if len(model_y_names[0]) != self.n_y:
+            raise ValueError(
+                'The y array has {} columns, but y_model provides {} names'
+                ''.format(self.n_y, len(model_y_names[0])))
+        self.y_names = list(model_y_names[0])
+        model_y_headers = y_model.y_headers
+        if not model_y_headers:
+            model_y_headers = y_model.get_y_headers()
+        if len(model_y_headers) != 1:
+            raise ValueError(
+                'Dataset requires exactly one y_header entry, but y_model '
+                'contains {}'.format(len(model_y_headers)))
+        self.y_header = model_y_headers[0].copy()
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -761,18 +815,19 @@ class DataCollection(object):
         - name (str, default:None): if specified it gets the y dataset
           with that name.
         """
-        # Get correct index
+        # Get correct index and resolve the selected output name.
         if name is not None:
-            idx = self.y_model.spectra.names.index(name)
-        elif len(self.y_model.spectra.names) == 1:
+            idx = self.y_keys.index(name)
+        elif len(self.y_keys) == 1:
             idx = 0
         else:
             raise Exception(
                 'It is not possible to extract a single dataset if no name '
                 'is specified and there are multiple datasets!')
+        selected_name = self.y_keys[idx]
 
         dataset = Dataset(
-            name=name,
+            name=selected_name,
             x=self.x,
             y=self.y[idx],
             n_x=self.n_x,
@@ -782,6 +837,7 @@ class DataCollection(object):
             y_names=self.y_names[idx],
             y_model=self.y_model[idx],
             path=self.path,
+            y_header=self.y_headers[idx].copy()
         )
 
         return dataset
