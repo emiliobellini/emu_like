@@ -748,6 +748,15 @@ class ClassSpectra(YModel):
             candidates, key=lambda index: len(z_arrays[index]))
         selected = y_models[selected_index]
         selected_z = np.asarray(selected.z_array)
+        if selected_z.size == 0:
+            raise ValueError('ClassSpectra z_array can not be empty')
+        if (target_z_max is not None
+                and np.max(selected_z) < target_z_max
+                and not np.isclose(
+                    np.max(selected_z), target_z_max,
+                    rtol=1.e-12, atol=1.e-12)):
+            raise ValueError(
+                'ClassSpectra reference grid does not reach z_max_pk')
 
         for model, z_array in zip(y_models, z_arrays):
             z_array = np.asarray(z_array)
@@ -765,14 +774,14 @@ class ClassSpectra(YModel):
                 selected_reference = selected.y_ref[output_index]
                 if spectrum.is_pk:
                     if (reference.ndim < 2
-                            or reference.shape[1] != len(z_array)
+                            or reference.shape[-1] != len(z_array)
                             or selected_reference.ndim < 2
-                            or selected_reference.shape[1] != len(selected_z)):
+                            or selected_reference.shape[-1] != len(selected_z)):
                         raise ValueError(
                             'ClassSpectra y_ref redshift dimension is '
                             'inconsistent with z_array')
                     selected_reference = np.take(
-                        selected_reference, selected_indices, axis=1)
+                        selected_reference, selected_indices, axis=-1)
                 if not np.allclose(
                         reference, selected_reference,
                         rtol=1.e-10, atol=1.e-12, equal_nan=True):
@@ -792,6 +801,9 @@ class ClassSpectra(YModel):
         first = y_models[0]
         if not all(isinstance(model, ClassSpectra) for model in y_models):
             raise ValueError('All models must be ClassSpectra instances')
+        if not all(model.classy is first.classy for model in y_models[1:]):
+            raise ValueError(
+                'ClassSpectra models use different classy runtimes')
 
         # Attributes defining the model and output representation must match.
         common_attributes = (
@@ -886,8 +898,15 @@ class ClassSpectra(YModel):
             optional_paths=(('z_max_pk',),),
             label='ClassSpectra ref_params')
 
+        if any(spectrum.is_pk for spectrum in joined.spectra):
+            joined.ref_params['z_max_pk'] = max(
+                joined.ref_params.get('z_max_pk', 0.1),
+                joined._get_z_max())
+
         joined.z_array, joined.y_ref = ClassSpectra._join_references(
             y_models, joined.ref_params)
+        joined.cosmo = (
+            None if joined.classy is None else joined.classy.Class())
 
         return joined
 

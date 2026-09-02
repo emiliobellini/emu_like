@@ -699,6 +699,10 @@ class Dataset(object):
             raise NotImplementedError(
                 'Joining is not implemented for this YModel type') from error
         y_model = join_y_models(y_models)
+        if len(y_model.y) != 1 or not np.array_equal(y_model.y[0], y):
+            raise ValueError(
+                'Joined y_model data are inconsistent with Dataset.y')
+        y_model.y = [y]
 
         # Splits, transformations, x_sampler, and settings are intentionally
         # reset: they describe individual source datasets, not the joined one.
