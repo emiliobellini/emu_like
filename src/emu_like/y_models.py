@@ -14,6 +14,7 @@ create the get_x method and adapt its other
 methods and attributes to your needs.
 """
 
+import copy
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -601,26 +602,40 @@ class ClassSpectra(YModel):
         idx = self.spectra._get_idx_from_name(name)
 
         oneclassspectrum = ClassSpectra()
-        # Fix relevant attributes
+
+        # Base YModel attributes
         oneclassspectrum.name = self.name
-        oneclassspectrum.classy = self.classy
-        oneclassspectrum.cosmo = self.cosmo
-        oneclassspectrum.args = self.args
-        oneclassspectrum.class_params = self.class_params
+        oneclassspectrum.params = copy.deepcopy(self.params)
+        oneclassspectrum.args = copy.deepcopy(self.args)
         oneclassspectrum.n_samples = self.n_samples
-        oneclassspectrum.params = self.params
-        oneclassspectrum.outputs = {name: self.outputs[name]}
-        oneclassspectrum.x_names = self.x_names
-        oneclassspectrum.y = [self.y[idx]]
-        oneclassspectrum.y_headers = [self.y_headers[idx]]
-        oneclassspectrum.y_names = [self.y_names[idx]]
-        oneclassspectrum.y_ref = [self.y_ref[idx]]
-        oneclassspectrum.spectra = Spectra([self.spectra[idx]])
-        if self.spectra[idx].is_pk:
-            oneclassspectrum.z_array = self.z_array
-            oneclassspectrum.k_ranges = [self.k_ranges[idx]]
-        elif self.spectra[idx].is_cl:
-            oneclassspectrum.ell_ranges = [self.ell_ranges[idx]]
+        oneclassspectrum.y = [self.y[idx].copy()]
+        oneclassspectrum.n_y = [self.n_y[idx]]
+        oneclassspectrum.y_names = [copy.deepcopy(self.y_names[idx])]
+        oneclassspectrum.y_headers = [copy.deepcopy(self.y_headers[idx])]
+        oneclassspectrum.outputs = {
+            name: copy.deepcopy(self.outputs[name])}
+        oneclassspectrum.x_names = list(self.x_names)
+
+        # ClassSpectra metadata
+        oneclassspectrum.spectra = Spectra(oneclassspectrum.outputs)
+        oneclassspectrum.y_keys = list(oneclassspectrum.spectra.names)
+        oneclassspectrum.ref_params = copy.deepcopy(self.ref_params)
+        oneclassspectrum.class_params = (
+            oneclassspectrum.args
+            | {parameter: None for parameter in oneclassspectrum.x_names})
+        oneclassspectrum.y_ref = [self.y_ref[idx].copy()]
+        oneclassspectrum.z_array = (
+            None if self.z_array is None else self.z_array.copy())
+        oneclassspectrum.k_ranges = [
+            copy.deepcopy(self.k_ranges[idx])]
+        oneclassspectrum.ell_ranges = [
+            copy.deepcopy(self.ell_ranges[idx])]
+
+        # Runtime CLASS objects must not be shared between models.
+        oneclassspectrum.classy = self.classy
+        oneclassspectrum.cosmo = (
+            None if self.classy is None else self.classy.Class())
+
         return oneclassspectrum
 
     @staticmethod
