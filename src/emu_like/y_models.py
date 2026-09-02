@@ -101,11 +101,6 @@ class YModel(object):
         else:
             raise Exception('YModel not recognised!')
 
-    @staticmethod
-    def join(y_models):
-        """Placeholder for combining multiple YModel instances."""
-        return None
-
     def get_n_y(self):
         """
         Get n_y.
@@ -627,6 +622,11 @@ class ClassSpectra(YModel):
         elif self.spectra[idx].is_cl:
             oneclassspectrum.ell_ranges = [self.ell_ranges[idx]]
         return oneclassspectrum
+
+    @staticmethod
+    def join(y_models):
+        """Placeholder for combining multiple ClassSpectra instances."""
+        return None
 
     def _get_z_max(self):
         z_max = 0.1

@@ -692,8 +692,13 @@ class Dataset(object):
                 for index in range(first.n_x)]
         else:
             x_ranges = None
-        y_model = YModel.join(
-            [dataset.y_model for dataset in datasets])
+        y_models = [dataset.y_model for dataset in datasets]
+        try:
+            join_y_models = y_models[0].join
+        except AttributeError as error:
+            raise NotImplementedError(
+                'Joining is not implemented for this YModel type') from error
+        y_model = join_y_models(y_models)
 
         # Splits, transformations, x_sampler, and settings are intentionally
         # reset: they describe individual source datasets, not the joined one.
