@@ -6,6 +6,7 @@
 
 """
 
+import copy
 import numpy as np
 import os
 import re
@@ -171,6 +172,17 @@ class Dataset(object):
             return [os.fspath(path)]
         return [os.fspath(source_path) for source_path in path]
 
+    def _clear_derived_state(self):
+        """Clear splits and transformations derived from the raw arrays."""
+        self.x_train = None
+        self.y_train = None
+        self.x_test = None
+        self.y_test = None
+        self.x_scaler = None
+        self.y_scaler = None
+        self.x_pca = None
+        self.y_pca = None
+
     def _set_and_validate_dimensions(
             self,
             n_samples=None,
@@ -216,11 +228,7 @@ class Dataset(object):
         - columns (default: None): slice object or list of
           column indices to be read.
         """
-        array = np.genfromtxt(path)
-        # Adjust array dimensions.
-        # If it has one feature I still want 1x2_samples
-        if array.ndim == 1:
-            array = array[:, np.newaxis]
+        array = np.genfromtxt(path, ndmin=2)
         return array
 
     @staticmethod
@@ -323,6 +331,7 @@ class Dataset(object):
                 self.y_header['y_names'] = self.y_names
 
         self._set_and_validate_dimensions()
+        self._clear_derived_state()
 
         return self
 
@@ -330,8 +339,8 @@ class Dataset(object):
         """
         Remove from the dataset non finite samples (inf and nan).
         Arguments:
-        - store_non_finites (bool, default: False): store x's that
-          give non finite y in non_finites_x.
+        - store_non_finites (bool, default: False): store x rows containing
+          non-finite values or corresponding to non-finite y rows.
         - verbose (bool, default: False): verbosity.
         """
 
@@ -339,12 +348,16 @@ class Dataset(object):
             io.print_level(1, 'Removing non finite values from x and y.')
 
         # Finite indices
-        only_finites = np.all(np.isfinite(self.y), axis=1)
+        only_finites = (
+            np.all(np.isfinite(self.x), axis=1)
+            & np.all(np.isfinite(self.y), axis=1))
 
         # Store non-finite elements
         if store_non_finites:
             only_non_finites = np.logical_not(only_finites)
             self.non_finites_x = self.x[only_non_finites]
+        else:
+            self.non_finites_x = None
 
         self.x = self.x[only_finites]
         self.y = self.y[only_finites]
@@ -362,14 +375,7 @@ class Dataset(object):
 
         # Existing splits and fitted transformations refer to the unfiltered
         # rows and must be recomputed.
-        self.x_train = None
-        self.y_train = None
-        self.x_test = None
-        self.y_test = None
-        self.x_scaler = None
-        self.y_scaler = None
-        self.x_pca = None
-        self.y_pca = None
+        self._clear_derived_state()
 
         return self
 
@@ -420,6 +426,8 @@ class Dataset(object):
                 'Dataset.load requires a native dataset with settings in '
                 'the primary FITS header; use Dataset.load_external for '
                 'files without settings')
+        self._clear_derived_state()
+        self.non_finites_x = None
 
         # Main path
         self.path = self._normalize_paths(path)
@@ -720,9 +728,6 @@ class Dataset(object):
         - seed (int): seed to randomly split train and test;
         - verbose (bool, default: False): verbosity.
 
-        NOTE: this method assumes that both settings and the fulle x array
-        are already saved into the folder. The x array is then used to
-        calculate the missing row of the y array.
         """
 
         if verbose:
@@ -734,6 +739,7 @@ class Dataset(object):
         split = skl_ms.train_test_split(self.x, self.y,
                                         train_size=frac_train,
                                         random_state=seed)
+        self._clear_derived_state()
         self.x_train, self.x_test, self.y_train, self.y_test = split
         return
 
@@ -792,10 +798,10 @@ class Dataset(object):
         """
         Apply PCA to x and/or y of a dataset.
         Arguments:
-        - num_pca_x (int): number of modes to be retained
-          for x (if 0 or negative PCA is not applied);
-        - num_pca_y (int): number of modes to be retained
-          for y (if 0 or negative PCA is not applied);
+        - num_x_pca (int or None): number of x modes to retain. If None,
+          all available modes are retained;
+        - num_y_pca (int or None): number of y modes to retain. If None,
+          all available modes are retained;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that we already splitted
@@ -891,6 +897,7 @@ class DataCollection(object):
 
         # Placeholder for the YModel
         self.y_model = None
+        self.x_sampler = None
 
         # Useful to keep track of how many samples have been computed
         self.counter_samples = 0
@@ -930,22 +937,39 @@ class DataCollection(object):
             x_ranges = [[minimum, maximum] for minimum, maximum in zip(
                 np.min(self.x, axis=0), np.max(self.x, axis=0))]
 
+        dataset_x = self.x.copy()
+        dataset_y = self.y[idx].copy()
+
+        x_sampler = None
+        if self.x_sampler is not None:
+            x_sampler = copy.copy(self.x_sampler)
+            x_sampler.x = dataset_x
+            x_sampler.n_samples = self.n_samples
+            x_sampler.params = copy.deepcopy(self.x_sampler.params)
+
+        y_model = None
+        if self.y_model is not None:
+            y_model = copy.copy(self.y_model[idx])
+            y_model.y = [dataset_y]
+            y_model.n_samples = self.n_samples
+            y_model.params = copy.deepcopy(y_model.params)
+
         dataset = Dataset(
             name=selected_name,
-            x=self.x,
-            y=self.y[idx],
+            x=dataset_x,
+            y=dataset_y,
             n_x=self.n_x,
             n_y=self.n_y[idx],
             n_samples=self.n_samples,
-            x_names=self.x_names,
-            y_names=self.y_names[idx],
-            y_model=self.y_model[idx],
+            x_names=list(self.x_names),
+            y_names=list(self.y_names[idx]),
+            y_model=y_model,
             x_ranges=x_ranges,
             path=self.path,
-            y_header=self.y_headers[idx].copy(),
-            x_sampler=self.x_sampler,
+            y_header=copy.deepcopy(self.y_headers[idx]),
+            x_sampler=x_sampler,
             x_key=self.x_key,
-            settings=self.settings
+            settings=copy.deepcopy(self.settings)
         )
 
         return dataset
@@ -980,26 +1004,53 @@ class DataCollection(object):
         - verbose (bool, default: False): verbosity.
         """
 
-        fits = io.FitsFile(
-            fname=fname,
-            root=root,
-        )
-
-        # Save settings
+        # Resolve and validate all content before writing anything.
+        if fname is None:
+            if root is None and self.path is not None:
+                fname = self.path
+            else:
+                raise ValueError('DataCollection.save requires a filename')
         if settings is None:
             settings = self.settings
-        fits.write(
-            name=None,
-            data=None,
-            header=self.settings,
-            verbose=verbose,
-        )
-
-        # Save x
+        if settings is None:
+            raise ValueError('DataCollection.save requires dataset settings')
         if data_x is None:
             data_x = self.x
         if name_x is None:
             name_x = self.x_key
+        if data_ys is None:
+            data_ys = self.y
+        if name_ys is None:
+            name_ys = self.y_keys
+        if hd_ys is None:
+            if len(self.y_headers) == len(data_ys):
+                hd_ys = self.y_headers
+            else:
+                hd_ys = [None for _ in range(len(data_ys))]
+        if len(name_ys) != len(data_ys) or len(hd_ys) != len(data_ys):
+            raise ValueError(
+                'data_ys, name_ys and hd_ys must have the same length')
+        if y_model is None:
+            y_model = self.y_model
+        if y_model is None:
+            raise ValueError('DataCollection.save requires a y_model')
+
+        fits = io.FitsFile(
+            fname=fname,
+            root=root,
+        )
+        self.path = fits.path
+        self.settings = settings
+
+        # Save settings
+        fits.write(
+            name=None,
+            data=None,
+            header=settings,
+            verbose=verbose,
+        )
+
+        # Save x
         fits.write(
             name=name_x,
             data=data_x,
@@ -1008,12 +1059,6 @@ class DataCollection(object):
         )
 
         # Save y
-        if data_ys is None:
-            data_ys = self.y
-        if name_ys is None:
-            name_ys = self.y_keys
-        if hd_ys is None:
-            hd_ys = [None for _ in range(len(data_ys))]
         for idx in range(len(data_ys)):
             fits.write(
                 name=name_ys[idx],
@@ -1023,8 +1068,6 @@ class DataCollection(object):
             )
 
         # Save y_model
-        if y_model is None:
-            y_model = self.y_model
         y_model.save(
             fname=self.path,
             verbose=verbose)
@@ -1058,6 +1101,10 @@ class DataCollection(object):
 
         # Load settings
         self.settings = fits.get_header(0, unflat_dict=True)
+        if self.settings is None:
+            raise ValueError(
+                'DataCollection.load requires settings in the primary FITS '
+                'header')
 
         # Main path
         self.path = path
@@ -1098,6 +1145,10 @@ class DataCollection(object):
         self.y_keys = y_model.y_keys
         # 1) load ys.
         y = [fits.get_data(name) for name in self.y_keys]
+        if not y:
+            raise ValueError('DataCollection contains no y outputs')
+        if any(y_one.ndim != 2 for y_one in y):
+            raise ValueError('All DataCollection y arrays must be 2D')
         # 2) Infer dimensions
         n_rows = [y_one.shape[0] for y_one in y]
         n_y = [y_one.shape[1] for y_one in y]
@@ -1106,6 +1157,9 @@ class DataCollection(object):
         if not all(row == n_rows[0] for row in n_rows):
             raise IOError('Not all the files have the same number of rows')
         self.counter_samples = n_rows[0]
+        if self.counter_samples > self.n_samples:
+            raise ValueError(
+                'Stored y arrays have more rows than the x array')
 
         # 3) Initialize list of zeros arrays with full or remaining samples.
         y_model.y = [np.zeros((self.n_samples, n_y_one)) for n_y_one in n_y]
@@ -1181,8 +1235,7 @@ class DataCollection(object):
         save_it = False
         if output is not None:
             save_it = True
-            self.path = output
-            fits = io.FitsFile(self.path)
+            fits = io.FitsFile(output)
             if fits.exists:
                 raise Exception(
                     'Output file exists! Exiting to avoid corruption of '
@@ -1191,6 +1244,12 @@ class DataCollection(object):
             elif verbose:
                 io.info('Generating dataset.')
                 io.print_level(1, 'Writing output in {}'.format(output))
+
+        # Reset state only after preliminary validation succeeds.
+        self.counter_samples = 0
+        self.path = output
+        self.x_sampler = None
+        self.y_model = None
 
         # Create settings dictionary
         self.settings = {
@@ -1396,7 +1455,7 @@ class DataCollection(object):
         Resume a dataset previously loaded (use load method
         before resuming). Many settings are already loaded.
         Arguments:
-        - path (str): path pointing to the folder containing the dataset;
+        - path (str): path pointing to the dataset FITS file;
         - timeout (float, default None): after timeout (in hours) stop
           sampling;
         - save_interval (int, default=None): save every n steps. If None, it
