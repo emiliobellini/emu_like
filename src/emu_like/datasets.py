@@ -563,12 +563,25 @@ class Dataset(object):
 
         # Try to infer the names
         self.x_names = Dataset._try_to_load_names_array(
-            path_x, n_names=self.n_y)
+            path_x, n_names=self.n_x)
         self.y_names = Dataset._try_to_load_names_array(
             path_y, n_names=self.n_y)
+        if self.x_names is None:
+            self.x_names = [
+                'x_{}'.format(index) for index in range(self.n_x)]
+        if self.y_names is None:
+            self.y_names = [
+                'y_{}'.format(index) for index in range(self.n_y)]
 
         # Slice data
         self.slice(columns_x, columns_y, verbose=verbose)
+
+        # External datasets have no declared priors, so store the range
+        # covered by their samples.
+        self.x_ranges = [[float(minimum), float(maximum)]
+                         for minimum, maximum in zip(
+                             np.min(self.x, axis=0),
+                             np.max(self.x, axis=0))]
 
         # Print info
         if verbose:
