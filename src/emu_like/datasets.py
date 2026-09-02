@@ -142,8 +142,8 @@ class Dataset(object):
         # y_model
         self.y_model = y_model
 
-        # Path
-        self.path = path
+        # Source paths
+        self.path = self._normalize_paths(path)
 
         # Container for all the settings
         self.settings = settings
@@ -161,6 +161,15 @@ class Dataset(object):
                 n_samples=n_samples, n_x=n_x, n_y=n_y)
 
         return
+
+    @staticmethod
+    def _normalize_paths(path):
+        """Return dataset source paths using a single representation."""
+        if path is None:
+            return []
+        if isinstance(path, (str, os.PathLike)):
+            return [os.fspath(path)]
+        return [os.fspath(source_path) for source_path in path]
 
     def _set_and_validate_dimensions(
             self,
@@ -261,15 +270,19 @@ class Dataset(object):
 
     def slice(self, columns_x, columns_y, verbose=False):
         """
-        Given a Dataset select the columns wanted, both for
-        "x" and "y". It adjusts also the other attributes.
+        Select columns from a model-free Dataset and update its metadata.
+
         Arguments:
-        - columns_x: reserved for compatibility; native dataset slicing is
-          not supported and this must be None;
-        - columns_y: reserved for compatibility; native dataset slicing is
-          not supported and this must be None;
+        - columns_x: list of x-column indices or a slice object;
+        - columns_y: list of y-column indices or a slice object;
         - verbose (bool, default: False): verbosity.
         """
+
+        if self.x_sampler is not None or self.y_model is not None:
+            raise ValueError(
+                'Dataset.slice only supports model-free datasets; slicing '
+                'a native dataset would invalidate x_sampler or y_model '
+                'metadata')
 
         if verbose:
             io.print_level(
@@ -278,6 +291,8 @@ class Dataset(object):
                 1, 'Slicing y data with columns: {}.'.format(columns_y))
 
         def slice_list(lst, slicing):
+            if lst is None:
+                return None
             if isinstance(slicing, list):
                 return [lst[i] for i in slicing]
             elif isinstance(slicing, slice):
@@ -300,9 +315,14 @@ class Dataset(object):
         self.x_names = slice_list(self.x_names, columns_x)
         self.y_names = slice_list(self.y_names, columns_y)
 
-        # Adjust shapes
-        self.n_samples, self.n_x = self.x.shape
-        _, self.n_y = self.y.shape
+        # Metadata tied to individual columns
+        self.x_ranges = slice_list(self.x_ranges, columns_x)
+        if self.y_header is not None:
+            self.y_header = self.y_header.copy()
+            if 'y_names' in self.y_header:
+                self.y_header['y_names'] = self.y_names
+
+        self._set_and_validate_dimensions()
 
         return self
 
@@ -321,16 +341,35 @@ class Dataset(object):
         # Finite indices
         only_finites = np.all(np.isfinite(self.y), axis=1)
 
-        # Sore non finite elements
+        # Store non-finite elements
         if store_non_finites:
-            only_non_finites = np.array([not elem for elem in only_finites])
+            only_non_finites = np.logical_not(only_finites)
             self.non_finites_x = self.x[only_non_finites]
 
         self.x = self.x[only_finites]
         self.y = self.y[only_finites]
 
-        # Adjust n_samples
-        self.n_samples = self.x.shape[0]
+        # Adjust and validate dimensions.
+        self._set_and_validate_dimensions()
+
+        # Keep attached data containers synchronized.
+        if self.x_sampler is not None:
+            self.x_sampler.x = self.x
+            self.x_sampler.n_samples = self.n_samples
+        if self.y_model is not None:
+            self.y_model.y = [self.y]
+            self.y_model.n_samples = self.n_samples
+
+        # Existing splits and fitted transformations refer to the unfiltered
+        # rows and must be recomputed.
+        self.x_train = None
+        self.y_train = None
+        self.x_test = None
+        self.y_test = None
+        self.x_scaler = None
+        self.y_scaler = None
+        self.x_pca = None
+        self.y_pca = None
 
         return self
 
@@ -376,9 +415,14 @@ class Dataset(object):
 
         # Load settings
         self.settings = fits.get_header(0, unflat_dict=True)
+        if self.settings is None:
+            raise ValueError(
+                'Dataset.load requires a native dataset with settings in '
+                'the primary FITS header; use Dataset.load_external for '
+                'files without settings')
 
         # Main path
-        self.path = path
+        self.path = self._normalize_paths(path)
 
         # Init x sampler
         x_sampler = XSampler.choose_one(
@@ -397,14 +441,10 @@ class Dataset(object):
         self.x_names = x_sampler.get_x_names()
         self.x_key = x_sampler.x_key
 
-        if self.settings is None:
-            self.x_ranges = [[m, M] for m, M in zip(
-                self.x.min(axis=0), self.x.max(axis=0))]
-        else:
-            self.x_ranges = [[
-                self.settings['params'][name]['prior']['min'],
-                self.settings['params'][name]['prior']['max']]
-                for name in self.x_names]
+        self.x_ranges = [[
+            self.settings['params'][name]['prior']['min'],
+            self.settings['params'][name]['prior']['max']]
+            for name in self.x_names]
 
         # Select exactly one configured output before initializing y_model.
         configured_outputs = self.settings['y_model']['outputs']
@@ -433,7 +473,7 @@ class Dataset(object):
 
         # Load y_model
         y_model.load(
-            self.path,
+            path,
             verbose=False,
         )
 
@@ -534,7 +574,7 @@ class Dataset(object):
         if os.path.isfile(path) and path_y is None:
             path_x = path
             path_y = path
-            self.path = path
+            self.path = self._normalize_paths(path)
             # Change default columns
             if columns_x is None:
                 columns_x = slice(None, -1)
@@ -544,7 +584,7 @@ class Dataset(object):
         elif os.path.isfile(path) and os.path.isfile(path_y):
             path_x = path
             path_y = path_y
-            self.path = [path, path_y]
+            self.path = self._normalize_paths([path, path_y])
             # Change default columns
             if columns_x is None:
                 columns_x = slice(None)
@@ -615,7 +655,7 @@ class Dataset(object):
         data = Dataset()
 
         # Name
-        data.name = datasets[0]
+        data.name = datasets[0].name
 
         # n_x
         if all(s.n_x == datasets[0].n_x for s in datasets):
