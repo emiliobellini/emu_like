@@ -836,6 +836,13 @@ class FFNNEmu(Emulator):
             io.info('Saving model at {}'.format(fname))
         self.model.save(fname, overwrite=True)
 
+        # The state file must describe only the model saved above.  Reusing an
+        # existing FITS file would append duplicate (and potentially stale)
+        # extensions on every save.
+        data_path = os.path.join(path, self.data_fname)
+        if os.path.isfile(data_path):
+            os.remove(data_path)
+
         fits = io.FitsFile(
             fname=self.data_fname,
             root=path,

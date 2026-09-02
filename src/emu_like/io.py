@@ -495,7 +495,8 @@ class FitsFile(object):
                 hdul.append(fits.ImageHDU(data, name=name, header=header))
         if verbose:
             print_level(1, 'Appended {} to {}'.format(
-                name.upper(), os.path.relpath(self.path)))
+                'PRIMARY' if name is None else name.upper(),
+                os.path.relpath(self.path)))
         return
 
     def update(self, name, data=None, header=None):
