@@ -106,7 +106,9 @@ class Dataset(object):
             path=None,
             y_header=None,
             x_sampler=None,
-            non_finites_x=None
+            non_finites_x=None,
+            x_key=None,
+            settings=None
             ):
         """
         Placeholders.
@@ -130,7 +132,7 @@ class Dataset(object):
         # Labels
         self.x_names = x_names  # List of names of x data
         self.y_names = y_names  # List of names of y data
-        self.x_key = None  # Name of the x image in fits file
+        self.x_key = x_key  # Name of the x image in fits file
         self.y_header = y_header  # Header for y file
 
         # Optional helpers and diagnostics
@@ -144,7 +146,7 @@ class Dataset(object):
         self.path = path
 
         # Container for all the settings
-        self.settings = None
+        self.settings = settings
 
         # Placeholders
         self.x_scaler = x_scaler
@@ -154,7 +156,47 @@ class Dataset(object):
 
         self.x_ranges = x_ranges
 
+        if self.x is not None and self.y is not None:
+            self._set_and_validate_dimensions(
+                n_samples=n_samples, n_x=n_x, n_y=n_y)
+
         return
+
+    def _set_and_validate_dimensions(
+            self,
+            n_samples=None,
+            n_x=None,
+            n_y=None):
+        """Validate x/y shapes and synchronize cached dimensions."""
+        if self.x.ndim != 2:
+            raise ValueError(
+                'Dataset x must be two-dimensional, got shape {}'
+                ''.format(self.x.shape))
+        if self.y.ndim != 2:
+            raise ValueError(
+                'Dataset y must be two-dimensional, got shape {}'
+                ''.format(self.y.shape))
+        if self.x.shape[0] != self.y.shape[0]:
+            raise ValueError(
+                'Dataset x and y must have the same number of rows, got {} '
+                'and {}'.format(self.x.shape[0], self.y.shape[0]))
+
+        inferred = {
+            'n_samples': self.x.shape[0],
+            'n_x': self.x.shape[1],
+            'n_y': self.y.shape[1],
+        }
+        provided = {
+            'n_samples': n_samples,
+            'n_x': n_x,
+            'n_y': n_y,
+        }
+        for attribute, value in provided.items():
+            if value is not None and value != inferred[attribute]:
+                raise ValueError(
+                    '{}={} is inconsistent with the array dimension {}'
+                    ''.format(attribute, value, inferred[attribute]))
+            setattr(self, attribute, inferred[attribute])
 
     @staticmethod
     def _load_array(path):
@@ -222,12 +264,10 @@ class Dataset(object):
         Given a Dataset select the columns wanted, both for
         "x" and "y". It adjusts also the other attributes.
         Arguments:
-        - columns_x (list of indices or slice object). Default: if "x"
-          and "y" data come from different files all columns. If "x" and
-          "y" are in the same file, all columns except the last one;
-        - columns_y (list of indices or slice object for each y file).
-          Default: if "x" and "y" data come from different files all
-          columns. If "x" and "y" are in the same file, last column;
+        - columns_x: reserved for compatibility; native dataset slicing is
+          not supported and this must be None;
+        - columns_y: reserved for compatibility; native dataset slicing is
+          not supported and this must be None;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -325,6 +365,12 @@ class Dataset(object):
         if verbose:
             io.info('Loading dataset.')
 
+        if columns_x is not None or columns_y is not None:
+            raise ValueError(
+                'columns_x and columns_y are not supported by Dataset.load; '
+                'native dataset metadata must remain aligned with its '
+                'sampler and y_model')
+
         # Init fits file
         fits = io.FitsFile(path)
 
@@ -333,11 +379,6 @@ class Dataset(object):
 
         # Main path
         self.path = path
-
-        if columns_x is None:
-            columns_x = slice(None)
-        if columns_y is None:
-            columns_y = slice(None)
 
         # Init x sampler
         x_sampler = XSampler.choose_one(
@@ -410,8 +451,8 @@ class Dataset(object):
         self.name = name
 
         # Load y data
-        y_model.y = fits.get_data(self.name)
-        self.y = y_model.y
+        self.y = fits.get_data(self.name)
+        y_model.y = [self.y]
 
         # Get remaining y attributes
         model_n_y = y_model.get_n_y()
@@ -419,11 +460,10 @@ class Dataset(object):
             raise ValueError(
                 'Dataset requires exactly one output, but y_model '
                 'contains {}'.format(len(model_n_y)))
-        self.n_y = self.y.shape[1]
-        if model_n_y[0] != self.n_y:
-            raise ValueError(
-                'The y array has {} columns, but y_model expects {}'
-                ''.format(self.n_y, model_n_y[0]))
+        self._set_and_validate_dimensions(
+            n_samples=self.n_samples,
+            n_x=self.n_x,
+            n_y=model_n_y[0])
         model_y_names = y_model.y_names
         if not model_y_names:
             model_y_names = y_model.get_y_names()
@@ -519,8 +559,7 @@ class Dataset(object):
         self.y = self._load_array(path_y)
 
         # Get shapes
-        self.n_samples, self.n_x = self.x.shape
-        _, self.n_y = self.y.shape
+        self._set_and_validate_dimensions()
 
         # Try to infer the names
         self.x_names = Dataset._try_to_load_names_array(
@@ -826,6 +865,18 @@ class DataCollection(object):
                 'is specified and there are multiple datasets!')
         selected_name = self.y_keys[idx]
 
+        # Preserve declared parameter ranges when available. Some external
+        # samplers do not define bounded priors, in which case use the range
+        # covered by the stored samples.
+        try:
+            x_ranges = [[
+                self.settings['params'][parameter]['prior']['min'],
+                self.settings['params'][parameter]['prior']['max']]
+                for parameter in self.x_names]
+        except (KeyError, TypeError):
+            x_ranges = [[minimum, maximum] for minimum, maximum in zip(
+                np.min(self.x, axis=0), np.max(self.x, axis=0))]
+
         dataset = Dataset(
             name=selected_name,
             x=self.x,
@@ -836,8 +887,12 @@ class DataCollection(object):
             x_names=self.x_names,
             y_names=self.y_names[idx],
             y_model=self.y_model[idx],
+            x_ranges=x_ranges,
             path=self.path,
-            y_header=self.y_headers[idx].copy()
+            y_header=self.y_headers[idx].copy(),
+            x_sampler=self.x_sampler,
+            x_key=self.x_key,
+            settings=self.settings
         )
 
         return dataset
