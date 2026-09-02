@@ -639,9 +639,257 @@ class ClassSpectra(YModel):
         return oneclassspectrum
 
     @staticmethod
+    def _attributes_equal(left, right):
+        """Compare nested model metadata, including NumPy arrays."""
+        if isinstance(left, dict) and isinstance(right, dict):
+            return (
+                left.keys() == right.keys()
+                and all(ClassSpectra._attributes_equal(left[key], right[key])
+                        for key in left))
+        if isinstance(left, (list, tuple)):
+            return (
+                isinstance(right, (list, tuple))
+                and len(left) == len(right)
+                and all(ClassSpectra._attributes_equal(value_left, value_right)
+                        for value_left, value_right in zip(left, right)))
+        if isinstance(left, np.ndarray) or isinstance(right, np.ndarray):
+            return np.array_equal(left, right)
+        return left == right
+
+    @staticmethod
+    def _join_dicts(
+            dictionaries,
+            reducers=None,
+            optional_paths=(),
+            label='metadata',
+            path=()):
+        """Recursively validate dictionaries and reduce selected fields."""
+        reducers = reducers or {}
+        if not dictionaries or not all(
+                isinstance(dictionary, dict) for dictionary in dictionaries):
+            raise ValueError('All {} must be dictionaries'.format(label))
+
+        keys = list(dictionaries[0])
+        for dictionary in dictionaries[1:]:
+            keys.extend(key for key in dictionary if key not in keys)
+
+        joined = {}
+        missing = object()
+        for key in keys:
+            field_path = path + (key,)
+            values = [dictionary.get(key, missing)
+                      for dictionary in dictionaries]
+            is_optional = field_path in optional_paths
+            if any(value is missing for value in values):
+                if not is_optional:
+                    raise ValueError(
+                        '{} fields differ at {}'.format(
+                            label, '.'.join(field_path)))
+                values = [value for value in values if value is not missing]
+
+            reducer = reducers.get(field_path)
+            if reducer is not None:
+                joined[key] = reducer(values)
+            elif all(isinstance(value, dict) for value in values):
+                joined[key] = ClassSpectra._join_dicts(
+                    values,
+                    reducers=reducers,
+                    optional_paths=optional_paths,
+                    label=label,
+                    path=field_path)
+            elif any(isinstance(value, dict) for value in values):
+                raise ValueError(
+                    '{} field {} has inconsistent types'.format(
+                        label, '.'.join(field_path)))
+            elif not all(ClassSpectra._attributes_equal(value, values[0])
+                         for value in values[1:]):
+                raise ValueError(
+                    '{} field {} differs'.format(
+                        label, '.'.join(field_path)))
+            else:
+                joined[key] = copy.deepcopy(values[0])
+        return joined
+
+    @staticmethod
+    def _join_references(y_models, ref_params):
+        """Select the widest reference grid and validate common values."""
+        first = y_models[0]
+        if not all(len(model.y_ref) == len(first.spectra.names)
+                   for model in y_models):
+            raise ValueError(
+                'ClassSpectra models have inconsistent y_ref lengths')
+
+        has_pk = any(spectrum.is_pk for spectrum in first.spectra)
+        z_arrays = [model.z_array for model in y_models]
+        if not has_pk or all(z_array is None for z_array in z_arrays):
+            for model in y_models[1:]:
+                if not all(np.allclose(
+                        reference, candidate,
+                        rtol=1.e-10, atol=1.e-12, equal_nan=True)
+                        for reference, candidate
+                        in zip(first.y_ref, model.y_ref)):
+                    raise ValueError(
+                        'ClassSpectra reference spectra differ')
+            return None, copy.deepcopy(first.y_ref)
+
+        if any(z_array is None for z_array in z_arrays):
+            raise ValueError(
+                'All ClassSpectra Pk models must define z_array')
+        if any(np.asarray(z_array).ndim != 1 for z_array in z_arrays):
+            raise ValueError('ClassSpectra z_array must be one-dimensional')
+
+        target_z_max = ref_params.get('z_max_pk')
+        candidates = [
+            index for index, model in enumerate(y_models)
+            if model.ref_params.get('z_max_pk') == target_z_max]
+        if not candidates:
+            candidates = list(range(len(y_models)))
+        selected_index = max(
+            candidates, key=lambda index: len(z_arrays[index]))
+        selected = y_models[selected_index]
+        selected_z = np.asarray(selected.z_array)
+
+        for model, z_array in zip(y_models, z_arrays):
+            z_array = np.asarray(z_array)
+            selected_indices = []
+            for redshift in z_array:
+                matches = np.flatnonzero(np.isclose(
+                    selected_z, redshift, rtol=1.e-12, atol=1.e-12))
+                if len(matches) != 1:
+                    raise ValueError(
+                        'ClassSpectra z_arrays are not nested consistently')
+                selected_indices.append(matches[0])
+
+            for output_index, spectrum in enumerate(first.spectra):
+                reference = model.y_ref[output_index]
+                selected_reference = selected.y_ref[output_index]
+                if spectrum.is_pk:
+                    if (reference.ndim < 2
+                            or reference.shape[1] != len(z_array)
+                            or selected_reference.ndim < 2
+                            or selected_reference.shape[1] != len(selected_z)):
+                        raise ValueError(
+                            'ClassSpectra y_ref redshift dimension is '
+                            'inconsistent with z_array')
+                    selected_reference = np.take(
+                        selected_reference, selected_indices, axis=1)
+                if not np.allclose(
+                        reference, selected_reference,
+                        rtol=1.e-10, atol=1.e-12, equal_nan=True):
+                    raise ValueError(
+                        'ClassSpectra reference spectra differ at common '
+                        'redshifts')
+
+        return selected_z.copy(), copy.deepcopy(selected.y_ref)
+
+    @staticmethod
     def join(y_models):
-        """Placeholder for combining multiple ClassSpectra instances."""
-        return None
+        """Combine multiple compatible ClassSpectra instances."""
+
+        if not y_models:
+            raise ValueError('At least one ClassSpectra model is required')
+
+        first = y_models[0]
+        if not all(isinstance(model, ClassSpectra) for model in y_models):
+            raise ValueError('All models must be ClassSpectra instances')
+
+        # Attributes defining the model and output representation must match.
+        common_attributes = (
+            'name', 'x_names', 'outputs', 'y_keys', 'n_y', 'y_names',
+            'y_headers', 'k_ranges', 'ell_ranges')
+        for attribute in common_attributes:
+            reference = getattr(first, attribute)
+            if not all(ClassSpectra._attributes_equal(
+                    getattr(model, attribute), reference)
+                    for model in y_models[1:]):
+                raise ValueError(
+                    'ClassSpectra models can not be joined because {} differs'
+                    ''.format(attribute))
+
+        reference_spectra = [
+            (type(spectrum), spectrum.name, spectrum.ratio)
+            for spectrum in first.spectra]
+        for model in y_models[1:]:
+            model_spectra = [
+                (type(spectrum), spectrum.name, spectrum.ratio)
+                for spectrum in model.spectra]
+            if model_spectra != reference_spectra:
+                raise ValueError(
+                    'ClassSpectra models can not be joined because spectra '
+                    'differ')
+
+        # Validate the arrays before aggregating them.
+        for model in y_models:
+            if len(model.y) != len(first.n_y):
+                raise ValueError(
+                    'ClassSpectra model has an inconsistent number of y '
+                    'arrays')
+            for index, (array, n_y) in enumerate(zip(model.y, first.n_y)):
+                expected_shape = (model.n_samples, n_y)
+                if array.shape != expected_shape:
+                    raise ValueError(
+                        'ClassSpectra y[{}] has shape {}, expected {}'
+                        ''.format(index, array.shape, expected_shape))
+
+        joined = ClassSpectra()
+
+        # Attributes copied after equality validation.
+        joined.name = first.name
+        joined.x_names = copy.deepcopy(first.x_names)
+        joined.outputs = copy.deepcopy(first.outputs)
+        joined.y_keys = copy.deepcopy(first.y_keys)
+        joined.n_y = copy.deepcopy(first.n_y)
+        joined.y_names = copy.deepcopy(first.y_names)
+        joined.y_headers = copy.deepcopy(first.y_headers)
+        joined.k_ranges = copy.deepcopy(first.k_ranges)
+        joined.ell_ranges = copy.deepcopy(first.ell_ranges)
+        joined.spectra = Spectra(joined.outputs)
+
+        # Attributes summed or stacked across models.
+        joined.n_samples = sum(model.n_samples for model in y_models)
+        joined.y = [
+            np.vstack([model.y[index] for model in y_models])
+            for index in range(len(joined.n_y))]
+
+        # Common runtime dependency; a fresh cosmo object will be created
+        # after the non-trivial metadata has been combined.
+        joined.classy = first.classy
+        joined.cosmo = None
+
+        # Merge parameter definitions. Only prior bounds may differ.
+        param_reducers = {}
+        for parameter in first.params:
+            param_reducers[(parameter, 'prior', 'min')] = min
+            param_reducers[(parameter, 'prior', 'max')] = max
+        joined.params = ClassSpectra._join_dicts(
+            [model.params for model in y_models],
+            reducers=param_reducers,
+            label='ClassSpectra params')
+
+        # Merge model arguments. z_max_pk controls only the calculation range;
+        # all physical and precision arguments must match.
+        joined.args = ClassSpectra._join_dicts(
+            [model.args for model in y_models],
+            reducers={('z_max_pk',): max},
+            optional_paths=(('z_max_pk',),),
+            label='ClassSpectra args')
+
+        joined.class_params = (
+            copy.deepcopy(joined.args)
+            | {parameter: None for parameter in joined.x_names})
+
+        # Merge reference CLASS parameters. z_max_pk is a calculation bound;
+        # every other cosmological and precision setting must match.
+        joined.ref_params = ClassSpectra._join_dicts(
+            [model.ref_params for model in y_models],
+            reducers={('z_max_pk',): max},
+            optional_paths=(('z_max_pk',),),
+            label='ClassSpectra ref_params')
+
+        joined.z_array, joined.y_ref = ClassSpectra._join_references(
+            y_models, joined.ref_params)
+
+        return joined
 
     def _get_z_max(self):
         z_max = 0.1
