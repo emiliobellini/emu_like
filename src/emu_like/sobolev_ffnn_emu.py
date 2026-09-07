@@ -469,6 +469,16 @@ class SobolevFFNNEmu(FFNNEmu):
             raise ValueError(
                 'data.fits does not contain Sobolev state metadata') from error
         self.reference_growth = fits.get_data(self.reference_growth_key)
+        if self.reference_growth.ndim == 3:
+            if self.reference_growth.shape[0] != 1:
+                raise ValueError(
+                    'Saved Sobolev growth reference has invalid shape {}'
+                    ''.format(self.reference_growth.shape))
+            self.reference_growth = self.reference_growth[0]
+        if self.reference_growth.ndim != 2:
+            raise ValueError(
+                'Saved Sobolev growth reference must have shape (k, z), '
+                'got {}'.format(self.reference_growth.shape))
         self.redshift_grid = fits.get_data(self.redshift_grid_key)
         self.x_names = state['x_names']
         self.y_names = state['y_names']
@@ -576,3 +586,56 @@ class SobolevFFNNEmu(FFNNEmu):
         if verbose:
             io.info('All Sobolev resume files exist in {}'.format(path))
         return
+
+    def eval_fk(self, x):
+        """Evaluate the physical growth rate from the pk emulator derivative.
+
+        Args:
+            x: One input point as an array/list or dictionary keyed by
+                ``x_names``. A two-dimensional array is also accepted for
+                batched evaluation.
+
+        Returns:
+            The physical ``f(k,z)`` array. A single input returns shape
+            ``(n_k,)``; batched inputs return ``(n_batch, n_k)``.
+        """
+        if self.model is None or self.x_scaler is None:
+            raise RuntimeError('Load or train SobolevFFNNEmu before eval_fk')
+        if self.x_pca is not None or self.y_pca is not None:
+            raise RuntimeError('eval_fk does not support PCA-transformed data')
+
+        if isinstance(x, dict):
+            x_array = np.array([[x[name] for name in self.x_names]],
+                               dtype=np.float32)
+            single_point = True
+        else:
+            x_array = np.asarray(x, dtype=np.float32)
+            if x_array.ndim == 0:
+                x_array = x_array.reshape(1, 1)
+                single_point = True
+            elif x_array.ndim == 1:
+                x_array = x_array[np.newaxis, :]
+                single_point = True
+            elif x_array.ndim == 2:
+                single_point = False
+            else:
+                raise ValueError('eval_fk expects a one- or two-dimensional x')
+        if x_array.shape[1] != len(self.x_names):
+            raise ValueError(
+                'eval_fk received {} inputs, expected {}'.format(
+                    x_array.shape[1], len(self.x_names)))
+
+        x_scaled = tf.convert_to_tensor(
+            self.x_scaler.transform(x_array), dtype=tf.float32)
+        with tf.GradientTape() as z_tape:
+            z_tape.watch(x_scaled)
+            pk_scaled = self.model(x_scaled, training=False)
+        jacobian = z_tape.batch_jacobian(pk_scaled, x_scaled)
+        d_pk_d_z_scaled = jacobian[:, :, self.z_index]
+        z = x_scaled[:, self.z_index] * self.model.z_scale + self.model.z_mean
+        d_log_ratio_d_z = (
+            self.model.pk_scale / self.model.z_scale * d_pk_d_z_scaled)
+        fk = self.model._interpolate_reference_growth(z) - 0.5 * (
+            1.0 + z[:, tf.newaxis]) * d_log_ratio_d_z
+        fk = fk.numpy()
+        return fk[0] if single_point else fk
