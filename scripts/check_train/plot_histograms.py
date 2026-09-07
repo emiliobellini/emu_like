@@ -11,7 +11,8 @@ import yaml
 from tabulate import tabulate
 import classy
 import emu_like.io as io
-from emu_like.ffnn_emu import FFNNEmu
+from emu_like.emu import Emulator
+from emu_like.sobolev_ffnn_emu import SobolevFFNNEmu
 matplotlib.use('Agg')
 
 
@@ -19,8 +20,11 @@ class EmuData(object):
 
     def __init__(self, path):
         self.name = os.path.basename(path)
-        self.emu = FFNNEmu()
+        with open(os.path.join(path, 'params.yaml')) as f:
+            params = yaml.safe_load(f)
+        self.emu = Emulator.choose_one(params['emulator']['name'])
         self.emu.load(path, still_training=False)
+        self.is_sobolev = isinstance(self.emu, SobolevFFNNEmu)
         self.abs_diff = None
         self.rel_diff = None
         self.mean_abs_diff = None
@@ -59,10 +63,39 @@ class EmuData(object):
             want_scaling=False,
             want_pca=False,
             select_pca_modes=None,
-            timeit=False):
+            timeit=False,
+            use_growth=False):
 
         if timeit:
             start_all = time.time()
+
+        if use_growth:
+            if not self.is_sobolev:
+                raise ValueError(
+                    'Growth-rate evaluation requires a Sobolev emulator.')
+            if want_scaling or want_pca or select_pca_modes is not None:
+                raise ValueError(
+                    'Sobolev growth-rate output is available only in physical '
+                    'units, without PCA.')
+            if x.ndim == 1:
+                x = x[np.newaxis, :]
+            n_samples = x.shape[0]
+            if timeit:
+                start_emu = time.time()
+            # eval_fk uses a batch Jacobian.  Splitting here avoids allocating
+            # a large Jacobian for an entire FITS range at once.
+            result = np.concatenate([
+                self.emu.eval_fk(x[start:start + self.emu.batch_size])
+                for start in range(0, n_samples, self.emu.batch_size)
+            ], axis=0)
+            if timeit:
+                stop_emu = time.time()
+                stop_all = time.time()
+                self.time_emu = (stop_emu - start_emu) / n_samples
+                self.time_all = (stop_all - start_all) / n_samples
+            if len(result) == 1:
+                result = result[0]
+            return result
 
         has_pca = self.emu.y_pca is not None
         has_scaling = self.emu.y_scaler is not None
@@ -123,7 +156,18 @@ class EmuData(object):
             y,
             want_scaling=False,
             want_pca=False,
-            select_pca_modes=None):
+            select_pca_modes=None,
+            use_growth=False):
+        if use_growth:
+            if not self.is_sobolev:
+                raise ValueError(
+                    'Growth-rate data requires a Sobolev emulator.')
+            if want_scaling or want_pca or select_pca_modes is not None:
+                raise ValueError(
+                    'Sobolev growth-rate data is available only in physical '
+                    'units, without PCA.')
+            return y[0] if len(y) == 1 else y
+
         has_pca = self.emu.y_pca is not None
         has_scaling = self.emu.y_scaler is not None
         want_pca_selection = select_pca_modes is not None
@@ -169,7 +213,8 @@ class EmuData(object):
             want_pca=False,
             select_pca_modes_emu=None,
             select_pca_modes_data=None,
-            time_emu=False):
+            time_emu=False,
+            use_growth=False):
 
         if want_pca and select_pca_modes_emu != select_pca_modes_data:
             raise ValueError(
@@ -177,10 +222,11 @@ class EmuData(object):
         self.x_data = x_emu
         self.y_data = self.get_y_data(
             y_data, want_scaling=want_scaling, want_pca=want_pca,
-            select_pca_modes=select_pca_modes_data)
+            select_pca_modes=select_pca_modes_data, use_growth=use_growth)
         self.y_emu = self.get_y_emu(
             x_emu, want_scaling=want_scaling, want_pca=want_pca,
-            select_pca_modes=select_pca_modes_emu, timeit=time_emu)
+            select_pca_modes=select_pca_modes_emu, timeit=time_emu,
+            use_growth=use_growth)
         self.abs_diff = self.y_emu - self.y_data
         return self.abs_diff
 
@@ -192,7 +238,8 @@ class EmuData(object):
             want_pca=False,
             select_pca_modes_emu=None,
             select_pca_modes_data=None,
-            time_emu=False):
+            time_emu=False,
+            use_growth=False):
 
         if want_pca and select_pca_modes_emu != select_pca_modes_data:
             raise ValueError(
@@ -200,10 +247,11 @@ class EmuData(object):
         self.x_data = x_emu
         self.y_data = self.get_y_data(
             y_data, want_scaling=want_scaling, want_pca=want_pca,
-            select_pca_modes=select_pca_modes_data)
+            select_pca_modes=select_pca_modes_data, use_growth=use_growth)
         self.y_emu = self.get_y_emu(
             x_emu, want_scaling=want_scaling, want_pca=want_pca,
-            select_pca_modes=select_pca_modes_emu, timeit=time_emu)
+            select_pca_modes=select_pca_modes_emu, timeit=time_emu,
+            use_growth=use_growth)
         self.rel_diff = self.y_emu / self.y_data - 1.
         return self.rel_diff
 
@@ -215,7 +263,8 @@ class EmuData(object):
             want_pca=False,
             select_pca_modes_emu=None,
             select_pca_modes_data=None,
-            time_emu=False):
+            time_emu=False,
+            use_growth=False):
 
         if x_emu is not None and y_data is not None:
             self.abs_diff = self.get_abs_diff(
@@ -225,7 +274,7 @@ class EmuData(object):
                 want_pca=want_pca,
                 select_pca_modes_emu=select_pca_modes_emu,
                 select_pca_modes_data=select_pca_modes_data,
-                time_emu=time_emu)
+                time_emu=time_emu, use_growth=use_growth)
         self.mean_abs_diff = np.sqrt(np.mean(self.abs_diff**2., axis=1))
         return self.mean_abs_diff
 
@@ -237,7 +286,8 @@ class EmuData(object):
             want_pca=False,
             select_pca_modes_emu=None,
             select_pca_modes_data=None,
-            time_emu=False):
+            time_emu=False,
+            use_growth=False):
 
         if x_emu is not None and y_data is not None:
             self.rel_diff = self.get_rel_diff(
@@ -247,7 +297,7 @@ class EmuData(object):
                 want_pca=want_pca,
                 select_pca_modes_emu=select_pca_modes_emu,
                 select_pca_modes_data=select_pca_modes_data,
-                time_emu=time_emu)
+                time_emu=time_emu, use_growth=use_growth)
         self.mean_rel_diff = np.sqrt(np.mean(self.rel_diff**2., axis=1))
         return self.mean_rel_diff
 
@@ -329,7 +379,16 @@ def show_summary(
     with open(os.path.join(root, 'params.yaml')) as f:
         params = yaml.safe_load(f)
 
-    spectrum = params['datasets']['name']
+    training_spectrum = params['datasets']['name']
+    is_sobolev = params['emulator']['name'] == 'sobolev_ffnn_emu'
+    if is_sobolev:
+        if not training_spectrum.startswith('pk_'):
+            raise ValueError(
+                'Sobolev histogram diagnostics require a pk_* training '
+                'spectrum in order to infer the matching fk_* target.')
+        spectrum = 'fk_{}'.format(training_spectrum[3:])
+    else:
+        spectrum = training_spectrum
 
     spectra_diff = {
         'pk_m': 'rel',
@@ -405,7 +464,7 @@ def show_summary(
             x_emu=x_data, y_data=y_data,
             want_scaling=False, want_pca=False,
             select_pca_modes_emu=None, select_pca_modes_data=None,
-            time_emu=True)
+            time_emu=True, use_growth=is_sobolev)
 
         tab_line = [dr]
         tab_line += ['{:.3f}%'.format(
@@ -447,7 +506,7 @@ def show_summary(
         outputfile.write(summary_table)
         outputfile.write('\n\n')
 
-    return emudata, spectrum, diff
+    return emudata, spectrum, diff, is_sobolev
 
 
 def plot_worst_modes(
@@ -455,6 +514,7 @@ def plot_worst_modes(
         emudata,
         spectrum,
         diff,
+        use_growth=False,
         n_modes_kept=3,
         vlines=[0.01, 0.05, 0.1, 1.],
         save_dir=None):
@@ -493,7 +553,10 @@ def plot_worst_modes(
             raise ValueError('Difference type not recognized!')
         y_emu = emudata[dr].y_emu[idxs]
         y_data = emudata[dr].y_data[idxs]
-        y_class = emudata[dr].get_y_class(idxs)
+        # The Sobolev emulator is checked against the fk values stored in the
+        # data file.  get_y_class currently reconstructs the primary Pk
+        # spectrum, so it is not a valid independent fk curve.
+        y_class = None if use_growth else emudata[dr].get_y_class(idxs)
 
         for val in vlines:
             axs[0, ndr].axhline(emudata[dr].max_y_data * val, c='k', lw=0.1)
@@ -510,8 +573,9 @@ def plot_worst_modes(
             axs[1 + nmode, ndr].plot(y_data[nmode], label='Data')
             axs[1 + nmode, ndr].plot(
                 y_emu[nmode], linestyle='--', label='Emulated')
-            axs[1 + nmode, ndr].plot(
-                y_class[nmode], linestyle=':', label='Class')
+            if y_class is not None:
+                axs[1 + nmode, ndr].plot(
+                    y_class[nmode], linestyle=':', label='Class')
             axs[1 + nmode, ndr].set_ylabel(
                 'Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
 
@@ -558,7 +622,7 @@ if __name__ == '__main__':
 
     for root in roots:
 
-        emudata, spectrum, diff = show_summary(
+        emudata, spectrum, diff, use_growth = show_summary(
             root,
             save_dir=args.save_dir,
             compare_to_all=True)
@@ -566,6 +630,6 @@ if __name__ == '__main__':
         plot_worst_modes(
             root,
             emudata,
-            spectrum, diff,
+            spectrum, diff, use_growth=use_growth,
             n_modes_kept=3,
             save_dir=args.save_dir)
