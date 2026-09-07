@@ -36,6 +36,9 @@ class Emulator(object):
         if emu_type == 'ffnn_emu':
             from .ffnn_emu import FFNNEmu
             return FFNNEmu(verbose=verbose)
+        elif emu_type == 'sobolev_ffnn_emu':
+            from .sobolev_ffnn_emu import SobolevFFNNEmu
+            return SobolevFFNNEmu(verbose=verbose)
         else:
             raise ValueError('Emulator not recognized!')
 
