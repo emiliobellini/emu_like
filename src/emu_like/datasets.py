@@ -840,6 +840,242 @@ class Dataset(object):
         return
 
 
+class SobolevDataset(Dataset):
+    """Dataset pairing a power spectrum with its growth-rate constraint.
+
+    The primary target remains the ``pk_*`` array inherited as ``y``.  The
+    matching ``fk_*`` array is retained separately because it is a derivative
+    target, rather than an additional emulator output.  All names are inferred
+    from the primary power-spectrum name; for example, ``pk_m`` maps to
+    ``fk_m``, ``REF_PK_M``, and ``REF_FK_M``.
+    """
+
+    def __init__(self, *args, **kwargs):
+        # These attributes must exist before Dataset.load calls the overridden
+        # _clear_derived_state method.
+        self.y_growth = None
+        self.y_growth_train = None
+        self.y_growth_test = None
+        self.growth_scaler = None
+        self.growth_pca = None
+        self.growth_name = None
+        self.growth_y_names = None
+        self.reference_pk = None
+        self.reference_growth = None
+        self.redshift_grid = None
+        super().__init__(*args, **kwargs)
+
+    @staticmethod
+    def _associated_names(pk_name):
+        """Return FITS extension names associated with a ``pk_*`` target."""
+        if not isinstance(pk_name, str) or not pk_name.startswith('pk_'):
+            raise ValueError(
+                'SobolevDataset requires a primary name of the form "pk_*", '
+                'got {!r}'.format(pk_name))
+        suffix = pk_name[3:]
+        return {
+            'growth': 'fk_{}'.format(suffix),
+            'reference_pk': 'REF_PK_{}'.format(suffix.upper()),
+            'reference_growth': 'REF_FK_{}'.format(suffix.upper()),
+            'redshift_grid': 'Z_ARRAY',
+        }
+
+    def _clear_derived_state(self):
+        """Clear primary and growth-target splits and transformations."""
+        super()._clear_derived_state()
+        self.y_growth_train = None
+        self.y_growth_test = None
+        self.growth_scaler = None
+        self.growth_pca = None
+
+    def load(
+            self,
+            path,
+            name=None,
+            columns_x=None,
+            columns_y=None,
+            verbose=False):
+        """Load one native FITS sample and its inferred growth-rate arrays."""
+        if name is None:
+            raise ValueError('SobolevDataset.load requires a pk_* name')
+
+        names = self._associated_names(name)
+        super().load(
+            path=path,
+            name=name,
+            columns_x=columns_x,
+            columns_y=columns_y,
+            verbose=verbose)
+
+        fits = io.FitsFile(path)
+        # FITS extension lookup is case-insensitive, whereas get_keys()
+        # preserves the conventional uppercase spelling used on disk.
+        available = {key.upper() for key in fits.get_keys()}
+        required = [
+            names['growth'], names['reference_pk'],
+            names['reference_growth'], names['redshift_grid'],
+        ]
+        missing = [key for key in required if key.upper() not in available]
+        if missing:
+            raise ValueError(
+                'SobolevDataset requires FITS extensions {}, but {} are '
+                'missing from {}'.format(required, missing, path))
+
+        self.growth_name = names['growth']
+        self.y_growth = fits.get_data(self.growth_name)
+        self.reference_pk = fits.get_data(names['reference_pk'])
+        self.reference_growth = fits.get_data(names['reference_growth'])
+        self.redshift_grid = fits.get_data(names['redshift_grid'])
+
+        if self.y_growth.ndim != 2 or self.y_growth.shape != self.y.shape:
+            raise ValueError(
+                'Growth target {} has shape {}, expected {} to match {}'
+                ''.format(
+                    self.growth_name, self.y_growth.shape, self.y.shape,
+                    self.name))
+        if self.redshift_grid.ndim != 1:
+            raise ValueError(
+                'Redshift grid {} must be one-dimensional, got {}'
+                ''.format(names['redshift_grid'], self.redshift_grid.shape))
+        if self.reference_pk.shape != self.reference_growth.shape:
+            raise ValueError(
+                'Reference pk and growth arrays must have the same shape, '
+                'got {} and {}'.format(
+                    self.reference_pk.shape, self.reference_growth.shape))
+        if self.reference_pk.shape[-1] != self.redshift_grid.size:
+            raise ValueError(
+                'Reference redshift axis has length {}, but Z_ARRAY has '
+                'length {}'.format(
+                    self.reference_pk.shape[-1], self.redshift_grid.size))
+
+        self.growth_y_names = [
+            'f_k_{}'.format(index) for index in range(self.n_y)]
+        return self
+
+    def remove_non_finite(self, store_non_finites=False, verbose=False):
+        """Remove rows non-finite in either the primary or growth target."""
+        if self.y_growth is None:
+            raise RuntimeError('Load the SobolevDataset before filtering it')
+        if verbose:
+            io.print_level(
+                1, 'Removing non finite values from x, pk, and growth.')
+
+        only_finites = (
+            np.all(np.isfinite(self.x), axis=1)
+            & np.all(np.isfinite(self.y), axis=1)
+            & np.all(np.isfinite(self.y_growth), axis=1))
+        if store_non_finites:
+            self.non_finites_x = self.x[~only_finites]
+        else:
+            self.non_finites_x = None
+
+        self.x = self.x[only_finites]
+        self.y = self.y[only_finites]
+        self.y_growth = self.y_growth[only_finites]
+        self._set_and_validate_dimensions()
+
+        if self.x_sampler is not None:
+            self.x_sampler.x = self.x
+            self.x_sampler.n_samples = self.n_samples
+        if self.y_model is not None:
+            self.y_model.y = [self.y]
+            self.y_model.n_samples = self.n_samples
+        self._clear_derived_state()
+        return self
+
+    def train_test_split(self, frac_train, seed, verbose=False):
+        """Split both targets using exactly the same sample indices."""
+        if self.y_growth is None:
+            raise RuntimeError('Load the SobolevDataset before splitting it')
+        indices = np.arange(self.n_samples)
+        train_indices, test_indices = skl_ms.train_test_split(
+            indices, train_size=frac_train, random_state=seed)
+        self._clear_derived_state()
+        self.x_train, self.x_test = self.x[train_indices], self.x[test_indices]
+        self.y_train, self.y_test = self.y[train_indices], self.y[test_indices]
+        self.y_growth_train = self.y_growth[train_indices]
+        self.y_growth_test = self.y_growth[test_indices]
+        return self
+
+    def rescale(self, rescale_x, rescale_y, rescale_growth, verbose=False):
+        """Rescale the primary and growth targets with independent scalers."""
+        if self.y_growth_train is None:
+            raise RuntimeError('Split the SobolevDataset before rescaling it')
+        super().rescale(rescale_x, rescale_y, verbose=verbose)
+        self.growth_scaler = sc.Scaler.choose_one(rescale_growth)
+        self.growth_scaler.fit(self.y_growth_train)
+        self.y_growth_train = self.growth_scaler.transform(
+            self.y_growth_train)
+        self.y_growth_test = self.growth_scaler.transform(
+            self.y_growth_test)
+        return self
+
+    def apply_pca(self, num_x_pca=None, num_y_pca=None, verbose=False):
+        """Reject PCA reductions for the Sobolev training representation."""
+        if num_x_pca == 'None':
+            num_x_pca = None
+        if num_y_pca == 'None':
+            num_y_pca = None
+        self.x_pca = None
+        self.y_pca = None
+        self.growth_pca = None
+        if num_x_pca is not None or num_y_pca is not None:
+            raise ValueError(
+                'PCA is not supported for SobolevDataset. Set both '
+                'num_x_pca and num_y_pca to null so the derivative loss is '
+                'defined directly in the physical pk/fk representation.')
+        return self
+
+    @staticmethod
+    def join(datasets, verbose=False):
+        """Join paired datasets while retaining their growth targets.
+
+        The ordinary Dataset join merges the primary ``pk`` metadata.  For
+        the separately stored growth reference, retain the source with the
+        densest redshift grid; it covers the lower-redshift samples and can
+        be used for interpolation in the Sobolev training step.
+        """
+        if not datasets:
+            raise ValueError('At least one Dataset is required')
+        if not all(isinstance(dataset, SobolevDataset)
+                   for dataset in datasets):
+            raise ValueError(
+                'SobolevDataset.join requires SobolevDataset inputs')
+
+        first = datasets[0]
+        if not all(dataset.growth_name == first.growth_name
+                   for dataset in datasets[1:]):
+            raise ValueError('Sobolev datasets have different growth targets')
+
+        primary = Dataset.join(datasets, verbose=verbose)
+        reference_source = max(
+            datasets, key=lambda dataset: dataset.redshift_grid.size)
+        joined = SobolevDataset(
+            name=primary.name,
+            x=primary.x,
+            y=primary.y,
+            n_x=primary.n_x,
+            n_y=primary.n_y,
+            n_samples=primary.n_samples,
+            x_names=primary.x_names,
+            y_names=primary.y_names,
+            y_model=primary.y_model,
+            x_ranges=primary.x_ranges,
+            path=primary.path,
+            y_header=primary.y_header,
+            non_finites_x=primary.non_finites_x,
+            x_key=primary.x_key,
+        )
+        joined.growth_name = first.growth_name
+        joined.growth_y_names = copy.deepcopy(first.growth_y_names)
+        joined.y_growth = np.vstack([dataset.y_growth for dataset in datasets])
+        joined.reference_pk = copy.deepcopy(reference_source.reference_pk)
+        joined.reference_growth = copy.deepcopy(
+            reference_source.reference_growth)
+        joined.redshift_grid = copy.deepcopy(reference_source.redshift_grid)
+        return joined
+
+
 class DataCollection(object):
     """
     This class that is primarly meant to deal with the generation

@@ -8,7 +8,7 @@
 
 import emu_like.io as io
 from emu_like.emu import Emulator
-from emu_like.datasets import Dataset
+from emu_like.datasets import Dataset, SobolevDataset
 
 
 def train_emu(args):
@@ -110,7 +110,9 @@ def train_emu(args):
     # Load datasets
     # 1) fits files created by this code
     if has_paths and paths_is_fits:
-        data = [Dataset().load(
+        dataset_type = (
+            SobolevDataset if emu.name == 'sobolev_ffnn_emu' else Dataset)
+        data = [dataset_type().load(
             path=path,
             name=pars_dat['name'],
             columns_x=pars_dat['columns_x'],
@@ -119,6 +121,10 @@ def train_emu(args):
             for path in pars_dat['paths']]
     # 2) unique text files for x and y
     elif has_paths:
+        if emu.name == 'sobolev_ffnn_emu':
+            raise ValueError(
+                'sobolev_ffnn_emu requires native FITS datasets containing '
+                'the matched fk_* and reference arrays')
         data = [Dataset().load_external(
             path=path,
             columns_x=pars_dat['columns_x'],
@@ -127,6 +133,10 @@ def train_emu(args):
             for path in pars_dat['paths']]
     # 3) separate text files for x and y
     else:
+        if emu.name == 'sobolev_ffnn_emu':
+            raise ValueError(
+                'sobolev_ffnn_emu requires native FITS datasets containing '
+                'the matched fk_* and reference arrays')
         data = [Dataset().load_external(
             path=path_x,
             path_y=path_y,
@@ -152,7 +162,7 @@ def train_emu(args):
             io.print_level(1, 'Removing non finite y from dataset.')
 
     # Join all datasets
-    data = Dataset.join(data, verbose=args.verbose)
+    data = type(data[0]).join(data, verbose=args.verbose)
 
     # Split training and testing samples
     data.train_test_split(
@@ -161,10 +171,17 @@ def train_emu(args):
         verbose=args.verbose)
 
     # If requested, rescale training and testing samples
-    data.rescale(
-        pars_dat['rescale_x'],
-        pars_dat['rescale_y'],
-        verbose=args.verbose)
+    if emu.name == 'sobolev_ffnn_emu':
+        data.rescale(
+            pars_dat['rescale_x'],
+            pars_dat['rescale_y'],
+            pars_dat['rescale_growth'],
+            verbose=args.verbose)
+    else:
+        data.rescale(
+            pars_dat['rescale_x'],
+            pars_dat['rescale_y'],
+            verbose=args.verbose)
 
     # If requested apply PCA on x and/or y
     data.apply_pca(
