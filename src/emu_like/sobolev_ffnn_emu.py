@@ -1,6 +1,7 @@
 """Sobolev FFNN emulator."""
 
 import numpy as np
+import os
 import tensorflow as tf
 from tensorflow import keras
 
@@ -131,6 +132,9 @@ class SobolevFFNNEmu(FFNNEmu):
         self.reference_growth = None
         self.redshift_grid = None
         self.sobolev_params = None
+        self.growth_scaler_fname = 'growth_scaler.save'
+        self.reference_growth_key = 'SOB_REF_GROWTH'
+        self.redshift_grid_key = 'SOB_Z_GRID'
 
     def build(self, params, data=None, verbose=False):
         """Build the smooth primary-pk network for Sobolev training.
@@ -216,6 +220,12 @@ class SobolevFFNNEmu(FFNNEmu):
             pk_weight=params.get('pk_weight', 1.0),
             name='sobolev_ffnn',
         )
+
+        # train_step calls the inner network directly for its input
+        # derivative, which would otherwise leave this outer Keras Model
+        # marked as unbuilt. Build it explicitly so ModelCheckpoint can save
+        # the full wrapper's weights after the first validation epoch.
+        self.model(tf.zeros((self.batch_size, n_x), dtype=tf.float32))
 
         # No ordinary Keras loss is registered here. The forthcoming custom
         # train_step supplies both the pk value loss and derivative loss.
@@ -309,8 +319,10 @@ class SobolevFFNNEmu(FFNNEmu):
         self.model.optimizer.learning_rate = learning_rate
 
         initial_epoch = self.epochs[-1] + 1 if self.epochs else 0
-        # Saving/loading Sobolev-specific state is intentionally deferred to
-        # the forthcoming override; checkpoints still preserve best weights.
+        if path and not self.epochs:
+            # Save the architecture and Sobolev metadata before fitting, as
+            # the ordinary FFNN path does for interruption resilience.
+            self.save(path)
         history = self.model.fit(
             train_data,
             epochs=initial_epoch + epochs,
@@ -323,6 +335,85 @@ class SobolevFFNNEmu(FFNNEmu):
         self.loss += history.history['loss']
         self.val_loss += history.history['val_loss']
 
+        if path:
+            self.save(path, verbose=verbose)
         if get_plots:
             self._plot_loss_per_epoch(path=path)
+        return
+
+    def _save_state(self, path, verbose=False):
+        """Save inference assets plus the Sobolev derivative metadata.
+
+        ``model.keras`` deliberately contains the plain inner network rather
+        than SobolevTrainingModel.  It is consequently a conventional Keras
+        model suitable for the export pipeline and fast inference; the
+        Sobolev-specific state is stored separately in ``data.fits``.
+        """
+        required = {
+            'model': self.model,
+            'x_scaler': self.x_scaler,
+            'y_scaler': self.y_scaler,
+            'growth_scaler': self.growth_scaler,
+            'y_model': self.y_model,
+            'reference_growth': self.reference_growth,
+            'redshift_grid': self.redshift_grid,
+            'z_index': self.z_index,
+        }
+        missing = [name for name, value in required.items() if value is None]
+        if missing:
+            raise RuntimeError(
+                'Cannot save incomplete Sobolev emulator; missing {}'
+                ''.format(', '.join(missing)))
+        if not hasattr(self.model, 'network'):
+            raise TypeError(
+                'Sobolev emulator model must expose its inference network')
+
+        io.Folder(path).create(verbose=verbose)
+        self.x_scaler.save(self.x_scaler_fname, root=path, verbose=verbose)
+        self.y_scaler.save(self.y_scaler_fname, root=path, verbose=verbose)
+        self.growth_scaler.save(
+            self.growth_scaler_fname, root=path, verbose=verbose)
+
+        model_path = os.path.join(path, self.model_fname)
+        if verbose:
+            io.info('Saving Sobolev inference network at {}'.format(model_path))
+        self.model.network.save(model_path, overwrite=True)
+
+        data_path = os.path.join(path, self.data_fname)
+        if os.path.isfile(data_path):
+            os.remove(data_path)
+        fits = io.FitsFile(fname=self.data_fname, root=path)
+        state_header = {
+            'x_names': self.x_names,
+            'y_names': self.y_names,
+            'x_ranges': self.x_ranges,
+            'y_model': {
+                'name': self.y_model.name,
+                'params': self.y_model.params,
+                'outputs': self.y_model.outputs,
+                'n_samples': self.y_model.n_samples,
+                'args': self.y_model.args,
+            },
+            'sobolev': {
+                'z_index': self.z_index,
+                'growth_scaler_fname': self.growth_scaler_fname,
+                'reference_growth_key': self.reference_growth_key,
+                'redshift_grid_key': self.redshift_grid_key,
+                'model_is_inference_network': True,
+                'params': self.sobolev_params or {},
+            },
+        }
+        fits.write(name=None, data=None, header=state_header, verbose=verbose)
+        self.y_model.save(self.data_fname, root=path, verbose=verbose)
+        fits.write(
+            name=self.reference_growth_key,
+            data=np.asarray(self.reference_growth),
+            verbose=verbose)
+        fits.write(
+            name=self.redshift_grid_key,
+            data=np.asarray(self.redshift_grid),
+            verbose=verbose)
+
+        if verbose:
+            io.info('Sobolev emulator saved at {}'.format(path))
         return
