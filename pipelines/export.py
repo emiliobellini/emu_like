@@ -12,6 +12,55 @@ import emu_like.io as io
 from emu_like.emu import Emulator
 
 
+def _export_transform(transform):
+    """Return a portable transform description, preserving absent PCA."""
+    return None if transform is None else transform.export()
+
+
+def _sobolev_export_metadata(emu, primary_name):
+    """Build the data needed to derive fk from an exported pk network.
+
+    The model stored in a Sobolev training directory is deliberately the raw
+    network which predicts the scaled log Pk ratio.  The following metadata is
+    therefore sufficient for a consumer to evaluate the same relation as
+    ``SobolevFFNNEmu.eval_fk`` without serialising its training wrapper.
+    """
+    if not primary_name.startswith('pk_'):
+        raise ValueError(
+            'Sobolev export expects a pk_* primary spectrum, got {!r}'
+            ''.format(primary_name))
+    required = {
+        'z_index': emu.z_index,
+        'redshift_grid': emu.redshift_grid,
+        'reference_growth': emu.reference_growth,
+        'growth_scaler': emu.growth_scaler,
+    }
+    missing = [key for key, value in required.items() if value is None]
+    if missing:
+        raise RuntimeError(
+            'Cannot export incomplete Sobolev emulator; missing {}'
+            ''.format(', '.join(missing)))
+
+    z_scaler = emu.x_scaler.skl_scaler
+    pk_scaler = emu.y_scaler.skl_scaler
+    return {
+        'version': 1,
+        'fk_name': 'fk_{}'.format(primary_name[3:]),
+        'z_index': int(emu.z_index),
+        'redshift_grid': emu.redshift_grid,
+        'reference_growth': emu.reference_growth,
+        # These explicit factors avoid making the consumer depend on the
+        # internal representation of the sklearn scaler wrappers.
+        'z_mean': z_scaler.mean_[emu.z_index],
+        'z_scale': z_scaler.scale_[emu.z_index],
+        'pk_scaled_to_log_ratio_scale': pk_scaler.scale_,
+        'growth_scaler': emu.growth_scaler.export(),
+        'formula': (
+            'fk = reference_growth(z) - 0.5 * (1 + z) * '
+            'd_log_pk_ratio_dz'),
+    }
+
+
 def export_emu(args):
     """ Export spectra emulators to a given folder.
 
@@ -36,8 +85,12 @@ def export_emu(args):
 
     for in_path in input.list_subfolders():
 
-        # Load emulator
-        emu = Emulator.choose_one('ffnn_emu', verbose=False)
+        # Load the concrete type recorded by training.  In particular, a
+        # Sobolev emulator has a custom training wrapper but exports its plain
+        # differentiable Pk inference network.
+        training_params = io.YamlFile(root=in_path).read().content
+        emu_type = training_params['emulator']['name']
+        emu = Emulator.choose_one(emu_type, verbose=False)
         emu.load(in_path, still_training=False, verbose=False)
 
         # Fix paths
@@ -48,12 +101,13 @@ def export_emu(args):
         # Store necessary quantities
         emu_dict = {
             'name': name,
+            'emulator_type': emu.name,
             'x_names': emu.x_names,
             'x_ranges': emu.x_ranges,
             'x_scaler': emu.x_scaler.export(),
             'y_scaler': emu.y_scaler.export(),
-            'x_pca': emu.x_pca.export(),
-            'y_pca': emu.y_pca.export(),
+            'x_pca': _export_transform(emu.x_pca),
+            'y_pca': _export_transform(emu.y_pca),
             'ref_spectrum': emu.y_model.y_ref[0][0],
             'ref_z': emu.y_model.z_array,
             'ref_k': emu.y_model.k_ranges[0],
@@ -62,6 +116,8 @@ def export_emu(args):
             'class_args': emu.y_model.args,
             'model_path': model_fname,
         }
+        if emu.name == 'sobolev_ffnn_emu':
+            emu_dict['sobolev'] = _sobolev_export_metadata(emu, name)
 
         # Add parameter files
         all_params = io.Folder(in_path).list_files(patterns='.+yaml')
@@ -84,7 +140,8 @@ def export_emu(args):
                 emu_dict[key_dr] = vals
 
         # Save emulator
-        emu.model.save(
+        inference_model = getattr(emu.model, 'network', emu.model)
+        inference_model.save(
             os.path.join(output.path, model_fname),
             include_optimizer=False)
 
