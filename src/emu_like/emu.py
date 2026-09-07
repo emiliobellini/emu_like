@@ -52,10 +52,17 @@ class Emulator(object):
 
         This method redirects to the correct emulator.
         """
-        params = io.YamlFile(root=path).load()
-        if params['emulator']['type'] == 'ffnn_emu':
+        params = io.YamlFile(root=path).read().content
+        emu_type = params['emulator'].get(
+            'name', params['emulator'].get('type'))
+        if emu_type == 'ffnn_emu':
             from .ffnn_emu import FFNNEmu
             emu = FFNNEmu(verbose=verbose)
+            emu = emu.load(path, model_to_load=model_to_load, verbose=verbose)
+            return emu
+        elif emu_type == 'sobolev_ffnn_emu':
+            from .sobolev_ffnn_emu import SobolevFFNNEmu
+            emu = SobolevFFNNEmu(verbose=verbose)
             emu = emu.load(path, model_to_load=model_to_load, verbose=verbose)
             return emu
         else:

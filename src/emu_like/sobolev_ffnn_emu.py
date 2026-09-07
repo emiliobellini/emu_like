@@ -8,6 +8,8 @@ from tensorflow import keras
 from . import io
 from .datasets import SobolevDataset
 from .ffnn_emu import FFNNEmu
+from .scalers import Scaler
+from .y_models import YModel
 
 
 class SobolevWeightScheduler(keras.callbacks.Callback):
@@ -416,4 +418,161 @@ class SobolevFFNNEmu(FFNNEmu):
 
         if verbose:
             io.info('Sobolev emulator saved at {}'.format(path))
+        return
+
+    def load(self, path, model_to_load='best', still_training=True,
+             verbose=False):
+        """Load Sobolev inference state and optionally a saved checkpoint.
+
+        The on-disk Keras model is the plain inference network.  This method
+        rebuilds the lightweight SobolevTrainingModel wrapper around it so
+        the loaded emulator retains the derivative metadata needed by later
+        evaluation and training work.
+        """
+        if verbose:
+            io.info('Loading Sobolev FFNN architecture')
+
+        # Load histories when available. A one-epoch CSV still represents a
+        # one-row structured array. Sobolev metrics add columns, so these are
+        # selected by name rather than by the ordinary FFNN column positions.
+        try:
+            history = np.genfromtxt(
+                os.path.join(path, self.log_fname), delimiter=',',
+                names=True)
+            history = np.atleast_1d(history)
+            self.epochs = [int(value) for value in history['epoch']]
+            self.learning_rate = list(history['learning_rate'])
+            self.loss = list(history['loss'])
+            self.val_loss = list(history['val_loss'])
+        except (FileNotFoundError, ValueError, IndexError, KeyError):
+            pass
+
+        self.x_scaler = Scaler.load(
+            os.path.join(path, self.x_scaler_fname), verbose=verbose)
+        self.y_scaler = Scaler.load(
+            os.path.join(path, self.y_scaler_fname), verbose=verbose)
+        self.growth_scaler = Scaler.load(
+            os.path.join(path, self.growth_scaler_fname), verbose=verbose)
+        self.x_pca = None
+        self.y_pca = None
+
+        fits = io.FitsFile(self.data_fname, root=path)
+        state = fits.get_header(0, unflat_dict=True)
+        try:
+            sobolev_state = state['sobolev']
+            self.z_index = int(sobolev_state['z_index'])
+            self.reference_growth_key = sobolev_state[
+                'reference_growth_key']
+            self.redshift_grid_key = sobolev_state['redshift_grid_key']
+            self.sobolev_params = dict(sobolev_state.get('params', {}))
+        except KeyError as error:
+            raise ValueError(
+                'data.fits does not contain Sobolev state metadata') from error
+        self.reference_growth = fits.get_data(self.reference_growth_key)
+        self.redshift_grid = fits.get_data(self.redshift_grid_key)
+        self.x_names = state['x_names']
+        self.y_names = state['y_names']
+        self.x_ranges = state['x_ranges']
+
+        self.y_model = YModel.choose_one(
+            state['y_model']['name'],
+            state['y_model']['params'],
+            state['y_model']['outputs'],
+            state['y_model']['n_samples'],
+            **state['y_model']['args'],
+            verbose=False)
+        self.y_model.load(self.data_fname, root=path, verbose=verbose)
+        self.reference_pk = self.y_model.y_ref[0]
+
+        network = keras.models.load_model(
+            os.path.join(path, self.model_fname), compile=False)
+        self.batch_size = network.inputs[0].shape[0]
+        if self.batch_size is None:
+            raise ValueError('Sobolev inference network has no fixed batch size')
+        n_x = network.inputs[0].shape[-1]
+        if n_x != len(self.x_names):
+            raise ValueError(
+                'Saved model has {} inputs but state lists {} input names'
+                ''.format(n_x, len(self.x_names)))
+        if not 0 <= self.z_index < n_x:
+            raise ValueError('Saved Sobolev redshift index is out of range')
+
+        z_scaler = self.x_scaler.skl_scaler
+        pk_scaler = self.y_scaler.skl_scaler
+        growth_scaler = self.growth_scaler.skl_scaler
+        self.model = SobolevTrainingModel(
+            network=network,
+            z_index=self.z_index,
+            z_mean=z_scaler.mean_[self.z_index],
+            z_scale=z_scaler.scale_[self.z_index],
+            pk_scale=pk_scaler.scale_,
+            growth_mean=growth_scaler.mean_,
+            growth_scale=growth_scaler.scale_,
+            reference_growth=self.reference_growth,
+            redshift_grid=self.redshift_grid,
+            pk_weight=self.sobolev_params.get('pk_weight', 1.0),
+            name='sobolev_ffnn',
+        )
+        self.model(tf.zeros((self.batch_size, n_x), dtype=tf.float32))
+
+        checkpoint_path = None
+        if model_to_load == 'best' and self.val_loss:
+            best_epoch = self.epochs[int(np.argmin(self.val_loss))] + 1
+            candidate = os.path.join(
+                path, self.checkpoint_folder,
+                self.checkpoint_fname.format(epoch=best_epoch))
+            if os.path.isfile(candidate):
+                checkpoint_path = candidate
+        elif isinstance(model_to_load, int):
+            candidate = os.path.join(
+                path, self.checkpoint_folder,
+                self.checkpoint_fname.format(epoch=model_to_load))
+            if not os.path.isfile(candidate):
+                raise FileNotFoundError(
+                    'Checkpoint for epoch {} does not exist'.format(
+                        model_to_load))
+            checkpoint_path = candidate
+        elif model_to_load != 'best':
+            raise ValueError('Model not recognised: {}'.format(model_to_load))
+        if checkpoint_path is not None:
+            self.model.load_weights(checkpoint_path)
+        if still_training:
+            # Checkpoints contain wrapper weights but no portable optimizer
+            # state because model.keras stores only the inner network.
+            self.model.compile(optimizer='adam')
+
+        if verbose:
+            source = checkpoint_path or os.path.join(path, self.model_fname)
+            io.print_level(1, 'Loaded Sobolev model from {}'.format(source))
+        return self
+
+    def check_files(self, path, datasets_paths, verbose=False):
+        """Check the Sobolev artifact set needed for resume.
+
+        Sobolev training intentionally has no x/y PCA files, so the FFNN
+        implementation's file check cannot be reused unchanged.
+        """
+        output_folder = io.Folder(path)
+        if not output_folder.exists:
+            raise FileNotFoundError(
+                'Output folder {} does not exist. Cannot resume!'.format(path))
+
+        required = [
+            io.YamlFile().default_name,
+            self.x_scaler_fname,
+            self.y_scaler_fname,
+            self.growth_scaler_fname,
+            self.model_fname,
+            self.log_fname,
+            self.data_fname,
+        ]
+        files = output_folder.list_files()
+        for fname in required:
+            full_path = output_folder.join(fname)
+            if full_path not in files:
+                raise FileNotFoundError(
+                    'Required file {} does not exist. Cannot resume!'.format(
+                        full_path))
+        if verbose:
+            io.info('All Sobolev resume files exist in {}'.format(path))
         return
