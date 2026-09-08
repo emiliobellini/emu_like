@@ -106,7 +106,8 @@ class SobolevTrainingModel(keras.Model):
         tape, total_loss, pk_loss, fk_loss = self._loss_terms(
             x_scaled, pk_true, fk_true, training=True)
         gradients = tape.gradient(total_loss, self.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
+        self.optimizer.apply_gradients(
+            zip(gradients, self.trainable_variables))
         self.loss_tracker.update_state(total_loss)
         self.pk_loss_tracker.update_state(pk_loss)
         self.fk_loss_tracker.update_state(fk_loss)
@@ -137,6 +138,11 @@ class SobolevFFNNEmu(FFNNEmu):
         self.growth_scaler_fname = 'growth_scaler.save'
         self.reference_growth_key = 'SOB_REF_GROWTH'
         self.redshift_grid_key = 'SOB_Z_GRID'
+        # ``model.keras`` is the portable inner network, not the training
+        # wrapper. Strict state therefore stores wrapper weights and optimizer
+        # variables separately.
+        self.strict_state_fname = 'strict_training_state.weights.h5'
+        self.strict_optimizer_fname = 'strict_training_state.optimizer.npz'
 
     def build(self, params, data=None, verbose=False):
         """Build the smooth primary-pk network for Sobolev training.
@@ -268,6 +274,8 @@ class SobolevFFNNEmu(FFNNEmu):
             reduce_learning_rate=True,
             relative_improvement=True,
             get_plots=False,
+            preserve_optimizer_state=False,
+            resume_learning_rate=None,
             verbose=False):
         """Train on paired pk/fk batches with the Sobolev derivative loss."""
         if not isinstance(data, SobolevDataset):
@@ -275,7 +283,8 @@ class SobolevFFNNEmu(FFNNEmu):
         if self.model is None:
             raise RuntimeError('Build SobolevFFNNEmu before training')
         if data.y_growth_train is None or data.growth_scaler is None:
-            raise ValueError('Split and rescale the SobolevDataset before training')
+            raise ValueError(
+                'Split and rescale the SobolevDataset before training')
 
         self.x_scaler = data.x_scaler
         self.y_scaler = data.y_scaler
@@ -295,17 +304,20 @@ class SobolevFFNNEmu(FFNNEmu):
             if shuffle:
                 dataset = dataset.shuffle(
                     buffer_size=len(x), reshuffle_each_iteration=True)
-            return dataset.batch(self.batch_size, drop_remainder=True).prefetch(
-                tf.data.AUTOTUNE)
+            return dataset.batch(
+                self.batch_size,
+                drop_remainder=True).prefetch(tf.data.AUTOTUNE)
 
         train_data = make_batches(
             data.x_train, data.y_train, data.y_growth_train, shuffle=True)
         validation_data = make_batches(
             data.x_test, data.y_test, data.y_growth_test, shuffle=False)
         if int(tf.data.experimental.cardinality(train_data).numpy()) <= 0:
-            raise ValueError('Training data contains fewer rows than batch_size')
+            raise ValueError(
+                'Training data contains fewer rows than batch_size')
         if int(tf.data.experimental.cardinality(validation_data).numpy()) <= 0:
-            raise ValueError('Validation data contains fewer rows than batch_size')
+            raise ValueError(
+                'Validation data contains fewer rows than batch_size')
 
         callbacks = self._callbacks(
             path,
@@ -318,7 +330,16 @@ class SobolevFFNNEmu(FFNNEmu):
             self.sobolev_params.get('fk_weight', 1.0),
             self.sobolev_params.get('fk_warmup_epochs', 0),
             self.sobolev_params.get('fk_ramp_epochs', 0)))
-        self.model.optimizer.learning_rate = learning_rate
+        if resume_learning_rate is not None:
+            self.model.optimizer.learning_rate = resume_learning_rate
+        elif not preserve_optimizer_state:
+            self.model.optimizer.learning_rate = learning_rate
+
+        # A new or warm-started run must immediately have a valid strict
+        # checkpoint, even if it never improves on the prior validation loss.
+        if path and (not preserve_optimizer_state or
+                     not os.path.isfile(self._strict_state_path(path))):
+            self._save_strict_state(path)
 
         initial_epoch = self.epochs[-1] + 1 if self.epochs else 0
         if path and not self.epochs:
@@ -378,7 +399,8 @@ class SobolevFFNNEmu(FFNNEmu):
 
         model_path = os.path.join(path, self.model_fname)
         if verbose:
-            io.info('Saving Sobolev inference network at {}'.format(model_path))
+            io.info(
+                'Saving Sobolev inference network at {}'.format(model_path))
         self.model.network.save(model_path, overwrite=True)
 
         data_path = os.path.join(path, self.data_fname)
@@ -420,8 +442,51 @@ class SobolevFFNNEmu(FFNNEmu):
             io.info('Sobolev emulator saved at {}'.format(path))
         return
 
+    def _strict_state_path(self, path):
+        """Return the wrapper-weights path used by strict resume."""
+        return os.path.join(path, self.strict_state_fname)
+
+    def _save_strict_state(self, path):
+        """Persist wrapper weights and optimizer variables together."""
+        self.model.optimizer.build(self.model.trainable_variables)
+        # Only the inner network has trainable weights. Keeping optimizer
+        # variables in the paired NPZ avoids Keras attempting a partial
+        # optimizer restore from the weights file.
+        self.model.network.save_weights(
+            self._strict_state_path(path), overwrite=True)
+        optimizer_values = {
+            'var_{:04d}'.format(index): variable.numpy()
+            for index, variable in enumerate(self.model.optimizer.variables)
+        }
+        np.savez(
+            os.path.join(path, self.strict_optimizer_fname),
+            **optimizer_values)
+
+    def _restore_strict_state(self, path):
+        """
+        Restore the optimizer-consistent wrapper state after rebuilding it.
+        """
+        self.model.optimizer.build(self.model.trainable_variables)
+        optimizer_path = os.path.join(path, self.strict_optimizer_fname)
+        with np.load(optimizer_path) as saved:
+            optimizer_variables = list(self.model.optimizer.variables)
+            expected_keys = [
+                'var_{:04d}'.format(index)
+                for index in range(len(optimizer_variables))]
+            if set(saved.files) != set(expected_keys):
+                raise ValueError(
+                    'Saved Sobolev optimizer state is incompatible with the '
+                    'rebuilt optimizer')
+            for key, variable in zip(expected_keys, optimizer_variables):
+                value = saved[key]
+                if value.shape != tuple(variable.shape):
+                    raise ValueError(
+                        'Saved optimizer variable {} has shape {}, expected {}'
+                        ''.format(key, value.shape, tuple(variable.shape)))
+                variable.assign(value)
+
     def load(self, path, model_to_load='best', still_training=True,
-             verbose=False):
+             verbose=False, resume_mode='warm'):
         """Load Sobolev inference state and optionally a saved checkpoint.
 
         The on-disk Keras model is the plain inference network.  This method
@@ -429,6 +494,23 @@ class SobolevFFNNEmu(FFNNEmu):
         the loaded emulator retains the derivative metadata needed by later
         evaluation and training work.
         """
+        if resume_mode not in ('warm', 'strict'):
+            raise ValueError('resume_mode must be either "warm" or "strict"')
+        strict_state_files = [
+            self._strict_state_path(path),
+            os.path.join(path, self.strict_optimizer_fname),
+        ]
+        legacy_strict = (resume_mode == 'strict' and still_training and
+                         not all(os.path.isfile(fname)
+                                 for fname in strict_state_files))
+        if legacy_strict:
+            io.warning(
+                'Strict optimizer state is unavailable in {}. Falling back '
+                'to legacy strict resume: best weights with a fresh optimizer.'
+                ''.format(path))
+            resume_mode = 'warm'
+        self.optimizer_state_restored = (
+            resume_mode == 'strict' and still_training)
         if verbose:
             io.info('Loading Sobolev FFNN architecture')
 
@@ -446,6 +528,10 @@ class SobolevFFNNEmu(FFNNEmu):
             self.val_loss = list(history['val_loss'])
         except (FileNotFoundError, ValueError, IndexError, KeyError):
             pass
+        if legacy_strict and self.learning_rate:
+            self.resume_learning_rate = self.learning_rate[-1]
+        else:
+            self.resume_learning_rate = None
 
         self.x_scaler = Scaler.load(
             os.path.join(path, self.x_scaler_fname), verbose=verbose)
@@ -498,7 +584,8 @@ class SobolevFFNNEmu(FFNNEmu):
             os.path.join(path, self.model_fname), compile=False)
         self.batch_size = network.inputs[0].shape[0]
         if self.batch_size is None:
-            raise ValueError('Sobolev inference network has no fixed batch size')
+            raise ValueError(
+                'Sobolev inference network has no fixed batch size')
         n_x = network.inputs[0].shape[-1]
         if n_x != len(self.x_names):
             raise ValueError(
@@ -526,7 +613,13 @@ class SobolevFFNNEmu(FFNNEmu):
         self.model(tf.zeros((self.batch_size, n_x), dtype=tf.float32))
 
         checkpoint_path = None
-        if model_to_load == 'best' and self.val_loss:
+        if resume_mode == 'strict' and still_training:
+            # Restore wrapper weights before compiling, then rebuild optimizer
+            # slots and restore the paired optimizer state.
+            self.model.network.load_weights(self._strict_state_path(path))
+            self.model.compile(optimizer='adam')
+            self._restore_strict_state(path)
+        elif model_to_load == 'best' and self.val_loss:
             best_epoch = self.epochs[int(np.argmin(self.val_loss))] + 1
             candidate = os.path.join(
                 path, self.checkpoint_folder,
@@ -546,7 +639,7 @@ class SobolevFFNNEmu(FFNNEmu):
             raise ValueError('Model not recognised: {}'.format(model_to_load))
         if checkpoint_path is not None:
             self.model.load_weights(checkpoint_path)
-        if still_training:
+        if still_training and resume_mode == 'warm':
             # Checkpoints contain wrapper weights but no portable optimizer
             # state because model.keras stores only the inner network.
             self.model.compile(optimizer='adam')
@@ -556,7 +649,8 @@ class SobolevFFNNEmu(FFNNEmu):
             io.print_level(1, 'Loaded Sobolev model from {}'.format(source))
         return self
 
-    def check_files(self, path, datasets_paths, verbose=False):
+    def check_files(
+            self, path, datasets_paths, verbose=False, strict_resume=False):
         """Check the Sobolev artifact set needed for resume.
 
         Sobolev training intentionally has no x/y PCA files, so the FFNN

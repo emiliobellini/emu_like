@@ -64,7 +64,8 @@ def train_emu(args):
         emu.check_files(
             params['output']['path'],
             params['datasets']['paths'],
-            verbose=args.verbose
+            verbose=args.verbose,
+            strict_resume=args.resume_strict,
         )
         emu.check_parameters(
             params,
@@ -192,7 +193,11 @@ def train_emu(args):
     # If resume
     if should_resume:
         # Load emulator
-        emu.load(pars_out['path'], model_to_load='best', verbose=args.verbose)
+        emu.load(
+            pars_out['path'],
+            model_to_load='best',
+            verbose=args.verbose,
+            resume_mode='strict' if args.resume_strict else 'warm')
     # Otherwise
     else:
         # Get dimensions of x and y for emulator
@@ -223,6 +228,9 @@ def train_emu(args):
         reduce_learning_rate=pars_emu['args']['reduce_learning_rate'],
         relative_improvement=pars_emu['args']['relative_improvement'],
         get_plots=False,
+        preserve_optimizer_state=getattr(
+            emu, 'optimizer_state_restored', False),
+        resume_learning_rate=getattr(emu, 'resume_learning_rate', None),
         verbose=args.verbose)
 
     return

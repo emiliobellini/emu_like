@@ -39,6 +39,22 @@ class LearningRateLogger(keras.callbacks.Callback):
             logs['learning_rate'] = value
 
 
+class StrictStateCheckpoint(keras.callbacks.Callback):
+    """Save a complete, optimizer-consistent state on val-loss improvement."""
+
+    def __init__(self, save_state, initial_best=np.inf):
+        super().__init__()
+        self.save_state = save_state
+        self.best = float(initial_best)
+
+    def on_epoch_end(self, epoch, logs=None):
+        value = (logs or {}).get('val_loss')
+        if value is None or not np.isfinite(value) or value >= self.best:
+            return
+        self.best = float(value)
+        self.save_state()
+
+
 class RelativeEarlyStopping(keras.callbacks.Callback):
     """Early stopping based on relative improvements of a monitored metric.
 
@@ -285,12 +301,15 @@ class FFNNEmu(Emulator):
         self.learning_rate = []  # List of learning_rates per epoch
         self.loss = []  # List of the losses per epoch
         self.val_loss = []  # List of the validation losses per epoch
+        self.optimizer_state_restored = False
+        self.resume_learning_rate = None
         # Defaults
         self.x_scaler_fname = 'x_scaler.save'
         self.y_scaler_fname = 'y_scaler.save'
         self.x_pca_fname = 'x_pca.save'
         self.y_pca_fname = 'y_pca.save'
         self.model_fname = 'model.keras'
+        self.strict_state_fname = 'strict_training_state.keras'
         self.checkpoint_folder = 'checkpoints'
         self.checkpoint_fname = 'checkpoint_epoch{epoch:04d}.weights.h5'
         self.log_fname = 'history_log.csv'
@@ -340,6 +359,7 @@ class FFNNEmu(Emulator):
 
         callbacks = [LearningRateLogger()]
 
+        strict_state_checkpoint = None
         # Checkpoint
         if path is not None:
             checkpoint_folder = io.Folder(path).subfolder(
@@ -360,6 +380,10 @@ class FFNNEmu(Emulator):
             # Logfile
             fname = os.path.join(path, self.log_fname)
             csv_logger = keras.callbacks.CSVLogger(fname, append=True)
+            initial_best = min(self.val_loss) if self.val_loss else np.inf
+            strict_state_checkpoint = StrictStateCheckpoint(
+                lambda: self._save_strict_state(path),
+                initial_best=initial_best)
 
         # Reduce learning rate on plateau
         if reduce_learning_rate:
@@ -420,6 +444,10 @@ class FFNNEmu(Emulator):
             callbacks.append(early_stopping)
         if timeout is not None:
             callbacks.append(time_early_stopping)
+        if strict_state_checkpoint is not None:
+            # Save after callbacks that may adjust the learning rate, so the
+            # optimizer state matches the next epoch exactly.
+            callbacks.append(strict_state_checkpoint)
 
         return callbacks
 
@@ -469,7 +497,8 @@ class FFNNEmu(Emulator):
         data_stub = SimpleNamespace(y_pca=y_pca)
         return loss_factory(data=data_stub, floor=loss_floor, delta=loss_delta)
 
-    def check_files(self, path, datasets_paths, verbose=False):
+    def check_files(
+            self, path, datasets_paths, verbose=False, strict_resume=False):
         """
         Check that the files needed to resume training exist.
         Arguments:
@@ -496,7 +525,6 @@ class FFNNEmu(Emulator):
             self.log_fname,
             self.data_fname,
         ]
-
         # Check that the necessary files exist in the output folder
         for fname in [output_folder.join(fname) for fname in required_files]:
             if fname not in output_folder.list_files():
@@ -508,6 +536,19 @@ class FFNNEmu(Emulator):
         if verbose:
             io.info('All required files exist in {}'.format(path))
         return
+
+    def _strict_state_path(self, path):
+        return os.path.join(path, self.strict_state_fname)
+
+    def _save_strict_state(self, path):
+        """Save the full Keras state used by strict resume."""
+        self.model.save(self._strict_state_path(path), overwrite=True)
+
+    def _restore_fresh_optimizer(self):
+        """Keep loaded weights but reset optimizer moments for warm resume."""
+        optimizer = keras.optimizers.deserialize(
+            keras.optimizers.serialize(self.model.optimizer))
+        self.model.compile(optimizer=optimizer, loss=self.model.loss)
 
     def check_parameters(
             self,
@@ -568,7 +609,7 @@ class FFNNEmu(Emulator):
         return
 
     def load(self, path, model_to_load='best', still_training=True,
-             verbose=False):
+             verbose=False, resume_mode='warm'):
         """
         Load from path a model for the emulator.
         This can be used both for using the emulator
@@ -590,6 +631,18 @@ class FFNNEmu(Emulator):
         (to save space).
         """
 
+        if resume_mode not in ('warm', 'strict'):
+            raise ValueError('resume_mode must be either "warm" or "strict"')
+        legacy_strict = (resume_mode == 'strict' and still_training and
+                         not os.path.isfile(self._strict_state_path(path)))
+        if legacy_strict:
+            io.warning(
+                'Strict optimizer state is unavailable in {}. Falling back '
+                'to legacy strict resume: best weights with a fresh optimizer.'
+                ''.format(path))
+            resume_mode = 'warm'
+        self.optimizer_state_restored = (
+            resume_mode == 'strict' and still_training)
         if verbose:
             io.info('Loading FFNN architecture')
 
@@ -625,14 +678,25 @@ class FFNNEmu(Emulator):
             self.val_loss = list(history[:, 3])
         except FileNotFoundError:
             pass
+        if legacy_strict and self.learning_rate:
+            self.resume_learning_rate = self.learning_rate[-1]
+        else:
+            self.resume_learning_rate = None
 
         # Load model
-        fname = os.path.join(path, self.model_fname)
+        if resume_mode == 'strict' and still_training:
+            fname = self._strict_state_path(path)
+        else:
+            fname = os.path.join(path, self.model_fname)
         self.model = keras.models.load_model(
             fname,
             compile=still_training,
             custom_objects=custom_objects)
-        if model_to_load == 'best':
+        if resume_mode == 'strict' and still_training:
+            # This artifact was saved at the same instant as its optimizer
+            # state. Loading a weights-only checkpoint would break that match.
+            pass
+        elif model_to_load == 'best':
             idxs = np.argsort(np.array(self.val_loss))
             try:
                 epoch = {
@@ -661,6 +725,9 @@ class FFNNEmu(Emulator):
             self.model.load_weights(fname)
         else:
             raise Exception('Model not recognised!')
+
+        if still_training and resume_mode == 'warm':
+            self._restore_fresh_optimizer()
 
         if verbose:
             io.print_level(1, 'From: {}'.format(fname))
@@ -982,6 +1049,8 @@ class FFNNEmu(Emulator):
             reduce_learning_rate=True,
             relative_improvement=True,
             get_plots=False,
+            preserve_optimizer_state=False,
+            resume_learning_rate=None,
             verbose=False):
         """
         Train the emulator.
@@ -1004,6 +1073,8 @@ class FFNNEmu(Emulator):
           instead of absolute improvement for early stopping and learning
           rate reduction;
         - get_plots (bool, default: False): get loss vs epoch plot;
+        - preserve_optimizer_state (bool, default: False): retain the
+          restored optimizer state and learning rate for strict resume;
         - verbose (bool, default: False): verbosity.
         """
 
@@ -1026,7 +1097,16 @@ class FFNNEmu(Emulator):
             relative_improvement=relative_improvement,
             verbose=verbose)
 
-        self.model.optimizer.learning_rate = learning_rate
+        if resume_learning_rate is not None:
+            self.model.optimizer.learning_rate = resume_learning_rate
+        elif not preserve_optimizer_state:
+            self.model.optimizer.learning_rate = learning_rate
+
+        # A new or warm-started run must immediately have a valid strict
+        # checkpoint, even if it never improves on the prior validation loss.
+        if path and (not preserve_optimizer_state or
+                     not os.path.isfile(self._strict_state_path(path))):
+            self._save_strict_state(path)
 
         # Fit model
         if self.epochs:
