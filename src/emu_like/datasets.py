@@ -779,24 +779,40 @@ class Dataset(object):
             io.print_level(1, 'Rescaled bounds:')
             mins = np.min(self.x_train, axis=0)
             maxs = np.max(self.x_train, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'x_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'x_train = [{}, {}]'.format(
+                    np.min(self.x_train), np.max(self.x_train)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'x_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
             mins = np.min(self.x_test, axis=0)
             maxs = np.max(self.x_test, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'x_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'x_test = [{}, {}]'.format(
+                    np.min(self.x_test), np.max(self.x_test)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'x_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
             mins = np.min(self.y_train, axis=0)
             maxs = np.max(self.y_train, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'y_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'y_train = [{}, {}]'.format(
+                    np.min(self.y_train), np.max(self.y_train)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'y_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
             mins = np.min(self.y_test, axis=0)
             maxs = np.max(self.y_test, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'y_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'y_test = [{}, {}]'.format(
+                    np.min(self.y_test), np.max(self.y_test)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'y_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
         return
 
     def apply_pca(self, num_x_pca=None, num_y_pca=None, verbose=False):

@@ -773,10 +773,11 @@ class ClassSpectra(YModel):
                 reference = model.y_ref[output_index]
                 selected_reference = selected.y_ref[output_index]
                 if spectrum.is_pk:
-                    if (reference.ndim < 2
-                            or reference.shape[-1] != len(z_array)
-                            or selected_reference.ndim < 2
-                            or selected_reference.shape[-1] != len(selected_z)):
+                    cond1 = reference.ndim < 2
+                    cond2 = reference.shape[-1] != len(z_array)
+                    cond3 = selected_reference.ndim < 2
+                    cond4 = selected_reference.shape[-1] != len(selected_z)
+                    if (cond1 or cond2 or cond3 or cond4):
                         raise ValueError(
                             'ClassSpectra y_ref redshift dimension is '
                             'inconsistent with z_array')
