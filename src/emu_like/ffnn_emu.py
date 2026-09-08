@@ -6,6 +6,7 @@
 
 """
 
+import csv
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -37,6 +38,54 @@ class LearningRateLogger(keras.callbacks.Callback):
             logs['learning_rate'] = float(value)
         except (TypeError, ValueError):
             logs['learning_rate'] = value
+
+
+class FFNNCSVLogger(keras.callbacks.Callback):
+    """Write standard FFNN histories with a stable conventional order."""
+
+    fields = ('epoch', 'learning_rate', 'loss', 'val_loss')
+
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self.file = None
+        self.writer = None
+
+    def on_train_begin(self, logs=None):
+        exists = os.path.isfile(self.path) and os.path.getsize(self.path) > 0
+        if exists:
+            with open(self.path, newline='') as input_file:
+                reader = csv.DictReader(input_file)
+                rows = list(reader)
+                old_fields = reader.fieldnames
+            if set(old_fields or ()) != set(self.fields):
+                raise ValueError(
+                    'Cannot append FFNN history with unexpected columns: '
+                    '{}'.format(old_fields))
+            if tuple(old_fields) != self.fields:
+                with open(self.path, 'w', newline='') as output_file:
+                    writer = csv.DictWriter(
+                        output_file, fieldnames=self.fields)
+                    writer.writeheader()
+                    writer.writerows(rows)
+
+        self.file = open(self.path, 'a', newline='')
+        self.writer = csv.DictWriter(self.file, fieldnames=self.fields)
+        if not exists:
+            self.writer.writeheader()
+            self.file.flush()
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        row = {'epoch': epoch}
+        row.update({name: logs.get(name) for name in self.fields[1:]})
+        self.writer.writerow(row)
+        self.file.flush()
+
+    def on_train_end(self, logs=None):
+        if self.file is not None:
+            self.file.close()
+            self.file = None
 
 
 class StrictStateCheckpoint(keras.callbacks.Callback):
@@ -379,7 +428,7 @@ class FFNNEmu(Emulator):
 
             # Logfile
             fname = os.path.join(path, self.log_fname)
-            csv_logger = keras.callbacks.CSVLogger(fname, append=True)
+            csv_logger = FFNNCSVLogger(fname)
             initial_best = min(self.val_loss) if self.val_loss else np.inf
             strict_state_checkpoint = StrictStateCheckpoint(
                 lambda: self._save_strict_state(path),

@@ -1,5 +1,6 @@
 """Sobolev FFNN emulator."""
 
+import csv
 import numpy as np
 import os
 import tensorflow as tf
@@ -7,7 +8,7 @@ from tensorflow import keras
 
 from . import io
 from .datasets import SobolevDataset
-from .ffnn_emu import FFNNEmu
+from .ffnn_emu import FFNNEmu, FFNNCSVLogger
 from .scalers import Scaler
 from .y_models import YModel
 
@@ -31,6 +32,59 @@ class SobolevWeightScheduler(keras.callbacks.Callback):
                            / self.ramp_epochs)
             current_weight = self.weight * fraction
         self.model.fk_weight.assign(current_weight)
+
+
+class SobolevCSVLogger(keras.callbacks.Callback):
+    """Write Sobolev history files with a stable, analysis-friendly order."""
+
+    fields = (
+        'epoch', 'learning_rate', 'loss', 'val_loss',
+        'pk_loss', 'val_pk_loss', 'fk_loss', 'val_fk_loss',
+    )
+
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
+        self.file = None
+        self.writer = None
+
+    def on_train_begin(self, logs=None):
+        exists = os.path.isfile(self.path) and os.path.getsize(self.path) > 0
+        if exists:
+            with open(self.path, newline='') as input_file:
+                reader = csv.DictReader(input_file)
+                rows = list(reader)
+                old_fields = reader.fieldnames
+            if set(old_fields or ()) != set(self.fields):
+                raise ValueError(
+                    'Cannot append Sobolev history with unexpected columns: '
+                    '{}'.format(old_fields))
+            if tuple(old_fields) != self.fields:
+                # Existing runs used Keras' alphabetical key ordering. Rewrite
+                # once before appending so values remain under the right names.
+                with open(self.path, 'w', newline='') as output_file:
+                    writer = csv.DictWriter(
+                        output_file, fieldnames=self.fields)
+                    writer.writeheader()
+                    writer.writerows(rows)
+
+        self.file = open(self.path, 'a', newline='')
+        self.writer = csv.DictWriter(self.file, fieldnames=self.fields)
+        if not exists:
+            self.writer.writeheader()
+            self.file.flush()
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        row = {'epoch': epoch}
+        row.update({name: logs.get(name) for name in self.fields[1:]})
+        self.writer.writerow(row)
+        self.file.flush()
+
+    def on_train_end(self, logs=None):
+        if self.file is not None:
+            self.file.close()
+            self.file = None
 
 
 class SobolevTrainingModel(keras.Model):
@@ -143,6 +197,26 @@ class SobolevFFNNEmu(FFNNEmu):
         # variables separately.
         self.strict_state_fname = 'strict_training_state.weights.h5'
         self.strict_optimizer_fname = 'strict_training_state.optimizer.npz'
+
+    def _callbacks(
+            self, path=None, patience=None, timeout=None,
+            reduce_learning_rate=True, relative_improvement=True,
+            verbose=False):
+        """Use the common callbacks with Sobolev's fixed-order CSV logger."""
+        callbacks = super()._callbacks(
+            path=path,
+            patience=patience,
+            timeout=timeout,
+            reduce_learning_rate=reduce_learning_rate,
+            relative_improvement=relative_improvement,
+            verbose=verbose)
+        if path is not None:
+            for index, callback in enumerate(callbacks):
+                if isinstance(callback, FFNNCSVLogger):
+                    callbacks[index] = SobolevCSVLogger(
+                        os.path.join(path, self.log_fname))
+                    break
+        return callbacks
 
     def build(self, params, data=None, verbose=False):
         """Build the smooth primary-pk network for Sobolev training.
