@@ -39,7 +39,7 @@ class SobolevCSVLogger(keras.callbacks.Callback):
 
     fields = (
         'epoch', 'learning_rate', 'loss', 'val_loss',
-        'pk_loss', 'val_pk_loss', 'fk_loss', 'val_fk_loss',
+        'loss_pk', 'val_loss_pk', 'loss_fk', 'val_loss_fk',
     )
 
     def __init__(self, path):
@@ -60,8 +60,9 @@ class SobolevCSVLogger(keras.callbacks.Callback):
                     'Cannot append Sobolev history with unexpected columns: '
                     '{}'.format(old_fields))
             if tuple(old_fields) != self.fields:
-                # Existing runs used Keras' alphabetical key ordering. Rewrite
-                # once before appending so values remain under the right names.
+                rows = [{
+                    name: row[name] for name in self.fields
+                } for row in rows]
                 with open(self.path, 'w', newline='') as output_file:
                     writer = csv.DictWriter(
                         output_file, fieldnames=self.fields)
@@ -107,8 +108,8 @@ class SobolevTrainingModel(keras.Model):
         self.pk_weight = tf.constant(float(pk_weight), dtype=tf.float32)
         self.fk_weight = tf.Variable(0.0, trainable=False, dtype=tf.float32)
         self.loss_tracker = keras.metrics.Mean(name='loss')
-        self.pk_loss_tracker = keras.metrics.Mean(name='pk_loss')
-        self.fk_loss_tracker = keras.metrics.Mean(name='fk_loss')
+        self.pk_loss_tracker = keras.metrics.Mean(name='loss_pk')
+        self.fk_loss_tracker = keras.metrics.Mean(name='loss_fk')
 
     @property
     def metrics(self):
@@ -153,28 +154,64 @@ class SobolevTrainingModel(keras.Model):
             total_loss = self.pk_weight * pk_loss + self.fk_weight * fk_loss
         return outer_tape, total_loss, pk_loss, fk_loss
 
-    def train_step(self, data):
-        x_scaled, targets, _ = keras.utils.unpack_x_y_sample_weight(data)
-        pk_true = targets['pk']
-        fk_true = targets['fk']
-        tape, total_loss, pk_loss, fk_loss = self._loss_terms(
-            x_scaled, pk_true, fk_true, training=True)
-        gradients = tape.gradient(total_loss, self.trainable_variables)
-        self.optimizer.apply_gradients(
-            zip(gradients, self.trainable_variables))
+    def _pk_only_loss_terms(self, x_scaled, pk_true, training):
+        """Compute the value loss without constructing an input Jacobian."""
+        with tf.GradientTape() as tape:
+            pk_pred = self.network(x_scaled, training=training)
+            pk_loss = tf.reduce_mean(tf.square(pk_pred - pk_true))
+            total_loss = self.pk_weight * pk_loss
+        return tape, total_loss, pk_loss
+
+    def _update_metrics(self, total_loss, pk_loss, fk_loss):
         self.loss_tracker.update_state(total_loss)
         self.pk_loss_tracker.update_state(pk_loss)
         self.fk_loss_tracker.update_state(fk_loss)
         return {metric.name: metric.result() for metric in self.metrics}
 
+    def _train_step_pk_only(self, x_scaled, pk_true):
+        tape, total_loss, pk_loss = self._pk_only_loss_terms(
+            x_scaled, pk_true, training=True)
+        gradients = tape.gradient(total_loss, self.trainable_variables)
+        self.optimizer.apply_gradients(
+            zip(gradients, self.trainable_variables))
+        return self._update_metrics(total_loss, pk_loss, tf.constant(0.0))
+
+    def _train_step_sobolev(self, x_scaled, pk_true, fk_true):
+        tape, total_loss, pk_loss, fk_loss = self._loss_terms(
+            x_scaled, pk_true, fk_true, training=True)
+        gradients = tape.gradient(total_loss, self.trainable_variables)
+        self.optimizer.apply_gradients(
+            zip(gradients, self.trainable_variables))
+        return self._update_metrics(total_loss, pk_loss, fk_loss)
+
+    def train_step(self, data):
+        x_scaled, targets, _ = keras.utils.unpack_x_y_sample_weight(data)
+        pk_true = targets['pk']
+        fk_true = targets['fk']
+        # Avoid the expensive Jacobian and second-order gradient entirely
+        # while the scheduler has set the fk term to zero during warm-up.
+        return tf.cond(
+            tf.equal(self.fk_weight, 0.0),
+            lambda: self._train_step_pk_only(x_scaled, pk_true),
+            lambda: self._train_step_sobolev(x_scaled, pk_true, fk_true))
+
+    def _test_step_pk_only(self, x_scaled, pk_true):
+        _, total_loss, pk_loss = self._pk_only_loss_terms(
+            x_scaled, pk_true, training=False)
+        return self._update_metrics(total_loss, pk_loss, tf.constant(0.0))
+
+    def _test_step_sobolev(self, x_scaled, pk_true, fk_true):
+        _, total_loss, pk_loss, fk_loss = self._loss_terms(
+            x_scaled, pk_true, fk_true, training=False)
+        return self._update_metrics(total_loss, pk_loss, fk_loss)
+
     def test_step(self, data):
         x_scaled, targets, _ = keras.utils.unpack_x_y_sample_weight(data)
-        _, total_loss, pk_loss, fk_loss = self._loss_terms(
-            x_scaled, targets['pk'], targets['fk'], training=False)
-        self.loss_tracker.update_state(total_loss)
-        self.pk_loss_tracker.update_state(pk_loss)
-        self.fk_loss_tracker.update_state(fk_loss)
-        return {metric.name: metric.result() for metric in self.metrics}
+        return tf.cond(
+            tf.equal(self.fk_weight, 0.0),
+            lambda: self._test_step_pk_only(x_scaled, targets['pk']),
+            lambda: self._test_step_sobolev(
+                x_scaled, targets['pk'], targets['fk']))
 
 
 class SobolevFFNNEmu(FFNNEmu):
