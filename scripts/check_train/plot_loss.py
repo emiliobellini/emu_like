@@ -76,9 +76,16 @@ def plot_loss(roots, save_dir=None):
         ax.plot(data['epoch'], data['loss'], label='loss')
 
         try:
-            ax.plot(data['epoch'], data['val_loss_pk'], label='val_loss_pk')
-            ax.plot(data['epoch'], data['loss_pk'], label='loss_pk')
-
+            ax.plot(
+                data['epoch'],
+                data['val_loss_pk'],
+                '--',
+                label='val_loss_pk')
+            ax.plot(
+                data['epoch'],
+                data['loss_pk'],
+                '--',
+                label='loss_pk')
             ax.plot(data['epoch'], data['val_loss_fk'], label='val_loss_fk')
             ax.plot(data['epoch'], data['loss_fk'], label='loss_fk')
         except ValueError:
