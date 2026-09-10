@@ -131,6 +131,10 @@ def argument_parser():
         type=str,
         help='Output folder')
     export_parser.add_argument(
+        '--force', '-f',
+        help='Force export. If output exists override it.',
+        action='store_true')
+    export_parser.add_argument(
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')
@@ -315,6 +319,69 @@ class Folder(object):
         """
         path = os.path.join(self.path, subpath)
         return path
+
+    def is_sample_folder(self):
+        """
+        Check if a folder is a sample folder.
+
+        Return:
+            - True if folder is a sample folder, False otherwise
+        """
+
+        if not self.exists:
+            return False
+        if self.list_subfolders() != []:
+            return False
+
+        yaml_files = self.list_files(patterns='.+yaml')
+        fits_files = self.list_files(patterns='.+fits')
+
+        if len(yaml_files) == 0 or len(fits_files) == 0:
+            return False
+
+        yaml_files = [os.path.splitext(os.path.split(fn)[-1])[0]
+                      for fn in yaml_files]
+        fits_files = [os.path.splitext(os.path.split(fn)[-1])[0]
+                      for fn in fits_files]
+
+        yaml_files.sort()
+        fits_files.sort()
+
+        if yaml_files != fits_files:
+            return False
+
+        return True
+
+    def is_emulator_folder(self):
+        """
+        Check if a folder is an emulator folder.
+
+        Return:
+            - True if folder is an emulator folder, False otherwise
+        """
+
+        if not self.exists:
+            return False
+
+        subfolders = [os.path.split(fn)[-1] for fn in self.list_subfolders()]
+        files = [os.path.split(fn)[-1] for fn in self.list_files()]
+
+        required_folders = ['checkpoints']
+        required_files = [
+            'model.keras',
+            'params.yaml',
+            'data.fits',
+            'x_scaler.save',
+            'y_scaler.save',
+            'history_log.csv',
+            ]
+
+        if not all([x in subfolders for x in required_folders]):
+            return False
+        if not all([x in files for x in required_files]):
+            return False
+
+        return True
 
 
 # ------------------- Fits Files ---------------------------------------------#
