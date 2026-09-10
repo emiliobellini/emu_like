@@ -71,25 +71,29 @@ def plot_loss(roots, save_dir=None):
         rel_best_val_loss = data['val_loss'][rel_best_idx]
         rel_best_loss = data['loss'][rel_best_idx]
 
-        fig, ax = plt.subplots(figsize=(8, 5))
+        # Sobolev histories contain separate power-spectrum and derivative
+        # losses. Keep each loss scale readable by giving it its own panel.
+        field_names = data.dtype.names
+        is_sobolev = 'loss_pk' in field_names
+
+        if is_sobolev:
+            fig, axes = plt.subplots(
+                3, 1, figsize=(8, 10), sharex=True, layout='constrained')
+            ax, pk_ax, fk_ax = axes
+        else:
+            fig, ax = plt.subplots(figsize=(8, 5))
+            axes = (ax,)
+
         ax.plot(data['epoch'], data['val_loss'], label='val_loss')
         ax.plot(data['epoch'], data['loss'], label='loss')
 
-        try:
-            ax.plot(
-                data['epoch'],
-                data['val_loss_pk'],
-                '--',
-                label='val_loss_pk')
-            ax.plot(
-                data['epoch'],
-                data['loss_pk'],
-                '--',
-                label='loss_pk')
-            ax.plot(data['epoch'], data['val_loss_fk'], label='val_loss_fk')
-            ax.plot(data['epoch'], data['loss_fk'], label='loss_fk')
-        except ValueError:
-            pass
+        if is_sobolev:
+            pk_ax.plot(data['epoch'], data['val_loss_pk'],
+                       label='val_loss_pk')
+            pk_ax.plot(data['epoch'], data['loss_pk'], label='loss_pk')
+            fk_ax.plot(data['epoch'], data['val_loss_fk'],
+                       label='val_loss_fk')
+            fk_ax.plot(data['epoch'], data['loss_fk'], label='loss_fk')
 
         # Plot abs best epoch
         ax.plot(
@@ -123,13 +127,23 @@ def plot_loss(roots, save_dir=None):
 
         for idx in range(1, len(data['learning_rate'])):
             if data['learning_rate'][idx] != data['learning_rate'][idx - 1]:
-                ax.axvline(x=data['epoch'][idx], color='k', linestyle='--',
-                           label='LR change' if idx == 1 else None)
+                for loss_ax in axes:
+                    loss_ax.axvline(
+                        x=data['epoch'][idx], color='k', linestyle='--',
+                        label='LR change' if idx == 1 else None)
 
-        ax.set_xlabel('Epoch')
         ax.set_ylabel('Loss')
-        # ax.set_xscale('log')
         ax.set_yscale('log')
+        if is_sobolev:
+            pk_ax.set_ylabel('PK loss')
+            fk_ax.set_ylabel('FK loss')
+            fk_ax.set_xlabel('Epoch')
+            for loss_ax in (pk_ax, fk_ax):
+                loss_ax.set_yscale('log')
+        else:
+            ax.set_xlabel('Epoch')
+
+        # ax.set_xscale('log')
         ax.set_title(
             '{}. Epochs:\n'
             ' Last: {} | Abs Best: {} (diff: {}) | Rel Best: {} (diff: {})'
@@ -140,8 +154,10 @@ def plot_loss(roots, save_dir=None):
                 int(last_epoch - abs_best_epoch),
                 int(rel_best_epoch),
                 int(last_epoch - rel_best_epoch)))
-        ax.legend()
-        plt.tight_layout()
+        for loss_ax in axes:
+            loss_ax.legend()
+        if not is_sobolev:
+            plt.tight_layout()
 
         fig.savefig(save_path,
                     dpi=150, bbox_inches='tight')
