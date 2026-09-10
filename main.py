@@ -17,6 +17,14 @@ from emu_like.io import argument_parser
 # -----------------MAIN-CALL-----------------------------------------
 if __name__ == '__main__':
 
+    import tensorflow as tf
+
+    # Use full float32 precision for the validated Sobolev derivatives.
+    tf.config.experimental.enable_tensor_float_32_execution(False)
+    print('TF32 enabled:',
+          tf.config.experimental.tensor_float_32_execution_enabled(),
+          flush=True)
+
     # Call the parser
     args = argument_parser()
 

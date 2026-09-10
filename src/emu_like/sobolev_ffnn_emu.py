@@ -131,16 +131,29 @@ class SobolevTrainingModel(keras.Model):
         f_upper = tf.transpose(tf.gather(self.reference_growth, upper, axis=1))
         return f_lower + fraction[:, tf.newaxis] * (f_upper - f_lower)
 
+    def _pk_and_z_derivative(self, x_scaled, training):
+        """Predict Pk and its derivative along the scaled redshift input.
+
+        Samples must be independent (enforced by SobolevFFNNEmu.build).
+        A single Jacobian-vector product then gives every output's redshift
+        derivative without constructing the full per-sample Jacobian.
+        Keep this operation inside the weight tape for Sobolev gradients.
+        """
+        direction = tf.broadcast_to(
+            tf.one_hot(self.z_index, tf.shape(x_scaled)[1],
+                       dtype=x_scaled.dtype),
+            tf.shape(x_scaled))
+        with tf.autodiff.ForwardAccumulator(x_scaled, direction) as tangent:
+            pk_pred = self.network(x_scaled, training=training)
+        return pk_pred, tangent.jvp(pk_pred)
+
     def _loss_terms(self, x_scaled, pk_true, fk_true, training):
         # The outer tape differentiates through the input derivative while
         # optimizing network weights; it therefore supplies second-order
         # derivatives required by Sobolev training.
         with tf.GradientTape() as outer_tape:
-            with tf.GradientTape() as z_tape:
-                z_tape.watch(x_scaled)
-                pk_pred = self.network(x_scaled, training=training)
-            jacobian = z_tape.batch_jacobian(pk_pred, x_scaled)
-            d_pk_d_z_scaled = jacobian[:, :, self.z_index]
+            pk_pred, d_pk_d_z_scaled = self._pk_and_z_derivative(
+                x_scaled, training)
 
             z = (x_scaled[:, self.z_index] * self.z_scale + self.z_mean)
             d_log_ratio_d_z = (
@@ -866,11 +879,8 @@ class SobolevFFNNEmu(FFNNEmu):
 
         x_scaled = tf.convert_to_tensor(
             self.x_scaler.transform(x_array), dtype=tf.float32)
-        with tf.GradientTape() as z_tape:
-            z_tape.watch(x_scaled)
-            pk_scaled = self.model(x_scaled, training=False)
-        jacobian = z_tape.batch_jacobian(pk_scaled, x_scaled)
-        d_pk_d_z_scaled = jacobian[:, :, self.z_index]
+        _, d_pk_d_z_scaled = self.model._pk_and_z_derivative(
+            x_scaled, training=False)
         z = x_scaled[:, self.z_index] * self.model.z_scale + self.model.z_mean
         d_log_ratio_d_z = (
             self.model.pk_scale / self.model.z_scale * d_pk_d_z_scaled)

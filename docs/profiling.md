@@ -1,5 +1,8 @@
 # Profiling Sobolev training on the cluster
 
+For the subsequent optimization and its accuracy checks, see
+[Z-only Sobolev differentiation](z-derivative.md).
+
 Notes from 10 September 2026, using Python 3.12, TensorFlow 2.19.0 and an
 NVIDIA A100-PCIE-40GB. Run repository commands from
 `/ceph/hpc/home/bellinie/emu_like`.
