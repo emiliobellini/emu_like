@@ -62,6 +62,9 @@ source /path/to/new/virtual/environment/bin/activate
 
 ## Usage
 
+For TensorBoard installation, GPU profiling on the cluster, and measured
+Sobolev performance, see [Profiling notes](docs/profiling.md).
+
 If you plan to create your own pipeline, follow examples in [this folder](examples). They explain how to get a sample, train and use an emulator in simple scenarios.
 
 The sample pipeline can be run from the main folder with
