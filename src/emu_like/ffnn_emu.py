@@ -623,6 +623,8 @@ class FFNNEmu(Emulator):
             ignored_paths = {
                 ('output', 'timeout'),
                 ('emulator', 'args', 'epochs'),
+                ('emulator', 'args', 'profile_batches'),
+                ('emulator', 'args', 'profile_log_dir'),
             }
         elif resume_warm:
             ignored_paths = {
@@ -632,6 +634,8 @@ class FFNNEmu(Emulator):
                 ('emulator', 'args', 'learning_rate'),
                 ('emulator', 'args', 'reduce_learning_rate'),
                 ('emulator', 'args', 'relative_improvement'),
+                ('emulator', 'args', 'profile_batches'),
+                ('emulator', 'args', 'profile_log_dir'),
                 ('datasets', 'paths'),
                 ('datasets', 'remove_non_finite'),
                 ('datasets', 'frac_train'),

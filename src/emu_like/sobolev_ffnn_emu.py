@@ -348,7 +348,8 @@ class SobolevFFNNEmu(FFNNEmu):
 
         # No ordinary Keras loss is registered here. The forthcoming custom
         # train_step supplies both the pk value loss and derivative loss.
-        self.model.compile(optimizer=params['optimizer'])
+        # Repeated XLA compilation dominated the profiled GPU batches.
+        self.model.compile(optimizer=params['optimizer'], jit_compile=False)
 
         self.x_scaler = data.x_scaler
         self.y_scaler = data.y_scaler
@@ -387,8 +388,16 @@ class SobolevFFNNEmu(FFNNEmu):
             get_plots=False,
             preserve_optimizer_state=False,
             resume_learning_rate=None,
+            profile_batches=None,
+            profile_log_dir=None,
             verbose=False):
-        """Train on paired pk/fk batches with the Sobolev derivative loss."""
+        """Train on paired pk/fk batches with the Sobolev derivative loss.
+
+        ``profile_batches`` optionally enables the TensorFlow profiler for an
+        inclusive ``(start, stop)`` range of training batches.  The trace is
+        written below ``profile_log_dir`` (or ``path/tf_profile`` by default)
+        and can be opened with TensorBoard.
+        """
         if not isinstance(data, SobolevDataset):
             raise TypeError('SobolevFFNNEmu.train requires a SobolevDataset')
         if self.model is None:
@@ -441,6 +450,31 @@ class SobolevFFNNEmu(FFNNEmu):
             self.sobolev_params.get('fk_weight', 1.0),
             self.sobolev_params.get('fk_warmup_epochs', 0),
             self.sobolev_params.get('fk_ramp_epochs', 0)))
+        if profile_batches is not None:
+            if (not isinstance(profile_batches, (list, tuple)) or
+                    len(profile_batches) != 2):
+                raise ValueError(
+                    'profile_batches must be a two-item (start, stop) range')
+            start_batch, stop_batch = (int(value) for value in profile_batches)
+            if start_batch < 1 or stop_batch < start_batch:
+                raise ValueError(
+                    'profile_batches must satisfy 1 <= start <= stop')
+            if profile_log_dir is None:
+                if path is None:
+                    raise ValueError(
+                        'profile_log_dir is required when path is None')
+                profile_log_dir = os.path.join(path, 'tf_profile')
+            callbacks.append(keras.callbacks.TensorBoard(
+                log_dir=profile_log_dir,
+                histogram_freq=0,
+                write_graph=False,
+                write_images=False,
+                profile_batch=(start_batch, stop_batch),
+            ))
+            if verbose:
+                io.info(
+                    'Profiling training batches {}-{} to {}'.format(
+                        start_batch, stop_batch, profile_log_dir))
         if resume_learning_rate is not None:
             self.model.optimizer.learning_rate = resume_learning_rate
         elif not preserve_optimizer_state:
@@ -728,7 +762,7 @@ class SobolevFFNNEmu(FFNNEmu):
             # Restore wrapper weights before compiling, then rebuild optimizer
             # slots and restore the paired optimizer state.
             self.model.network.load_weights(self._strict_state_path(path))
-            self.model.compile(optimizer='adam')
+            self.model.compile(optimizer='adam', jit_compile=False)
             self._restore_strict_state(path)
         elif model_to_load == 'best' and self.val_loss:
             best_epoch = self.epochs[int(np.argmin(self.val_loss))] + 1
@@ -753,7 +787,7 @@ class SobolevFFNNEmu(FFNNEmu):
         if still_training and resume_mode == 'warm':
             # Checkpoints contain wrapper weights but no portable optimizer
             # state because model.keras stores only the inner network.
-            self.model.compile(optimizer='adam')
+            self.model.compile(optimizer='adam', jit_compile=False)
 
         if verbose:
             source = checkpoint_path or os.path.join(path, self.model_fname)

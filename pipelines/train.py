@@ -217,7 +217,15 @@ def train_emu(args):
     except KeyError:
         timeout = None
 
-    # Train the emulator
+    # Train the emulator. TensorFlow profiling is currently implemented for
+    # the Sobolev training loop, where custom derivative losses make it most
+    # useful for diagnosing performance.
+    train_kwargs = {}
+    if emu.name == 'sobolev_ffnn_emu':
+        train_kwargs['profile_batches'] = pars_emu['args'].get(
+            'profile_batches')
+        train_kwargs['profile_log_dir'] = pars_emu['args'].get(
+            'profile_log_dir')
     emu.train(
         data,
         pars_emu['args']['epochs'],
@@ -231,6 +239,7 @@ def train_emu(args):
         preserve_optimizer_state=getattr(
             emu, 'optimizer_state_restored', False),
         resume_learning_rate=getattr(emu, 'resume_learning_rate', None),
+        **train_kwargs,
         verbose=args.verbose)
 
     return
