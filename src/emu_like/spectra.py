@@ -473,6 +473,8 @@ class GrowthRate(Pk):
     NOTE: k is in units of h/Mpc. f(k) is dimensionless.
     """
 
+    derivative_step = 1e-3
+
     def __init__(self, name, params):
         Pk.__init__(self, name, params)
         return
@@ -512,7 +514,7 @@ class GrowthRate(Pk):
             raise ValueError(
                 'Growth redshifts must lie inside the CLASS table')
 
-        step = 1e-3
+        step = self.derivative_step
         samples = redshifts[:, None] + step * np.array([0., -1., 1.])
         weights = np.tile([0., -0.5, 0.5], (len(redshifts), 1))
         forward = redshifts - step < native_z[0]
