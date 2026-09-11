@@ -303,28 +303,31 @@ class Pk(Spectrum):
 
     def _get_2D_pk(self, cosmo, k_range, only_cb):
         """
-        Here the k_range is expected to be in units of 1/Mpc
-        and pk is in units of Mpc^3.
+        Evaluate CLASS power on the native redshift grid at requested k.
+
+        k_range is in 1/Mpc and the result is in Mpc^3, with axes (k, z).
+        The native table supplies only redshifts: pk/pk_cb handle both
+        interpolation and low-k extrapolation, just as for scalar get().
+        They also select the configured linear/nonlinear spectrum.
         """
-
-        # Decide if non linear
-        if 'non_linear' in cosmo.pars:
-            nonlinear = True
-        else:
-            nonlinear = False
-
-        # Get array of pk
-        pk_array, k_array, z_array = cosmo.get_pk_and_k_and_z(
-            nonlinear=nonlinear,
-            only_clustering_species=only_cb,
+        # A linear total-matter table is sufficient to obtain the time grid,
+        # including when no separate CDM+baryon spectrum is available.
+        _, _, z_array = cosmo.get_pk_and_k_and_z(
+            nonlinear=False,
+            only_clustering_species=False,
             h_units=False)
-
-        # Flip z_array (for the interpolation it has to be increasing)
         z_array = np.flip(z_array)
-        pk_array = np.flip(pk_array, axis=1)
 
-        # Evaluate pk at the requested range
-        pk = interp.make_splrep(k_array, pk_array, s=0)(k_range)
+        evaluator = cosmo.pk_cb if only_cb else cosmo.pk
+        try:
+            pk = np.array([[evaluator(k, z) for z in z_array]
+                           for k in k_range])
+        except ClassySevereError:
+            if not only_cb:
+                raise
+            # Preserve the fallback used by ColdBaryonPk.get(z=...).
+            pk = np.array([[cosmo.pk(k, z) for z in z_array]
+                           for k in k_range])
 
         return pk, z_array
 
