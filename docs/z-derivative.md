@@ -166,3 +166,28 @@ ignored by Git:
 The benchmark jobs explicitly set `PYTHONPATH` to the source checkout. An
 existing non-editable package installation still needs reinstalling to use
 these source changes in ordinary training commands.
+
+## Reference-growth correction (2026-09-11)
+
+The Sobolev network predicts the log of `P / REF_PK`. Its physical growth
+prediction therefore uses
+
+```
+f = -0.5 * (1 + z) * d(REF_PK)/dz / REF_PK
+    -0.5 * (1 + z) * d(log(P / REF_PK))/dz
+```
+
+`REF_FK` is only the normalization used to store the fk target; it is not
+necessarily physical reference growth. It can contain ones. The dataset loader
+now differentiates a cubic spline of `REF_PK` on `Z_ARRAY` to construct the
+reference term. A constant Pk normalization correctly contributes zero.
+Stored `FK` targets are multiplied by their interpolated `REF_FK` normalization
+before fitting the growth scaler, so the loss always compares physical growth.
+
+Previously saved Sobolev checkpoints may contain an incorrect reference and
+were optimized against that incorrect objective. They are rejected on load;
+use a fresh output directory for corrected training. Existing exports and
+already-running jobs are not repaired by this source change.
+
+This correction does not remove or repair the extreme finite fk spikes found
+in the lcdm_k sample files. Their generation still requires investigation.

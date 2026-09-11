@@ -8,6 +8,7 @@
 
 import copy
 import numpy as np
+from scipy.interpolate import make_interp_spline
 import os
 import re
 from concurrent.futures import ProcessPoolExecutor
@@ -904,6 +905,26 @@ class SobolevDataset(Dataset):
         self.growth_scaler = None
         self.growth_pca = None
 
+    @staticmethod
+    def growth_from_reference_pk(reference_pk, redshift_grid):
+        """Differentiate the Pk normalization, independently of fk scaling."""
+        z = np.asarray(redshift_grid, dtype=float)
+        pk = np.asarray(reference_pk, dtype=float)
+        if (z.ndim != 1 or z.size < 2 or not np.all(np.isfinite(z))
+                or np.any(np.diff(z) <= 0)):
+            raise ValueError(
+                'Reference redshift grid must be finite and increasing')
+        if (
+                pk.ndim < 1
+                or pk.shape[-1] != z.size
+                or not np.all(np.isfinite(pk))
+                or np.any(pk <= 0)):
+            raise ValueError(
+                'Reference Pk must be finite, positive, and match the z grid')
+        derivative = make_interp_spline(
+            z, pk, k=min(3, z.size - 1), axis=-1).derivative()(z)
+        return -0.5 * (1.0 + z) * derivative / pk
+
     def load(
             self,
             path,
@@ -940,7 +961,7 @@ class SobolevDataset(Dataset):
         self.growth_name = names['growth']
         self.y_growth = fits.get_data(self.growth_name)
         self.reference_pk = fits.get_data(names['reference_pk'])
-        self.reference_growth = fits.get_data(names['reference_growth'])
+        growth_normalization = fits.get_data(names['reference_growth'])
         self.redshift_grid = fits.get_data(names['redshift_grid'])
 
         if self.y_growth.ndim != 2 or self.y_growth.shape != self.y.shape:
@@ -953,16 +974,30 @@ class SobolevDataset(Dataset):
             raise ValueError(
                 'Redshift grid {} must be one-dimensional, got {}'
                 ''.format(names['redshift_grid'], self.redshift_grid.shape))
-        if self.reference_pk.shape != self.reference_growth.shape:
+        if self.reference_pk.shape != growth_normalization.shape:
             raise ValueError(
                 'Reference pk and growth arrays must have the same shape, '
                 'got {} and {}'.format(
-                    self.reference_pk.shape, self.reference_growth.shape))
+                    self.reference_pk.shape, growth_normalization.shape))
         if self.reference_pk.shape[-1] != self.redshift_grid.size:
             raise ValueError(
                 'Reference redshift axis has length {}, but Z_ARRAY has '
                 'length {}'.format(
                     self.reference_pk.shape[-1], self.redshift_grid.size))
+
+        self.reference_growth = self.growth_from_reference_pk(
+            self.reference_pk, self.redshift_grid)
+        # FK_* stores f / normalization, whereas the Sobolev loss uses f.
+        # REF_FK_* is a normalization only, not the derivative of REF_PK_*.
+        z = self.x[:, self.x_names.index('z_pk')]
+        if np.any(z < self.redshift_grid[0]) or np.any(
+                z > self.redshift_grid[-1]):
+            raise ValueError('Sample redshifts lie outside the reference grid')
+        if not np.all(growth_normalization == 1):
+            normalization = make_interp_spline(
+                self.redshift_grid, growth_normalization[0],
+                k=min(3, self.redshift_grid.size - 1), axis=-1)(z).T
+            self.y_growth = self.y_growth * normalization
 
         self.growth_y_names = [
             'f_k_{}'.format(index) for index in range(self.n_y)]
