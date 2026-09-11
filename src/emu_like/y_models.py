@@ -25,7 +25,7 @@ try:
 except ImportError:  # classy is optional for dataset-based workflows
     classy = None  # type: ignore
 
-from .spectra import Spectra
+from .spectra import Spectra, GrowthRate
 from .x_samplers import XSampler
 
 
@@ -560,7 +560,8 @@ class ClassSpectra(YModel):
         # Compute reference spectra (used to take the ratio if requested)
         # 1) Infer the maximum redshift
         if any([sp.is_pk for sp in self.spectra]):
-            z_max = {'z_max_pk': self._get_z_max()}
+            reference_z_max = self._get_z_max()
+            z_max = {'z_max_pk': self._required_z_max(reference_z_max)}
         else:
             z_max = {}
         # 2) Compute Class
@@ -571,6 +572,8 @@ class ClassSpectra(YModel):
         # 3) Compute all the spectra
         self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis]
                       for sp in self.spectra]
+        if z_max:
+            self._restrict_reference_grid(cosmo_ref, reference_z_max)
         # 4) Replace with ones if we do not take ratio
         for nsp, sp in enumerate(self.spectra):
             if not sp.ratio:
@@ -750,13 +753,14 @@ class ClassSpectra(YModel):
         selected_z = np.asarray(selected.z_array)
         if selected_z.size == 0:
             raise ValueError('ClassSpectra z_array can not be empty')
-        if (target_z_max is not None
-                and np.max(selected_z) < target_z_max
+        # Stored reference outputs exclude derivative-only CLASS coverage.
+        target_output_z_max = max(model._get_z_max() for model in y_models)
+        if (np.max(selected_z) < target_output_z_max
                 and not np.isclose(
-                    np.max(selected_z), target_z_max,
+                    np.max(selected_z), target_output_z_max,
                     rtol=1.e-12, atol=1.e-12)):
             raise ValueError(
-                'ClassSpectra reference grid does not reach z_max_pk')
+                'ClassSpectra reference grid does not reach requested redshift')
 
         for model, z_array in zip(y_models, z_arrays):
             z_array = np.asarray(z_array)
@@ -900,9 +904,9 @@ class ClassSpectra(YModel):
             label='ClassSpectra ref_params')
 
         if any(spectrum.is_pk for spectrum in joined.spectra):
-            joined.ref_params['z_max_pk'] = max(
-                joined.ref_params.get('z_max_pk', 0.1),
-                joined._get_z_max())
+            joined.ref_params['z_max_pk'] = joined._required_z_max(
+                joined._get_z_max(),
+                configured_limit=joined.ref_params.get('z_max_pk', 0.1))
 
         joined.z_array, joined.y_ref = ClassSpectra._join_references(
             y_models, joined.ref_params)
@@ -910,6 +914,36 @@ class ClassSpectra(YModel):
             None if joined.classy is None else joined.classy.Class())
 
         return joined
+
+    def _required_z_max(self, z, configured_limit=None):
+        """Plan coverage from this request, without inheriting earlier rows."""
+        limit = (self.args.get('z_max_pk', 0.1)
+                 if configured_limit is None else configured_limit)
+        stencil_max = z
+        if any(sp.name in ('fk_m', 'fk_cb') for sp in self.spectra):
+            step = GrowthRate.derivative_step
+            stencil_max = z + (2 * step if z < step else step)
+        return max(0.1, limit, stencil_max)
+
+    def _restrict_reference_grid(self, cosmo, z_max):
+        """Store a common output grid, excluding derivative-only coverage."""
+        common_z = None
+        for index, sp in enumerate(self.spectra):
+            if not sp.is_pk:
+                continue
+            native_z = np.asarray(sp.z_array)
+            keep = native_z <= z_max
+            output_z = native_z[keep]
+            table = self.y_ref[index][..., keep]
+            if not output_z.size or output_z[-1] < z_max:
+                output_z = np.append(output_z, z_max)
+                endpoint = np.asarray(sp.get(cosmo, z=z_max))[None, :, None]
+                table = np.concatenate((table, endpoint), axis=-1)
+            if common_z is not None and not np.array_equal(common_z, output_z):
+                raise ValueError('Reference spectra must share a redshift grid')
+            common_z = output_z
+            sp.z_array = output_z.copy()
+            self.y_ref[index] = table
 
     def _get_z_max(self):
         z_max = 0.1
@@ -976,13 +1010,8 @@ class ClassSpectra(YModel):
         # Update z_max_pk if needed and get z
         z = 0
         if any([sp.is_pk for sp in self.spectra]):
-            self.class_params['z_max_pk'] = 0.1
-            try:
-                self.class_params['z_max_pk'] = max(
-                    self.class_params['z_pk'], self.class_params['z_max_pk'])
-                z = self.class_params['z_pk']
-            except KeyError:
-                z = 0.
+            z = self.class_params.get('z_pk', 0.)
+            self.class_params['z_max_pk'] = self._required_z_max(z)
 
         try:
             # Compute class
