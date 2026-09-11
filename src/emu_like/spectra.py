@@ -494,12 +494,60 @@ class GrowthRate(Pk):
         }
         return hd
 
+    def _get_matter_growth(self, cosmo, z):
+        """Differentiate the m/cb evaluator on one already computed CLASS run.
+
+        Use dz=1e-3 and second-order centered differences, switching to
+        forward/backward differences at the computed redshift boundaries.
+        In particular, native reference tables include their upper boundary.
+        """
+        _, _, native_z = cosmo.get_pk_and_k_and_z(
+            nonlinear=False, only_clustering_species=False, h_units=False)
+        native_z = np.flip(native_z)
+        redshifts = native_z if z is None else np.atleast_1d(z).astype(float)
+        if (redshifts.ndim != 1 or not redshifts.size
+                or not np.all(np.isfinite(redshifts))
+                or np.any(redshifts < native_z[0])
+                or np.any(redshifts > native_z[-1])):
+            raise ValueError(
+                'Growth redshifts must lie inside the CLASS table')
+
+        step = 1e-3
+        samples = redshifts[:, None] + step * np.array([0., -1., 1.])
+        weights = np.tile([0., -0.5, 0.5], (len(redshifts), 1))
+        forward = redshifts - step < native_z[0]
+        backward = redshifts + step > native_z[-1]
+        samples[forward] = \
+            redshifts[forward, None] + step * np.array([0., 1., 2.])
+        weights[forward] = [-1.5, 2., -0.5]
+        samples[backward] = \
+            redshifts[backward, None] + step * np.array([0., -1., -2.])
+        weights[backward] = [1.5, -2., 0.5]
+        if samples.min() < native_z[0] or samples.max() > native_z[-1]:
+            raise ValueError(
+                'CLASS redshift coverage is too narrow for dz=1e-3')
+
+        # Reuse samples shared by multiple stencils. The power accessor keeps
+        # units, species fallback, and linear/nonlinear selection consistent.
+        unique_z, inverse = np.unique(samples, return_inverse=True)
+        values = np.column_stack([self.pk.get(cosmo, z=float(zi))
+                                  for zi in unique_z])
+        pk = values[:, inverse.ravel()].reshape(self.k_num, len(redshifts), 3)
+        dpkdz = np.sum((pk - pk[:, :, :1]) * weights, axis=-1) / step
+        fk = -0.5 * (1 + redshifts) * dpkdz / pk[:, :, 0]
+        if z is None:
+            self.z_array = native_z
+            self.pk.z_array = native_z
+        return fk[:, 0] if z is not None and np.ndim(z) == 0 else fk
+
     def get(self, cosmo, z=None):
         """
         Get the growth rate of the desired spectrum.
-        This is the same for each spectrum, provided that
-        self.pk points to the write one (definition in __init__)
+        Matter/cb use finite differences of CLASS's power evaluator.
+        Weyl uses a derivative of its tabulated power spline.
         """
+        if isinstance(self.pk, (MatterPk, ColdBaryonPk)):
+            return self._get_matter_growth(cosmo, z)
 
         # Get array of pk
         pk_array = self.pk.get(cosmo, z=None)
@@ -522,32 +570,8 @@ class GrowthRate(Pk):
             # Compute pk
             pk = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z)
             # Compute derivative (d ln P / d ln z)
-            if True:
-                dpkdz = interp.make_splrep(
-                    self.pk.z_array, pk_array.T, s=0).derivative()(z)
-            # Here we keep also the derivative I implemented because the
-            # growth rate is noisy and we may want to check it is less noisy
-            # with this (for now they are equivalent)
-            else:
-                z_step = 0.1
-                if z - z_step >= 0.:
-                    pk_p1 = interp.make_splrep(
-                        self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    pk_m1 = interp.make_splrep(
-                        self.pk.z_array, pk_array.T, s=0)(z-z_step)
-                    dpkdz = (pk_p1-pk_m1)/(2.*z_step)
-                elif z - z_step/10 >= 0.:
-                    z_step = z
-                    pk_p1 = interp.make_splrep(
-                        self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    pk_m1 = interp.make_splrep(
-                        self.pk.z_array, pk_array.T, s=0)(z-z_step)
-                    dpkdz = (pk_p1-pk_m1)/(2.*z_step)
-                else:
-                    z_step /= 10
-                    pk_p1 = interp.make_splrep(
-                        self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    dpkdz = (pk_p1-pk)/z_step
+            dpkdz = interp.make_splrep(
+                self.pk.z_array, pk_array.T, s=0).derivative()(z)
             # Compute growth factor f
             fk = -0.5 * (1+z) * dpkdz/pk
 
