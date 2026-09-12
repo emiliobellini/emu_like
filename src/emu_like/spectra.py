@@ -301,6 +301,17 @@ class Pk(Spectrum):
         self.hd_name = None
         return
 
+    @staticmethod
+    def _matter_pk_evaluator(cosmo, only_cb):
+        """Use total matter for cb only when non-cold matter is absent.
+
+        Inspect the computed density rather than swallowing CLASS errors:
+        an unavailable or invalid cb evaluation must otherwise propagate.
+        """
+        if only_cb and cosmo.Omega_nu != 0.:
+            return cosmo.pk_cb
+        return cosmo.pk
+
     def _get_2D_pk(self, cosmo, k_range, only_cb):
         """
         Evaluate CLASS power on the native redshift grid at requested k.
@@ -318,16 +329,9 @@ class Pk(Spectrum):
             h_units=False)
         z_array = np.flip(z_array)
 
-        evaluator = cosmo.pk_cb if only_cb else cosmo.pk
-        try:
-            pk = np.array([[evaluator(k, z) for z in z_array]
-                           for k in k_range])
-        except ClassySevereError:
-            if not only_cb:
-                raise
-            # Preserve the fallback used by ColdBaryonPk.get(z=...).
-            pk = np.array([[cosmo.pk(k, z) for z in z_array]
-                           for k in k_range])
+        evaluator = self._matter_pk_evaluator(cosmo, only_cb)
+        pk = np.array([[evaluator(k, z) for z in z_array]
+                       for k in k_range])
 
         return pk, z_array
 
@@ -657,10 +661,8 @@ class ColdBaryonPk(Pk):
 
         # Otherwise return P(k)
         else:
-            try:
-                pk = np.array([cosmo.pk_cb(k, z) for k in k_range])
-            except ClassySevereError:
-                pk = np.array([cosmo.pk(k, z) for k in k_range])
+            evaluator = self._matter_pk_evaluator(cosmo, only_cb=True)
+            pk = np.array([evaluator(k, z) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
@@ -702,11 +704,9 @@ class WeylPk(Pk):
         # convert k in units of 1/Mpc
         k_range = self.k_range * cosmo.h()
 
-        # Decide if non linear
-        if 'non_linear' in cosmo.pars:
-            nonlinear = True
-        else:
-            nonlinear = False
+        # CLASS's computed enum is zero for nl_none. An explicit input
+        # non_linear='none' must not request a nonexistent nonlinear table.
+        nonlinear = cosmo.nonlinear_method != 0
 
         # Get array of pk
         pk_array, k_array, z_array = cosmo.get_Weyl_pk_and_k_and_z(

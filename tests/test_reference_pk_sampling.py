@@ -15,9 +15,18 @@ class FakeClass:
     def h(self):
         return 0.7
 
+    @property
+    def Omega_nu(self):
+        return .001 if self.has_cb else 0.
+
+    @property
+    def nonlinear_method(self):
+        return int(self.nonlinear)
+
     def get_pk_and_k_and_z(self, **kwargs):
         # Deliberately unsuitable for extrapolation; only z should be used.
-        return np.ones((4, 4)), np.array([0.01, 0.1, 0.2, 1.]), np.array([2., 1., .5, 0.])
+        return (np.ones((4, 4)), np.array([0.01, 0.1, 0.2, 1.]),
+                np.array([2., 1., .5, 0.]))
 
     def pk(self, k, z):
         if k > 1.:
@@ -36,16 +45,22 @@ class ReferencePowerTests(unittest.TestCase):
         for cls, species in ((MatterPk, 'm'), (ColdBaryonPk, 'cb')):
             for nonlinear in (False, True):
                 for has_cb in (False, True):
-                    with self.subTest(species=species, nonlinear=nonlinear, has_cb=has_cb):
+                    with self.subTest(
+                            species=species, nonlinear=nonlinear,
+                            has_cb=has_cb):
                         cosmo = FakeClass(nonlinear, has_cb)
                         sp = cls('pk_' + species, params)
                         table = sp.get(cosmo)
                         self.assertEqual(table.shape, (7, 4))
-                        np.testing.assert_array_equal(sp.z_array, [0., .5, 1., 2.])
+                        np.testing.assert_array_equal(
+                            sp.z_array, [0., .5, 1., 2.])
                         for j, z in enumerate(sp.z_array):
-                            np.testing.assert_allclose(table[:, j], sp.get(cosmo, z))
+                            np.testing.assert_allclose(
+                                table[:, j], sp.get(cosmo, z))
                         physical_k = sp.k_range * cosmo.h()
-                        expected = (1 + nonlinear * physical_k**2) * physical_k**0.96 * cosmo.h()**3
+                        expected = (
+                            (1 + nonlinear * physical_k**2)
+                            * physical_k**0.96 * cosmo.h()**3)
                         if species == 'cb' and has_cb:
                             expected *= 1.2
                         np.testing.assert_allclose(table[:, 0], expected)
