@@ -742,12 +742,21 @@ class ClassSpectra(YModel):
         if any(np.asarray(z_array).ndim != 1 for z_array in z_arrays):
             raise ValueError('ClassSpectra z_array must be one-dimensional')
 
-        target_z_max = ref_params.get('z_max_pk')
+        for grid in z_arrays:
+            grid = np.asarray(grid)
+            if (len(grid) < 4 or not np.all(np.isfinite(grid))
+                    or np.any(np.diff(grid) <= 0)):
+                raise ValueError('Reference redshift grids must contain at '
+                                 'least four finite, increasing values')
+
+        # Select by stored output coverage, not derivative-only CLASS limits.
+        lower = min(grid[0] for grid in z_arrays)
+        upper = max(grid[-1] for grid in z_arrays)
         candidates = [
-            index for index, model in enumerate(y_models)
-            if model.ref_params.get('z_max_pk') == target_z_max]
+            index for index, grid in enumerate(z_arrays)
+            if grid[0] <= lower and grid[-1] >= upper]
         if not candidates:
-            candidates = list(range(len(y_models)))
+            raise ValueError('No reference grid covers all joined ranges')
         selected_index = max(
             candidates, key=lambda index: len(z_arrays[index]))
         selected = y_models[selected_index]
@@ -765,14 +774,14 @@ class ClassSpectra(YModel):
 
         for model, z_array in zip(y_models, z_arrays):
             z_array = np.asarray(z_array)
-            selected_indices = []
-            for redshift in z_array:
-                matches = np.flatnonzero(np.isclose(
-                    selected_z, redshift, rtol=1.e-12, atol=1.e-12))
-                if len(matches) != 1:
-                    raise ValueError(
-                        'ClassSpectra z_arrays are not nested consistently')
-                selected_indices.append(matches[0])
+            # Compare the interpolated normalizations, including between
+            # nodes. Matching nodes alone can conceal different splines.
+            shared_selected_z = selected_z[
+                (selected_z >= z_array[0]) & (selected_z <= z_array[-1])]
+            nodes = np.unique(np.concatenate((z_array, shared_selected_z)))
+            probes = np.unique(np.concatenate((
+                nodes, nodes[:-1] + np.diff(nodes)/3,
+                nodes[:-1] + 2*np.diff(nodes)/3)))
 
             for output_index, spectrum in enumerate(first.spectra):
                 reference = model.y_ref[output_index]
@@ -786,14 +795,19 @@ class ClassSpectra(YModel):
                         raise ValueError(
                             'ClassSpectra y_ref redshift dimension is '
                             'inconsistent with z_array')
-                    selected_reference = np.take(
-                        selected_reference, selected_indices, axis=-1)
+                    reference = interp.make_splrep(
+                        z_array, reference.T, s=0)(
+                            probes, extrapolate=False)
+                    selected_reference = interp.make_splrep(
+                        selected_z, selected_reference.T, s=0)(
+                            probes, extrapolate=False)
                 if not np.allclose(
                         reference, selected_reference,
-                        rtol=1.e-10, atol=1.e-12, equal_nan=True):
+                        rtol=1.e-10, atol=1.e-12, equal_nan=False):
                     raise ValueError(
-                        'ClassSpectra reference spectra differ at common '
-                        'redshifts')
+                        'ClassSpectra reference normalizations differ over '
+                        'the shared redshift range; regenerate with a common '
+                        'reference or renormalize before joining')
 
         return selected_z.copy(), copy.deepcopy(selected.y_ref)
 
