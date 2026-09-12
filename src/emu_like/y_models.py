@@ -580,6 +580,7 @@ class ClassSpectra(YModel):
                 self.y_ref[nsp] = np.ones_like(self.y_ref[nsp])
         # 5) Store the redshift values at which all Pk have been computed
         self.z_array = self._get_z_array(self.spectra)
+        self._validate_reference_tables()
         # 6) Store the k modes values at which all Pk have been computed
         self.k_ranges = [None for sp in self.spectra]
         for nsp, sp in enumerate(self.spectra):
@@ -759,8 +760,8 @@ class ClassSpectra(YModel):
                 and not np.isclose(
                     np.max(selected_z), target_output_z_max,
                     rtol=1.e-12, atol=1.e-12)):
-            raise ValueError(
-                'ClassSpectra reference grid does not reach requested redshift')
+            raise ValueError('ClassSpectra reference grid does not reach '
+                             'requested redshift')
 
         for model, z_array in zip(y_models, z_arrays):
             z_array = np.asarray(z_array)
@@ -940,7 +941,8 @@ class ClassSpectra(YModel):
                 endpoint = np.asarray(sp.get(cosmo, z=z_max))[None, :, None]
                 table = np.concatenate((table, endpoint), axis=-1)
             if common_z is not None and not np.array_equal(common_z, output_z):
-                raise ValueError('Reference spectra must share a redshift grid')
+                raise ValueError(
+                    'Reference spectra must share a redshift grid')
             common_z = output_z
             sp.z_array = output_z.copy()
             self.y_ref[index] = table
@@ -989,6 +991,44 @@ class ClassSpectra(YModel):
         self.y_headers = self.spectra.get_headers()
         return self.y_headers
 
+    def _validate_reference_tables(self):
+        """
+        Check normalized reference tables, including references from FITS.
+        """
+        normalized = [(i, sp) for i, sp in enumerate(self.spectra)
+                      if sp.ratio and sp.is_pk]
+        if not normalized:
+            return
+        grid = np.asarray(self.z_array, dtype=float)
+        if (grid.ndim != 1 or grid.size < 4
+                or not np.all(np.isfinite(grid))
+                or np.any(np.diff(grid) <= 0)):
+            raise ValueError('Reference redshift grid must contain at least '
+                             'four finite, strictly increasing values')
+        for index, sp in normalized:
+            table = np.asarray(self.y_ref[index])
+            if table.shape != (1, sp.get_n_vec(), len(grid)):
+                raise ValueError(f'Reference table for {sp.name} does not '
+                                 'match its spectrum and redshift grid')
+            if not np.all(np.isfinite(table)):
+                raise ValueError(f'Reference table for {sp.name} contains '
+                                 'nonfinite values; regenerate the reference')
+
+    def _reference_at_z(self, index, z):
+        """Interpolate normalization only within the stored reference range."""
+        sp = self.spectra[index]
+        grid = np.asarray(self.z_array)
+        requested = np.asarray(z)
+        if (not np.all(np.isfinite(requested))
+                or np.any(requested < grid[0])
+                or np.any(requested > grid[-1])):
+            raise ValueError(
+                f'Reference for {sp.name} covers z=[{grid[0]}, {grid[-1]}], '
+                f'but z={z} was requested; regenerate the reference with '
+                'sufficient redshift coverage')
+        spline = interp.make_splrep(grid, self.y_ref[index].T, s=0)
+        return spline(z, extrapolate=False).T
+
     def evaluate(self, x, idx, **kwargs):
         """
         Arguments:
@@ -1013,6 +1053,17 @@ class ClassSpectra(YModel):
             z = self.class_params.get('z_pk', 0.)
             self.class_params['z_max_pk'] = self._required_z_max(z)
 
+        # Check normalization before running CLASS or changing a stored row.
+        denominators = {}
+        for nsp, sp in enumerate(self.spectra):
+            if sp.ratio:
+                den = (self._reference_at_z(nsp, z) if sp.is_pk
+                       else self.y_ref[nsp])
+                if not np.all(np.isfinite(den)) or np.any(den == 0):
+                    raise ValueError(f'Reference normalization for {sp.name} '
+                                     f'is zero or nonfinite at z={z}')
+                denominators[nsp] = den
+
         try:
             # Compute class
             self.cosmo.set(self.class_params)
@@ -1028,15 +1079,8 @@ class ClassSpectra(YModel):
             y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
 
         # Take the ratio
-        for nsp, sp in enumerate(self.spectra):
-            if sp.ratio:
-                # Get y_ref at the correct z
-                if sp.is_pk:
-                    den = interp.make_splrep(
-                        self.z_array, self.y_ref[nsp].T, s=0)(z).T
-                else:
-                    den = self.y_ref[nsp]
-                y[nsp] = y[nsp]/den
+        for nsp, den in denominators.items():
+            y[nsp] = y[nsp]/den
 
         # Store in self
         for ny in range(len(self.n_y)):
@@ -1127,6 +1171,7 @@ class ClassSpectra(YModel):
             # read z_array
             self.z_array = fits.get_data('z_array')
 
+        self._validate_reference_tables()
         return
 
     def plot(self, emu, data, max_data=1e4, path=None):
@@ -1152,9 +1197,12 @@ class ClassSpectra(YModel):
 
         def get_ref(emu, x, idx_max):
             if emu.y_model.spectra[0].is_pk:
-                z = x[idx_max, 0]
-                ref = interp.make_splrep(
-                    emu.y_model.z_array, emu.y_model.y_ref[0][0].T, s=0)(z)
+                if 'z_pk' in emu.y_model.x_names:
+                    z_index = emu.y_model.x_names.index('z_pk')
+                    z = x[idx_max, z_index]
+                else:
+                    z = emu.y_model.args.get('z_pk', 0.)
+                ref = emu.y_model._reference_at_z(0, z)[0]
             else:
                 ref = emu.y_model.y_ref[0][0]
             return ref
