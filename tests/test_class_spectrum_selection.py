@@ -5,7 +5,7 @@ import numpy as np
 
 from emu_like.spectra import (
     ColdBaryonPk, ColdBaryonGrowthRate, WeylPk, WeylGrowthRate,
-    ClassySevereError,
+    CosmoSevereError,
 )
 from test_reference_pk_sampling import FakeClass
 
@@ -15,7 +15,7 @@ PARAMS = dict(k_min=.02, k_max=.2, k_num=5, k_space='log')
 
 class BrokenCb(FakeClass):
     def pk_cb(self, k, z):
-        raise ClassySevereError('cb evaluation failed')
+        raise CosmoSevereError('cb evaluation failed')
 
 
 class WeylClass(FakeClass):
@@ -32,7 +32,7 @@ class SelectionTests(unittest.TestCase):
             for z in (None, .5):
                 with self.subTest(cls=cls.__name__, z=z):
                     with self.assertRaisesRegex(
-                            ClassySevereError, 'cb evaluation failed'):
+                            CosmoSevereError, 'cb evaluation failed'):
                         cls('cb', PARAMS).get(BrokenCb(has_cb=True), z)
 
     def test_cb_uses_total_matter_only_without_non_cold_matter(self):

@@ -35,7 +35,7 @@ This will take care of installing all the dependencies.
 
 ### Class and hi_class
 
-If you want to use Class or hi_class make sure that their python wrapper classy is installed correctly. Follow these links [http://class-code.net/](http://class-code.net/) or [hiclass-code.net](hiclass-code.net) for installation instructions.
+Cosmological sampling uses `hiclassy.HiClass` for both standard CLASS and hi_class models. Install `hiclassy` in the same Python environment before sampling, for example with `pip install '.[sampling]'`. It is optional when training on existing datasets.
 
 ### Cobaya
 
@@ -73,7 +73,7 @@ python main.py sample params.yaml -v
 ```
 Ready to use parameter files can also be found in the main directory
 - `simple_sample.yaml`: to sample a straight line in 1D on a grid;
-- `planck_sample.yaml`: to sample the Planck likelihood using Cobaya, classy and standard cosmological parameters.
+- `planck_sample.yaml`: to sample the Planck likelihood using Cobaya, `hiclassy` and standard cosmological parameters. The `emu_like.cobaya_hiclass.HiClassTheory` adapter selects `HiClass` through Cobaya's CLASS interface.
 
 The train pipeline can be run from the main folder with
 ```

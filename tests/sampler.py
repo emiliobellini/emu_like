@@ -1,5 +1,5 @@
 import argparse
-import classy
+import hiclassy
 import numpy as np
 import scipy.interpolate as interp
 import tqdm
@@ -16,7 +16,7 @@ def _compare_reference_spectra(y_model, threshold):
     else:
         z_max = {}
 
-    cosmo_ref = classy.Class()
+    cosmo_ref = hiclassy.HiClass()
     ref_params = y_model.ref_params | z_max
     cosmo_ref.set(ref_params)
     cosmo_ref.compute()
@@ -60,7 +60,7 @@ def _evaluate_with_class(y_model, x, cosmo, class_params):
     try:
         cosmo.set(class_params)
         cosmo.compute()
-    except (classy.CosmoComputationError, classy.CosmoSevereError):
+    except (hiclassy.CosmoComputationError, hiclassy.CosmoSevereError):
         return {
             sp.name: np.full((y_model.n_y[nsp],), np.nan)
             for nsp, sp in enumerate(spectra)
@@ -138,7 +138,7 @@ if __name__ == '__main__':
 
     if args.evaluator == 'class':
         _compare_reference_spectra(y_model, args.threshold)
-        cosmo = classy.Class()
+        cosmo = hiclassy.HiClass()
         class_params = dict(y_model.class_params)
     else:
         io.info(

@@ -36,14 +36,14 @@ class CoverageClass(FakeClass):
 
 class CoverageTests(unittest.TestCase):
     def model(self, configured=None, growth=True):
-        runtime = SimpleNamespace(Class=CoverageClass,
+        runtime = SimpleNamespace(HiClass=CoverageClass,
                                   CosmoComputationError=RuntimeError,
                                   CosmoSevereError=RuntimeError)
         names = ['pk_m', 'pk_cb'] + (['fk_m', 'fk_cb'] if growth else [])
         outputs = {name: dict(k_min=1e-5, k_max=1., k_num=5,
                               k_space='log', ratio=False) for name in names}
         args = {} if configured is None else {'z_max_pk': configured}
-        with patch('emu_like.y_models.classy', runtime):
+        with patch('emu_like.y_models.hiclassy', runtime):
             return ClassSpectra(name='class', params={
                 'z_pk': {'prior': {'min': 0., 'max': 1.}}},
                 n_samples=2, outputs=outputs, **args)

@@ -21,9 +21,9 @@ import os
 import scipy.interpolate as interp
 from . import io as io
 try:
-    import classy  # type: ignore
-except ImportError:  # classy is optional for dataset-based workflows
-    classy = None  # type: ignore
+    import hiclassy  # type: ignore
+except ImportError:  # hiclassy is optional for dataset-based workflows
+    hiclassy = None  # type: ignore
 
 from .spectra import Spectra, GrowthRate
 from .x_samplers import XSampler
@@ -522,7 +522,7 @@ class ClassSpectra(YModel):
         YModel.__init__(self, name, params, n_samples, **kwargs)
         self.outputs = outputs
 
-        # Initialise spectra metadata even if classy is unavailable.
+        # Initialise spectra metadata even if hiclassy is unavailable.
         self.spectra = Spectra(outputs)
         self.y_keys = self.spectra.names
 
@@ -543,19 +543,20 @@ class ClassSpectra(YModel):
         self.ell_ranges = [None] * n_specs
         self.z_array = None
 
-        if classy is None:
+        if hiclassy is None:
             if verbose:
-                io.info('classy not available; ClassSpectra running in '
+                io.info('hiclassy not available; ClassSpectra running in '
                         'read-only mode.')
-            self.classy = None
+            self.hiclassy = None
             self.cosmo = None
             return
 
-        # Init classy
-        self.classy = classy
-        self.cosmo = classy.Class()
+        # Init hiclassy
+        self.hiclassy = hiclassy
+        self.cosmo = hiclassy.HiClass()
         if verbose:
-            io.print_level(1, 'Loading classy from {}'.format(classy.__file__))
+            io.print_level(
+                1, 'Loading hiclassy from {}'.format(hiclassy.__file__))
 
         # Compute reference spectra (used to take the ratio if requested)
         # 1) Infer the maximum redshift
@@ -564,8 +565,8 @@ class ClassSpectra(YModel):
             z_max = {'z_max_pk': self._required_z_max(reference_z_max)}
         else:
             z_max = {}
-        # 2) Compute Class
-        cosmo_ref = self.classy.Class()
+        # 2) Compute HiClass
+        cosmo_ref = self.hiclassy.HiClass()
         self.ref_params = self.ref_params | z_max
         cosmo_ref.set(self.ref_params)
         cosmo_ref.compute()
@@ -635,10 +636,10 @@ class ClassSpectra(YModel):
         oneclassspectrum.ell_ranges = [
             copy.deepcopy(self.ell_ranges[idx])]
 
-        # Runtime CLASS objects must not be shared between models.
-        oneclassspectrum.classy = self.classy
+        # Runtime HiClass objects must not be shared between models.
+        oneclassspectrum.hiclassy = self.hiclassy
         oneclassspectrum.cosmo = (
-            None if self.classy is None else self.classy.Class())
+            None if self.hiclassy is None else self.hiclassy.HiClass())
 
         return oneclassspectrum
 
@@ -821,9 +822,9 @@ class ClassSpectra(YModel):
         first = y_models[0]
         if not all(isinstance(model, ClassSpectra) for model in y_models):
             raise ValueError('All models must be ClassSpectra instances')
-        if not all(model.classy is first.classy for model in y_models[1:]):
+        if not all(model.hiclassy is first.hiclassy for model in y_models[1:]):
             raise ValueError(
-                'ClassSpectra models use different classy runtimes')
+                'ClassSpectra models use different hiclassy runtimes')
 
         # Attributes defining the model and output representation must match.
         common_attributes = (
@@ -885,7 +886,7 @@ class ClassSpectra(YModel):
 
         # Common runtime dependency; a fresh cosmo object will be created
         # after the non-trivial metadata has been combined.
-        joined.classy = first.classy
+        joined.hiclassy = first.hiclassy
         joined.cosmo = None
 
         # Merge parameter definitions. Only prior bounds may differ.
@@ -926,7 +927,7 @@ class ClassSpectra(YModel):
         joined.z_array, joined.y_ref = ClassSpectra._join_references(
             y_models, joined.ref_params)
         joined.cosmo = (
-            None if joined.classy is None else joined.classy.Class())
+            None if joined.hiclassy is None else joined.hiclassy.HiClass())
 
         return joined
 
@@ -1053,9 +1054,9 @@ class ClassSpectra(YModel):
 
         """
 
-        if self.classy is None or self.cosmo is None:
+        if self.hiclassy is None or self.cosmo is None:
             raise RuntimeError(
-                'classy is required to evaluate ClassSpectra outputs.')
+                'hiclassy is required to evaluate ClassSpectra outputs.')
 
         # Update parameter dictionary
         for npar, par in enumerate(self.x_names):
@@ -1085,10 +1086,10 @@ class ClassSpectra(YModel):
 
             y = [sp.get(self.cosmo, z=z)[np.newaxis] for sp in self.spectra]
 
-        except self.classy.CosmoComputationError:
+        except self.hiclassy.CosmoComputationError:
             # Fill with nans if error
             y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
-        except self.classy.CosmoSevereError:
+        except self.hiclassy.CosmoSevereError:
             # Fill with nans if error
             y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
 

@@ -56,7 +56,7 @@ y_model:
   # Arguments
   args:
     theory:
-      classy:
+      emu_like.cobaya_hiclass.HiClassTheory:
         extra_args:
           non_linear: hmcode
           N_ur: 2.0308

@@ -1,11 +1,11 @@
 """Compare linear sampling/extraction in emu_like and hi_fast.
 
-Run with the environment containing classy and hiclassy:
+Run with the environment containing hiclassy:
     python scripts/check_data/check_cross_package.py
 
 Uses local source checkouts, no emulator weights or existing FITS targets.
-Each cosmology is computed once per backend. JSON and NPZ results include
-an extra same-backend comparison to separate package and backend differences.
+Each cosmology is computed once per package. JSON and NPZ results include
+an extra shared-instance comparison to check numerical reproducibility.
 """
 import argparse
 import json
@@ -33,7 +33,6 @@ def main():
                         default=root/'output'/'cross_package')
     args = parser.parse_args()
     sys.path[:0] = [str(root/'src'), str(args.hi_fast_src.resolve())]
-    import classy
     import hiclassy
     import emu_like.spectra as sampling
     import hi_fast.spectra as extraction
@@ -42,14 +41,15 @@ def main():
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
     report = dict(
-        versions=dict(classy=classy.__version__, hiclassy=hiclassy.__version__),
-        paths=dict(classy=classy.__file__, hiclassy=hiclassy.__file__,
+        versions=dict(hiclassy=hiclassy.__version__),
+        paths=dict(hiclassy=hiclassy.__file__,
                    emu_like=sampling.__file__, hi_fast=extraction.__file__),
         cases=[])
     print(json.dumps(report, indent=2), flush=True)
     z = np.array([0., .0005, .001, .5, 2.])
     names = ('pk_m', 'pk_cb', 'fk_m', 'fk_cb')
-    for curvature, omega_k in (('flat', 0.), ('open', .055), ('closed', -.055)):
+    for curvature, omega_k in (
+            ('flat', 0.), ('open', .055), ('closed', -.055)):
         for massive in (False, True):
             label = f'{curvature}_' + ('massive' if massive else 'massless')
             params = dict(h=.67, omega_b=.0224, omega_cdm=.12,
@@ -62,7 +62,7 @@ def main():
             params['P_k_max_h/Mpc'] = 1.
             if massive:
                 params['m_ncdm'] = .06
-            native = classy.Class()
+            native = hiclassy.HiClass()
             cache = HiClassCache()
             print(f'Computing {label}', flush=True)
             try:
@@ -80,7 +80,8 @@ def main():
                           for minimum in minima))))
                     objects = {}
                     for name in names:
-                        cls = extraction.Pk if name.startswith('pk') else extraction.Fk
+                        cls = (extraction.Pk if name.startswith('pk')
+                               else extraction.Fk)
                         obj = cls.__new__(cls)
                         obj.name = name
                         obj.class_args = {}
@@ -93,7 +94,8 @@ def main():
                         kind: {species: coordinates for species in ('m', 'cb')}
                         for kind in ('pk', 'fk')})
                     case = dict(name=label, params=params,
-                                native_k_min=dict(zip(('classy', 'hiclassy'), minima)),
+                                native_k_min=dict(
+                                    zip(('emu_like', 'hi_fast'), minima)),
                                 comparisons={}, reference_checks={})
                     arrays = dict(k=k, z=z)
                     for name in names:
@@ -104,18 +106,20 @@ def main():
                         obj.k_range = k.copy()
                         if hasattr(obj, 'pk'):
                             obj.pk.k_range = k.copy()
-                        emu = np.stack([obj.get(native, float(zi)) for zi in z])
+                        emu = np.stack(
+                            [obj.get(native, float(zi)) for zi in z])
                         emu_same = np.stack([
                             obj.get(fast_native, float(zi)) for zi in z])
                         kind, species = name.split('_')
                         fast = fast_result[kind][species][0]
                         for values in (emu, emu_same, fast):
                             if not np.isfinite(values).all():
-                                raise ValueError(f'{label} {name}: nonfinite results')
+                                raise ValueError(
+                                    f'{label} {name}: nonfinite results')
                         cross = metrics(emu, fast, k, z)
                         same = metrics(emu_same, fast, k, z)
                         case['comparisons'][name] = dict(
-                            cross_backend=cross, same_backend=same)
+                            independent_instances=cross, shared_instance=same)
                         np.testing.assert_allclose(emu_same, fast,
                                                    rtol=1e-9, atol=1e-11)
                         # Reference tables must agree with scalar evaluation
@@ -133,12 +137,14 @@ def main():
                         arrays[name+'_emu_like'] = emu
                         arrays[name+'_hi_fast'] = fast
                         arrays[name+'_emu_like_hiclassy'] = emu_same
-                        print(f'  {name}: cross-backend max relative '
-                              f'{cross["max_relative"]:.3e}; same-backend '
+                        print(f'  {name}: independent-instance max relative '
+                              f'{cross["max_relative"]:.3e}; shared-instance '
                               f'{same["max_relative"]:.3e}', flush=True)
                     assert cache.info()['misses'] == 1, cache.info()
                     case['hiclassy_computations'] = cache.info()['misses']
-                    np.savez_compressed(args.output_dir/(label+'.npz'), **arrays)
+                    np.savez_compressed(
+                        args.output_dir/(label+'.npz'),
+                        **arrays)
                     report['cases'].append(case)
                     (args.output_dir/'report.json').write_text(
                         json.dumps(report, indent=2)+'\n')

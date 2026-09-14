@@ -5,26 +5,26 @@
 :Author: Emilio Bellini
 
 : Description: this module provides a list of classes for each
-spectrum that can be computed. It uses classy to get the spectra,
+spectrum that can be computed. It uses hiclassy to get the spectra,
 the syntax and conventions are equivalent to those in Class.
-Here we are assuming that a classy.Class() object has already
+Here we are assuming that a hiclassy.HiClass() object has already
 been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
 """
 
 try:
-    import classy  # type: ignore
-except ImportError:  # classy is optional for dataset-based training
-    classy = None  # type: ignore
+    import hiclassy  # type: ignore
+except ImportError:  # hiclassy is optional for dataset-based training
+    hiclassy = None  # type: ignore
 
-    class ClassySevereError(Exception):
+    class CosmoSevereError(Exception):
         """
         Placeholder raised when CLASS errors
-        are caught without classy installed.
+        are caught without hiclassy installed.
         """
         pass
 else:
-    ClassySevereError = classy.CosmoSevereError
+    CosmoSevereError = hiclassy.CosmoSevereError
 
 import numpy as np
 import scipy.interpolate as interp
@@ -37,7 +37,7 @@ class Spectra(object):
     This class acts as a container for all the spectra.
     It is useful to get common properties of the spectra,
     as well as to prepare the parameters that should be
-    passed to classy for a proper run.
+    passed to hiclassy for a proper run.
     """
 
     def __init__(self, dict_or_list):
@@ -47,7 +47,7 @@ class Spectra(object):
         - dict_or_list (dict or list): either nested dictionary
           of parameters for each spectrum, or a list of Spectrum objects.
         """
-        # Init classy
+        # Init hiclassy
         if isinstance(dict_or_list, dict):
             self.list = [Spectrum.choose_one(sp, dict_or_list[sp])
                          for sp in dict_or_list]
@@ -400,7 +400,7 @@ class Cell(Spectrum):
         """
         Convenience method to get unlensed Cls.
         Arguments:
-        - cosmo: classy.Class() instance. We assume that
+        - cosmo: hiclassy.HiClass() instance. We assume that
           the output was previously computed;
         - cl_name (str): type of cl with the same syntax as Class.
         """
@@ -419,7 +419,7 @@ class Cell(Spectrum):
         """
         Convenience method to get lensed Cls.
         Arguments:
-        - cosmo: classy.Class() instance. We assume that
+        - cosmo: hiclassy.HiClass() instance. We assume that
           the output was previously computed;
         - cl_name (str): type of cl with the same syntax as Class.
         """

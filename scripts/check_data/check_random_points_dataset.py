@@ -1,5 +1,5 @@
 import argparse
-import classy
+import hiclassy
 import numpy as np
 import scipy.interpolate as interp
 import tqdm
@@ -29,7 +29,7 @@ if __name__ == '__main__':
         replace=False)
     # random_indices = [0, 85713]  # TODO
 
-    cosmo = classy.Class()
+    cosmo = hiclassy.HiClass()
     class_params = data.y_model.class_params
     spectra = data.y_model.spectra
 
@@ -40,7 +40,7 @@ if __name__ == '__main__':
     else:
         z_max = {}
     # 2) Compute Class
-    cosmo_ref = classy.Class()
+    cosmo_ref = hiclassy.HiClass()
     ref_params = data.y_model.ref_params
     ref_params = ref_params | z_max
     cosmo_ref.set(ref_params)

@@ -10,7 +10,13 @@ if __name__ == '__main__':
 
     spectra_list = {
         'pk': ['pk_m', 'pk_cb', 'pk_weyl', 'fk_m', 'fk_cb', 'fk_weyl'],
-        'cl': ['cl_TT_lensed', 'cl_TE_lensed', 'cl_EE_lensed', 'cl_pp_lensed', 'cl_Tp_lensed', 'cl_BB_lensed'],
+        'cl': [
+            'cl_TT_lensed',
+            'cl_TE_lensed',
+            'cl_EE_lensed',
+            'cl_pp_lensed',
+            'cl_Tp_lensed',
+            'cl_BB_lensed'],
     }
 
     folder = io.Folder(args.sample_folder)

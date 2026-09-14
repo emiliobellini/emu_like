@@ -22,6 +22,9 @@ dependencies = [
     "tqdm>=4.66",
 ]
 
+[project.optional-dependencies]
+sampling = ["hiclassy"]
+
 [project.urls]
 Homepage = "https://github.com/emiliobellini/emu_like"
 Documentation = "https://github.com/emiliobellini/emu_like/README.md"

@@ -51,7 +51,7 @@ def test_full_join_with_different_reference_limits():
     import test_sampling_redshift_coverage as coverage
     small = coverage.CoverageTests().model(configured=1.)
     large = coverage.CoverageTests().model(configured=2.)
-    large.classy = small.classy
+    large.hiclassy = small.hiclassy
     joined = ClassSpectra.join([small, large])
     assert joined.n_samples == 4
     assert joined.z_array[-1] == 2.
@@ -73,7 +73,7 @@ def test_diagnostic_array_evaluator_fills_every_redshift():
         'check_class',
         Path(__file__).parents[1]/'scripts/check_data/check_class.py')
     diagnostic = importlib.util.module_from_spec(spec)
-    with patch.dict('sys.modules', {'classy': SimpleNamespace()}):
+    with patch.dict('sys.modules', {'hiclassy': SimpleNamespace()}):
         spec.loader.exec_module(diagnostic)
 
     class FakeClass:

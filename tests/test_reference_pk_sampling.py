@@ -3,7 +3,7 @@ import unittest
 
 import numpy as np
 
-from emu_like.spectra import MatterPk, ColdBaryonPk, ClassySevereError
+from emu_like.spectra import MatterPk, ColdBaryonPk, CosmoSevereError
 
 
 class FakeClass:
@@ -30,12 +30,12 @@ class FakeClass:
 
     def pk(self, k, z):
         if k > 1.:
-            raise ClassySevereError('k out of bounds')
+            raise CosmoSevereError('k out of bounds')
         return (1 + self.nonlinear * k**2) * k**0.96 / (1 + z)**2
 
     def pk_cb(self, k, z):
         if not self.has_cb:
-            raise ClassySevereError('P_cb not computed')
+            raise CosmoSevereError('P_cb not computed')
         return 1.2 * self.pk(k, z)
 
 
@@ -70,7 +70,7 @@ class ReferencePowerTests(unittest.TestCase):
         for cls, species in ((MatterPk, 'm'), (ColdBaryonPk, 'cb')):
             sp = cls('pk_' + species, dict(
                 k_min=.1, k_max=2., k_num=4, k_space='log'))
-            with self.assertRaisesRegex(ClassySevereError, 'out of bounds'):
+            with self.assertRaisesRegex(CosmoSevereError, 'out of bounds'):
                 sp.get(FakeClass())
 
 

@@ -9,7 +9,7 @@ import os
 import time
 import yaml
 from tabulate import tabulate
-import classy
+import hiclassy
 import emu_like.io as io
 from emu_like.emu import Emulator
 from emu_like.sobolev_ffnn_emu import SobolevFFNNEmu
@@ -313,7 +313,7 @@ class EmuData(object):
 
     def get_y_class(self, idxs):
 
-        cosmo = classy.Class()
+        cosmo = hiclassy.HiClass()
         class_params = self.emu.y_model.class_params
         spectrum = self.emu.y_model.spectra[0]
         ref_spectrum_array = self.emu.y_model.y_ref[0][0]

@@ -1,4 +1,4 @@
-import classy
+import hiclassy
 import emu_like.io as io
 import matplotlib.pyplot as plt
 import numpy as np
@@ -121,8 +121,8 @@ def main():
     args['z_pk'] = max(z)
     args['z_max_pk'] = max(args.get('z_max_pk', 0.1), 0.1, max(z))
 
-    # Init classy
-    cosmo = classy.Class()
+    # Init hiclassy
+    cosmo = hiclassy.HiClass()
     cosmo.set(args | params)
     cosmo.compute()
 
