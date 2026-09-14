@@ -47,7 +47,7 @@ def main():
         cases=[])
     print(json.dumps(report, indent=2), flush=True)
     z = np.array([0., .0005, .001, .5, 2.])
-    names = ('pk_m', 'pk_cb', 'fk_m', 'fk_cb')
+    names = ('pk_m', 'pk_cb', 'pk_weyl', 'fk_m', 'fk_cb', 'fk_weyl')
     for curvature, omega_k in (
             ('flat', 0.), ('open', .055), ('closed', -.055)):
         for massive in (False, True):
@@ -56,7 +56,7 @@ def main():
                           Omega_k=omega_k, A_s=2.1e-9, n_s=.965,
                           tau_reio=.054, YHe=.24, N_ncdm=int(massive),
                           N_ur=2.0328 if massive else 3.046,
-                          output='mPk, dTk', z_max_pk=2.1,
+                          output='mPk, dTk, wPk', z_max_pk=2.1,
                           k_per_decade_for_pk=40, k_per_decade_for_bao=80,
                           perturbations_sampling_stepsize=.02)
             params['P_k_max_h/Mpc'] = 1.
@@ -91,7 +91,8 @@ def main():
                     service = HiClassService(objects, cache=cache)
                     coordinates = {'k': k, 'z': z}
                     fast_result = service.get_many(params, {
-                        kind: {species: coordinates for species in ('m', 'cb')}
+                        kind: {species: coordinates
+                               for species in ('m', 'cb', 'weyl')}
                         for kind in ('pk', 'fk')})
                     case = dict(name=label, params=params,
                                 native_k_min=dict(

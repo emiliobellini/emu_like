@@ -527,6 +527,10 @@ class ClassSpectra(YModel):
         self.y_keys = self.spectra.names
 
         # Build parameter dictionary
+        if any(sp.name in ('pk_weyl', 'fk_weyl') for sp in self.spectra):
+            outputs = self.args.get('output', '').replace(',', ' ').split()
+            self.args = self.args | {
+                'output': ', '.join(dict.fromkeys(outputs + ['mPk', 'wPk']))}
         var = {nm: None for nm in self.x_names}
         self.class_params = self.args | var
 
@@ -568,6 +572,10 @@ class ClassSpectra(YModel):
         # 2) Compute HiClass
         cosmo_ref = self.hiclassy.HiClass()
         self.ref_params = self.ref_params | z_max
+        if any(sp.name in ('pk_weyl', 'fk_weyl') for sp in self.spectra):
+            outputs = self.ref_params['output'].replace(',', ' ').split()
+            self.ref_params['output'] = ', '.join(
+                dict.fromkeys(outputs + ['wPk']))
         cosmo_ref.set(self.ref_params)
         cosmo_ref.compute()
         # 3) Compute all the spectra
@@ -936,7 +944,7 @@ class ClassSpectra(YModel):
         limit = (self.args.get('z_max_pk', 0.1)
                  if configured_limit is None else configured_limit)
         stencil_max = z
-        if any(sp.name in ('fk_m', 'fk_cb') for sp in self.spectra):
+        if any(sp.name in ('fk_m', 'fk_cb', 'fk_weyl') for sp in self.spectra):
             step = GrowthRate.derivative_step
             stencil_max = z + (2 * step if z < step else step)
         return max(0.1, limit, stencil_max)

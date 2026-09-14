@@ -19,11 +19,13 @@ class BrokenCb(FakeClass):
 
 
 class WeylClass(FakeClass):
-    def get_Weyl_pk_and_k_and_z(self, nonlinear, h_units):
-        assert nonlinear == bool(self.nonlinear_method)
-        k = np.array([.001, .01, .1, 1.])
-        z = np.array([2., 1., .5, 0.])
-        return k[:, None] * (1+z[None, :])**2, k, z
+    def pk_weyl(self, k, z):
+        if self.nonlinear_method:
+            raise CosmoSevereError('Nonlinear Weyl unsupported')
+        return k**.96 * (1+z)**2
+
+    def get_Weyl_pk_and_k_and_z(self, **kwargs):
+        raise AssertionError('Weyl must use its evaluator')
 
 
 class SelectionTests(unittest.TestCase):
@@ -53,8 +55,24 @@ class SelectionTests(unittest.TestCase):
                         c = WeylClass()
                         c.nonlinear = method
                         c.pars = {'non_linear': 'none'} if method == 0 else {}
-                        values = cls('weyl', PARAMS).get(c, z)
-                        self.assertTrue(np.all(np.isfinite(values)))
+                        if method:
+                            with self.assertRaisesRegex(
+                                    CosmoSevereError, 'Nonlinear Weyl'):
+                                cls('weyl', PARAMS).get(c, z)
+                        else:
+                            sp = cls('weyl', PARAMS)
+                            values = sp.get(c, z)
+                            self.assertTrue(np.all(np.isfinite(values)))
+                            if cls is WeylGrowthRate:
+                                np.testing.assert_allclose(
+                                    values, -1., atol=1e-9)
+                            else:
+                                zz = sp.z_array if z is None else z
+                                expected = (sp.k_range*c.h())**.96
+                                if z is None:
+                                    expected = expected[:, None]
+                                expected = expected*(1+zz)**2*c.h()**3
+                                np.testing.assert_allclose(values, expected)
 
 
 if __name__ == '__main__':

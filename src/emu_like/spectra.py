@@ -27,7 +27,6 @@ else:
     CosmoSevereError = hiclassy.CosmoSevereError
 
 import numpy as np
-import scipy.interpolate as interp
 
 
 # ----------------- Generic Spectra ------------------------------------------#
@@ -312,14 +311,14 @@ class Pk(Spectrum):
             return cosmo.pk_cb
         return cosmo.pk
 
-    def _get_2D_pk(self, cosmo, k_range, only_cb):
+    def _get_2D_pk(self, cosmo, k_range, only_cb, evaluator=None):
         """
         Evaluate CLASS power on the native redshift grid at requested k.
 
-        k_range is in 1/Mpc and the result is in Mpc^3, with axes (k, z).
-        The native table supplies only redshifts: pk/pk_cb handle both
-        interpolation and low-k extrapolation, just as for scalar get().
-        They also select the configured linear/nonlinear spectrum.
+        k_range is in 1/Mpc; results have axes (k, z) and the evaluator
+        units (Mpc^3 for matter, 1/Mpc for Weyl). The native matter table
+        supplies only redshifts. The selected evaluator handles interpolation,
+        low-k extrapolation and the configured linear/nonlinear selection.
         """
         # A linear total-matter table is sufficient to obtain the time grid,
         # including when no separate CDM+baryon spectrum is available.
@@ -329,7 +328,8 @@ class Pk(Spectrum):
             h_units=False)
         z_array = np.flip(z_array)
 
-        evaluator = self._matter_pk_evaluator(cosmo, only_cb)
+        if evaluator is None:
+            evaluator = self._matter_pk_evaluator(cosmo, only_cb)
         pk = np.array([[evaluator(k, z) for z in z_array]
                        for k in k_range])
 
@@ -500,8 +500,8 @@ class GrowthRate(Pk):
         }
         return hd
 
-    def _get_matter_growth(self, cosmo, z):
-        """Differentiate the m/cb evaluator on one already computed CLASS run.
+    def _get_power_growth(self, cosmo, z):
+        """Differentiate power on one already computed CLASS run.
 
         Use dz=1e-3 and second-order centered differences, switching to
         forward/backward differences at the computed redshift boundaries.
@@ -547,41 +547,8 @@ class GrowthRate(Pk):
         return fk[:, 0] if z is not None and np.ndim(z) == 0 else fk
 
     def get(self, cosmo, z=None):
-        """
-        Get the growth rate of the desired spectrum.
-        Matter/cb use finite differences of CLASS's power evaluator.
-        Weyl uses a derivative of its tabulated power spline.
-        """
-        if isinstance(self.pk, (MatterPk, ColdBaryonPk)):
-            return self._get_matter_growth(cosmo, z)
-
-        # Get array of pk
-        pk_array = self.pk.get(cosmo, z=None)
-
-        # If z is None return f(k, z)
-        if z is None:
-            # Compute pk
-            pk = pk_array
-            # Compute derivative (d ln P / d ln z)
-            dpkdz = interp.make_splrep(
-                self.pk.z_array, pk_array.T, s=0).derivative()(
-                    self.pk.z_array).T
-            # Compute growth factor f
-            fk = -0.5 * (1+self.pk.z_array) * dpkdz/pk
-            # Store the z_array
-            self.z_array = self.pk.z_array
-
-        # Otherwise return f(k)
-        else:
-            # Compute pk
-            pk = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z)
-            # Compute derivative (d ln P / d ln z)
-            dpkdz = interp.make_splrep(
-                self.pk.z_array, pk_array.T, s=0).derivative()(z)
-            # Compute growth factor f
-            fk = -0.5 * (1+z) * dpkdz/pk
-
-        return fk
+        """Use second-order differences of the HiClass power evaluator."""
+        return self._get_power_growth(cosmo, z)
 
 
 # ----------------- Pk -------------------------------------------------------#
@@ -680,9 +647,10 @@ class WeylPk(Pk):
     k**2 in the Poisson equation this rescaled Weyl spectrum has
     a shape similar to the matter power spectrum.
 
-    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
+    NOTE: k is in h/Mpc; values retain the legacy h**3 normalization
+    of the physical Weyl spectrum (1/Mpc).
 
-    TODO: this is ok at linear order. Beyond that I should check it.
+    Only linear Weyl power is currently supported by HiClass.
     """
 
     def __init__(self, name, params):
@@ -690,47 +658,32 @@ class WeylPk(Pk):
 
         # (list of str) list of spectra that Class should compute.
         # Use the same syntax of the Class output argument.
-        self.class_spectra = ['mPk', 'dTk']
+        self.class_spectra = ['mPk', 'wPk']
         # (str) name you want to appear in the header of the
         # file, see Pk.get_header
         self.hd_name = 'Weyl'
         return
 
+    def get_header(self):
+        """Describe the legacy Weyl normalization."""
+        header = super().get_header()
+        header['dimensions_Pk'] = 'h^3/Mpc'
+        return header
+
     def get(self, cosmo, z=None):
-        """
-        Return the correct spectrum sampled at k_range bins.
-        """
+        """Evaluate HiClass Weyl power with the legacy dataset normalization.
 
-        # convert k in units of 1/Mpc
+        k is in h/Mpc. Preserve h**3 times the physical 1/Mpc Weyl power;
+        this historical normalization is not a conversion to (Mpc/h)**3.
+        Nonlinear requests and unsupported low-k models propagate CLASS errors.
+        """
         k_range = self.k_range * cosmo.h()
-
-        # CLASS's computed enum is zero for nl_none. An explicit input
-        # non_linear='none' must not request a nonexistent nonlinear table.
-        nonlinear = cosmo.nonlinear_method != 0
-
-        # Get array of pk
-        pk_array, k_array, z_array = cosmo.get_Weyl_pk_and_k_and_z(
-            nonlinear=nonlinear,
-            h_units=False)
-
-        # Flip z_array (for the interpolation it has to be increasing)
-        z_array = np.flip(z_array)
-        pk_array = np.flip(pk_array, axis=1)
-
-        # Evaluate pk at the requested range
-        pk = interp.make_splrep(k_array, pk_array, s=0)(k_range)
-
-        # The output is in units Mpc**3 and I want (Mpc/h)**3.
-        pk *= cosmo.h()**3.
-
-        # Store the z_array
         if z is None:
-            self.z_array = z_array
-        # Or interpolate and get pk at the correct z
+            pk, self.z_array = self._get_2D_pk(
+                cosmo, k_range, only_cb=False, evaluator=cosmo.pk_weyl)
         else:
-            pk = interp.make_splrep(z_array, pk.T, s=0)(z)
-
-        return pk
+            pk = np.array([cosmo.pk_weyl(k, z) for k in k_range])
+        return pk * cosmo.h()**3
 
 
 class MatterGrowthRate(GrowthRate):
@@ -802,7 +755,7 @@ class WeylGrowthRate(GrowthRate):
 
         # (list of str) list of spectra that Class should compute.
         # Use the same syntax of the Class output argument.
-        self.class_spectra = ['mPk', 'dTk']
+        self.class_spectra = ['mPk', 'wPk']
         # (str) name you want to appear in the header of the
         # file, see Pk.get_header
         self.hd_name = 'Weyl'

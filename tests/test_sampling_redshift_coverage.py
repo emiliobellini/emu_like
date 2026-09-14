@@ -33,13 +33,19 @@ class CoverageClass(FakeClass):
         self.calls.append(z)
         return super().pk(k, z)
 
+    def pk_weyl(self, k, z):
+        assert 'wPk' in self.pars['output']
+        return self.pk(k, z)
+
 
 class CoverageTests(unittest.TestCase):
     def model(self, configured=None, growth=True):
         runtime = SimpleNamespace(HiClass=CoverageClass,
                                   CosmoComputationError=RuntimeError,
                                   CosmoSevereError=RuntimeError)
-        names = ['pk_m', 'pk_cb'] + (['fk_m', 'fk_cb'] if growth else [])
+        names = ['pk_m', 'pk_cb', 'pk_weyl']
+        if growth:
+            names += ['fk_m', 'fk_cb', 'fk_weyl']
         outputs = {name: dict(k_min=1e-5, k_max=1., k_num=5,
                               k_space='log', ratio=False) for name in names}
         args = {} if configured is None else {'z_max_pk': configured}
@@ -48,7 +54,7 @@ class CoverageTests(unittest.TestCase):
                 'z_pk': {'prior': {'min': 0., 'max': 1.}}},
                 n_samples=2, outputs=outputs, **args)
 
-    def test_sample_coverage_preserves_configuration_and_has_no_row_history(self):
+    def test_sample_coverage_preserves_config_without_row_history(self):
         for limit in (None, 3.):
             m = self.model(limit)
             m.evaluate([1.], 0)
