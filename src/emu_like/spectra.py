@@ -277,7 +277,8 @@ class Pk(Spectrum):
     """
     Generic class for k-dependent power spectra (matter, cb, weyl).
 
-    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
+    NOTE: k is in h/Mpc. Matter power is in (Mpc/h)^3; Weyl uses
+    the historical h**3 normalization of physical rescaled power in 1/Mpc.
     """
 
     def __init__(self, name, params):
@@ -639,9 +640,12 @@ class ColdBaryonPk(Pk):
 class WeylPk(Pk):
     """
     Weyl power spectrum.
-    As in Class, we use the convention:
+    For a single adiabatic initial condition, the physical convention is:
 
     Weyl_pk = matter_pk * ((phi+psi)/2./d_m)**2 * k**4
+
+    Here k is in 1/Mpc. HiClass constructs the general IC sum directly
+    from the potential sources and primordial auto/cross-spectra.
 
     The k**4 factor is just a convention. Since there is a factor
     k**2 in the Poisson equation this rescaled Weyl spectrum has

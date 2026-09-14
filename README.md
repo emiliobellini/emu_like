@@ -103,3 +103,53 @@ For bugs and feature requests consider using the [issue tracker](https://github.
 
 ## License
 `emu_like` is released under the GPL-3 license (see [LICENSE](LICENSE)).
+
+## Weyl power and growth conventions
+
+Write `W = (phi + psi)/2` and `Q_W(k,z) = k**4 P_W(k,z)`.
+HiClass returns `Q_W` in `1/Mpc`, with k in `1/Mpc`. It is the power
+spectrum of `k**2 W`, not the dimensionless power per logarithmic interval.
+
+The clients `emu_like` and `hi_fast` accept q in `h/Mpc` and retain the
+historical numerical normalization `S_W(q,z) = h**3 Q_W(h*q,z)` for
+compatibility with existing datasets. This is not matter power in
+`(Mpc/h)**3`; new `emu_like` Weyl headers label it `h^3/Mpc`.
+Ratio targets additionally divide by their stored reference spectrum.
+
+For every species, `f = (1/2) d ln P / d ln a = -(1+z)/(2P) dP/dz`.
+For Weyl, P denotes the rescaled Weyl power; its growth can be negative.
+Both clients differentiate HiClass power with second-order differences and
+`dz = 1e-3`. They use a forward stencil near z=0. `emu_like` also uses a
+backward stencil at the native upper time boundary; `hi_fast` reserves
+coverage for its upper stencil. The fixed h normalization cancels in f.
+
+Weyl requires a HiClass build exposing `pk_weyl`, `pk_weyl_lin`,
+`get_pk_weyl`, and `get_pk_weyl_lin`. Both clients request `wPk`
+automatically. `emu_like` follows the configured nonlinear setting and
+rejects nonlinear Weyl requests; `hi_fast` explicitly uses linear power.
+The unchanged `get_Weyl_pk_and_k_and_z` remains a comparison accessor, not
+the source of client-side extrapolation.
+
+Below the native k_min, the leading-order prescription is
+`Q_W(k,z) = (k/k_min)**n_s Q_W(k_min,z)`. It assumes a k-independent Weyl
+source at leading order and a single adiabatic analytic primordial power
+law with `alpha_s = beta_s = 0`. Other primordial setups remain usable
+within the native grid but are rejected below k_min. There is no high-k
+or redshift extrapolation, and k must be strictly positive. Agreement
+between implementations does not by itself establish this asymptotic
+approximation's accuracy for every modified-gravity model.
+
+Regenerating datasets updates targets and reference tables; existing
+trained emulator weights are not changed by these code updates.
+
+Before regenerating datasets, install the updated client checkouts into the
+same virtual environment used by the batch jobs, for example:
+
+```bash
+python -m pip install --no-deps -e /cephhome/bellinie/emu_like -e /cephhome/bellinie/hi_fast
+```
+
+Confirm `emu_like.spectra.__file__` and `hi_fast.spectra.__file__` resolve to
+the intended checkouts. Source-tree tests using `PYTHONPATH` do not update
+previously installed package copies. The HiClass build in that environment
+must also expose all four Weyl accessors listed above.
