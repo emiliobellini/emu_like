@@ -14,12 +14,18 @@ create the get_x method and adapt its other
 methods and attributes to your needs.
 """
 
+import copy
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import scipy.interpolate as interp
 from . import io as io
-from .spectra import Spectra
+try:
+    import hiclassy  # type: ignore
+except ImportError:  # hiclassy is optional for dataset-based workflows
+    hiclassy = None  # type: ignore
+
+from .spectra import Spectra, GrowthRate
 from .x_samplers import XSampler
 
 
@@ -40,6 +46,7 @@ class YModel(object):
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
         self.outputs = None
+        self.y_keys = ['y_data']
 
         # Derive varying parameters
         self.x_names = [x for x in self.params
@@ -50,16 +57,11 @@ class YModel(object):
         if item is None or item == 0:
             return self
         else:
-            raise TypeError('Base YModel object is not subscriptable. Implement your own rules!')
+            raise TypeError('Base YModel object is not subscriptable.'
+                            'Implement your own rules!')
 
     @staticmethod
-    def choose_one(
-        name,
-        params,
-        outputs,
-        n_samples,
-        verbose=False,
-        **kwargs):
+    def choose_one(name, params, outputs, n_samples, verbose=False, **kwargs):
         """
         Main function to get the correct model for y.
 
@@ -77,17 +79,23 @@ class YModel(object):
           the correct sampling function and initialize it.
         """
         if name == 'linear_1d':
-            return Linear1D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Linear1D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'quadratic_1d':
-            return Quadratic1D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Quadratic1D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'gaussian_1d':
-            return Gaussian1D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Gaussian1D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'linear_2d':
-            return Linear2D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Linear2D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'quadratic_2d':
-            return Quadratic2D(name, params, n_samples, verbose=verbose, **kwargs)
+            return Quadratic2D(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'cobaya_loglike':
-            return CobayaLoglike(name, params, n_samples, verbose=verbose, **kwargs)
+            return CobayaLoglike(
+                name, params, n_samples, verbose=verbose, **kwargs)
         elif name == 'class_spectra':
             return ClassSpectra(
                 name, params, n_samples, outputs, verbose=verbose, **kwargs)
@@ -101,8 +109,10 @@ class YModel(object):
         if self.y == []:
             raise Exception('Empty y arrays! Use get_y '
                             'or evaluate to generate them first.')
-
-        self.n_y = [y.shape[1] for y in self.y]
+        elif isinstance(self.y, list):
+            self.n_y = [y.shape[1] for y in self.y]
+        else:
+            self.n_y = [self.y.shape[1]]
         return self.n_y
 
     def get_y_names(self):
@@ -120,8 +130,8 @@ class YModel(object):
         """
         if self.y_names == []:
             self.get_y_names()
-        
-        self.y_headers = ['\t'.join(y_names) for y_names in self.y_names]
+
+        self.y_headers = [{'y_names': y_names} for y_names in self.y_names]
         return self.y_headers
 
     def get_y(self, x, **kwargs):
@@ -155,13 +165,12 @@ class YModel(object):
         """
         return
 
-    def plot(self, emu, data, path=None):
+    def plot(self, emu, data, max_data=1e4, path=None):
         """
-        Placeholder for model specific plots. Arguments:
-        - emu (emu_like.FFNNEmu object)
-        - path (str, default:None): path where to save the plots.
+        Placeholder for model specific plots.
         """
         return
+
 
 # 1D functions
 
@@ -390,7 +399,7 @@ class CobayaLoglike(YModel):
 
         # Init Cobaya
         import cobaya
-        
+
         # Cobaya parameters
         self.cobaya_params = {'params': params} | kwargs
 
@@ -465,18 +474,20 @@ class ClassSpectra(YModel):
             verbose=False,
             **kwargs):
 
-        # Cosmo (Planck 2018 bestfit, Table 1 of https://arxiv.org/pdf/1807.06209)
+        # Cosmo (Planck 2018 bestfit,
+        # Table 1 of https://arxiv.org/pdf/1807.06209)
         self.ref_params = {
             'h': 0.6732,
             'Omega_m': 0.3158,
             'Omega_b': 0.0494,
+            'tau_reio': 0.0543,
             'ln_A_s_1e10': 3.044,
             'n_s': 0.966,
-            'tau_reio': 0.0543,
+            'YHe': 0.24,
             'N_ur': 0.,
             'N_ncdm': 1,
             'deg_ncdm': 3,
-            'm_ncdm': 0.2,
+            'm_ncdm': 0.02,
             # Precision parameters
             'k_per_decade_for_pk': 40,
             'k_per_decade_for_bao': 80,
@@ -495,7 +506,7 @@ class ClassSpectra(YModel):
         }
 
         # Decide wether to fully initialize (it calls Class to
-        # compute the reference spectra, which takes some time) or not.        
+        # compute the reference spectra, which takes some time) or not.
         skip_init = False
         if params is None or n_samples is None or outputs is None:
             skip_init = True
@@ -511,43 +522,74 @@ class ClassSpectra(YModel):
         YModel.__init__(self, name, params, n_samples, **kwargs)
         self.outputs = outputs
 
-        # Init classy
-        import classy
-        self.classy = classy
-        self.cosmo = classy.Class()
-        if verbose:
-            io.print_level(1, 'Loading classy from {}'.format(classy.__file__))
-
-        # Initialise spectra
+        # Initialise spectra metadata even if hiclassy is unavailable.
         self.spectra = Spectra(outputs)
+        self.y_keys = self.spectra.names
 
         # Build parameter dictionary
+        if any(sp.name in ('pk_weyl', 'fk_weyl') for sp in self.spectra):
+            outputs = self.args.get('output', '').replace(',', ' ').split()
+            self.args = self.args | {
+                'output': ', '.join(dict.fromkeys(outputs + ['mPk', 'wPk']))}
         var = {nm: None for nm in self.x_names}
         self.class_params = self.args | var
 
         # Fix known properties of the function
         self.n_y = self.get_n_y()
         self.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
+        self.y_names = self.get_y_names()
+        self.y_headers = self.get_y_headers()
 
-        # Compute reference spectra (this is used to take the ratio if requested)
+        # Default placeholders for reference spectra and sampling grids
+        n_specs = len(self.n_y)
+        self.y_ref = [np.ones((1, n_y)) for n_y in self.n_y]
+        self.k_ranges = [None] * n_specs
+        self.ell_ranges = [None] * n_specs
+        self.z_array = None
+
+        if hiclassy is None:
+            if verbose:
+                io.info('hiclassy not available; ClassSpectra running in '
+                        'read-only mode.')
+            self.hiclassy = None
+            self.cosmo = None
+            return
+
+        # Init hiclassy
+        self.hiclassy = hiclassy
+        self.cosmo = hiclassy.HiClass()
+        if verbose:
+            io.print_level(
+                1, 'Loading hiclassy from {}'.format(hiclassy.__file__))
+
+        # Compute reference spectra (used to take the ratio if requested)
         # 1) Infer the maximum redshift
         if any([sp.is_pk for sp in self.spectra]):
-            z_max = {'z_max_pk': self._get_z_max()}
+            reference_z_max = self._get_z_max()
+            z_max = {'z_max_pk': self._required_z_max(reference_z_max)}
         else:
             z_max = {}
-        # 2) Compute Class
-        cosmo_ref = self.classy.Class()
+        # 2) Compute HiClass
+        cosmo_ref = self.hiclassy.HiClass()
         self.ref_params = self.ref_params | z_max
+        if any(sp.name in ('pk_weyl', 'fk_weyl') for sp in self.spectra):
+            outputs = self.ref_params['output'].replace(',', ' ').split()
+            self.ref_params['output'] = ', '.join(
+                dict.fromkeys(outputs + ['wPk']))
         cosmo_ref.set(self.ref_params)
         cosmo_ref.compute()
         # 3) Compute all the spectra
-        self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in self.spectra]
+        self.y_ref = [sp.get(cosmo_ref, z=None)[np.newaxis]
+                      for sp in self.spectra]
+        if z_max:
+            self._restrict_reference_grid(cosmo_ref, reference_z_max)
         # 4) Replace with ones if we do not take ratio
         for nsp, sp in enumerate(self.spectra):
             if not sp.ratio:
                 self.y_ref[nsp] = np.ones_like(self.y_ref[nsp])
         # 5) Store the redshift values at which all Pk have been computed
         self.z_array = self._get_z_array(self.spectra)
+        self._validate_reference_tables()
         # 6) Store the k modes values at which all Pk have been computed
         self.k_ranges = [None for sp in self.spectra]
         for nsp, sp in enumerate(self.spectra):
@@ -567,33 +609,366 @@ class ClassSpectra(YModel):
     def __getitem__(self, item):
         if item is None:
             return self
-        
+
         # Get correct name and index for spectrum
         name = self.spectra[item].name
         idx = self.spectra._get_idx_from_name(name)
-        
+
         oneclassspectrum = ClassSpectra()
-        # Fix relevant attributes
+
+        # Base YModel attributes
         oneclassspectrum.name = self.name
-        oneclassspectrum.classy = self.classy
-        oneclassspectrum.cosmo = self.cosmo
-        oneclassspectrum.args = self.args
-        oneclassspectrum.class_params = self.class_params
+        oneclassspectrum.params = copy.deepcopy(self.params)
+        oneclassspectrum.args = copy.deepcopy(self.args)
         oneclassspectrum.n_samples = self.n_samples
-        oneclassspectrum.params = self.params
-        oneclassspectrum.outputs = {name: self.outputs[name]}
-        oneclassspectrum.x_names = self.x_names
-        oneclassspectrum.y = [self.y[idx]]
-        oneclassspectrum.y_headers = [self.y_headers[idx]]
-        oneclassspectrum.y_names = [self.y_names[idx]]
-        oneclassspectrum.y_ref = [self.y_ref[idx]]
-        oneclassspectrum.spectra = Spectra([self.spectra[idx]])
-        if self.spectra[idx].is_pk:
-            oneclassspectrum.z_array = self.z_array
-            oneclassspectrum.k_ranges = [self.k_ranges[idx]]
-        elif self.spectra[idx].is_cl:
-            oneclassspectrum.ell_ranges = [self.ell_ranges[idx]]
+        oneclassspectrum.y = [self.y[idx].copy()]
+        oneclassspectrum.n_y = [self.n_y[idx]]
+        oneclassspectrum.y_names = [copy.deepcopy(self.y_names[idx])]
+        oneclassspectrum.y_headers = [copy.deepcopy(self.y_headers[idx])]
+        oneclassspectrum.outputs = {
+            name: copy.deepcopy(self.outputs[name])}
+        oneclassspectrum.x_names = list(self.x_names)
+
+        # ClassSpectra metadata
+        oneclassspectrum.spectra = Spectra(oneclassspectrum.outputs)
+        oneclassspectrum.y_keys = list(oneclassspectrum.spectra.names)
+        oneclassspectrum.ref_params = copy.deepcopy(self.ref_params)
+        oneclassspectrum.class_params = (
+            oneclassspectrum.args
+            | {parameter: None for parameter in oneclassspectrum.x_names})
+        oneclassspectrum.y_ref = [self.y_ref[idx].copy()]
+        oneclassspectrum.z_array = (
+            None if self.z_array is None else self.z_array.copy())
+        oneclassspectrum.k_ranges = [
+            copy.deepcopy(self.k_ranges[idx])]
+        oneclassspectrum.ell_ranges = [
+            copy.deepcopy(self.ell_ranges[idx])]
+
+        # Runtime HiClass objects must not be shared between models.
+        oneclassspectrum.hiclassy = self.hiclassy
+        oneclassspectrum.cosmo = (
+            None if self.hiclassy is None else self.hiclassy.HiClass())
+
         return oneclassspectrum
+
+    @staticmethod
+    def _attributes_equal(left, right):
+        """Compare nested model metadata, including NumPy arrays."""
+        if isinstance(left, dict) and isinstance(right, dict):
+            return (
+                left.keys() == right.keys()
+                and all(ClassSpectra._attributes_equal(left[key], right[key])
+                        for key in left))
+        if isinstance(left, (list, tuple)):
+            return (
+                isinstance(right, (list, tuple))
+                and len(left) == len(right)
+                and all(ClassSpectra._attributes_equal(value_left, value_right)
+                        for value_left, value_right in zip(left, right)))
+        if isinstance(left, np.ndarray) or isinstance(right, np.ndarray):
+            return np.array_equal(left, right)
+        return left == right
+
+    @staticmethod
+    def _join_dicts(
+            dictionaries,
+            reducers=None,
+            optional_paths=(),
+            label='metadata',
+            path=()):
+        """Recursively validate dictionaries and reduce selected fields."""
+        reducers = reducers or {}
+        if not dictionaries or not all(
+                isinstance(dictionary, dict) for dictionary in dictionaries):
+            raise ValueError('All {} must be dictionaries'.format(label))
+
+        keys = list(dictionaries[0])
+        for dictionary in dictionaries[1:]:
+            keys.extend(key for key in dictionary if key not in keys)
+
+        joined = {}
+        missing = object()
+        for key in keys:
+            field_path = path + (key,)
+            values = [dictionary.get(key, missing)
+                      for dictionary in dictionaries]
+            is_optional = field_path in optional_paths
+            if any(value is missing for value in values):
+                if not is_optional:
+                    raise ValueError(
+                        '{} fields differ at {}'.format(
+                            label, '.'.join(field_path)))
+                values = [value for value in values if value is not missing]
+
+            reducer = reducers.get(field_path)
+            if reducer is not None:
+                joined[key] = reducer(values)
+            elif all(isinstance(value, dict) for value in values):
+                joined[key] = ClassSpectra._join_dicts(
+                    values,
+                    reducers=reducers,
+                    optional_paths=optional_paths,
+                    label=label,
+                    path=field_path)
+            elif any(isinstance(value, dict) for value in values):
+                raise ValueError(
+                    '{} field {} has inconsistent types'.format(
+                        label, '.'.join(field_path)))
+            elif not all(ClassSpectra._attributes_equal(value, values[0])
+                         for value in values[1:]):
+                raise ValueError(
+                    '{} field {} differs'.format(
+                        label, '.'.join(field_path)))
+            else:
+                joined[key] = copy.deepcopy(values[0])
+        return joined
+
+    @staticmethod
+    def _join_references(y_models, ref_params):
+        """Select the widest reference grid and validate common values."""
+        first = y_models[0]
+        if not all(len(model.y_ref) == len(first.spectra.names)
+                   for model in y_models):
+            raise ValueError(
+                'ClassSpectra models have inconsistent y_ref lengths')
+
+        has_pk = any(spectrum.is_pk for spectrum in first.spectra)
+        z_arrays = [model.z_array for model in y_models]
+        if not has_pk or all(z_array is None for z_array in z_arrays):
+            for model in y_models[1:]:
+                if not all(np.allclose(
+                        reference, candidate,
+                        rtol=1.e-10, atol=1.e-12, equal_nan=True)
+                        for reference, candidate
+                        in zip(first.y_ref, model.y_ref)):
+                    raise ValueError(
+                        'ClassSpectra reference spectra differ')
+            return None, copy.deepcopy(first.y_ref)
+
+        if any(z_array is None for z_array in z_arrays):
+            raise ValueError(
+                'All ClassSpectra Pk models must define z_array')
+        if any(np.asarray(z_array).ndim != 1 for z_array in z_arrays):
+            raise ValueError('ClassSpectra z_array must be one-dimensional')
+
+        for grid in z_arrays:
+            grid = np.asarray(grid)
+            if (len(grid) < 4 or not np.all(np.isfinite(grid))
+                    or np.any(np.diff(grid) <= 0)):
+                raise ValueError('Reference redshift grids must contain at '
+                                 'least four finite, increasing values')
+
+        # Select by stored output coverage, not derivative-only CLASS limits.
+        lower = min(grid[0] for grid in z_arrays)
+        upper = max(grid[-1] for grid in z_arrays)
+        candidates = [
+            index for index, grid in enumerate(z_arrays)
+            if grid[0] <= lower and grid[-1] >= upper]
+        if not candidates:
+            raise ValueError('No reference grid covers all joined ranges')
+        selected_index = max(
+            candidates, key=lambda index: len(z_arrays[index]))
+        selected = y_models[selected_index]
+        selected_z = np.asarray(selected.z_array)
+        if selected_z.size == 0:
+            raise ValueError('ClassSpectra z_array can not be empty')
+        # Stored reference outputs exclude derivative-only CLASS coverage.
+        target_output_z_max = max(model._get_z_max() for model in y_models)
+        if (np.max(selected_z) < target_output_z_max
+                and not np.isclose(
+                    np.max(selected_z), target_output_z_max,
+                    rtol=1.e-12, atol=1.e-12)):
+            raise ValueError('ClassSpectra reference grid does not reach '
+                             'requested redshift')
+
+        for model, z_array in zip(y_models, z_arrays):
+            z_array = np.asarray(z_array)
+            # Compare the interpolated normalizations, including between
+            # nodes. Matching nodes alone can conceal different splines.
+            shared_selected_z = selected_z[
+                (selected_z >= z_array[0]) & (selected_z <= z_array[-1])]
+            nodes = np.unique(np.concatenate((z_array, shared_selected_z)))
+            probes = np.unique(np.concatenate((
+                nodes, nodes[:-1] + np.diff(nodes)/3,
+                nodes[:-1] + 2*np.diff(nodes)/3)))
+
+            for output_index, spectrum in enumerate(first.spectra):
+                reference = model.y_ref[output_index]
+                selected_reference = selected.y_ref[output_index]
+                if spectrum.is_pk:
+                    cond1 = reference.ndim < 2
+                    cond2 = reference.shape[-1] != len(z_array)
+                    cond3 = selected_reference.ndim < 2
+                    cond4 = selected_reference.shape[-1] != len(selected_z)
+                    if (cond1 or cond2 or cond3 or cond4):
+                        raise ValueError(
+                            'ClassSpectra y_ref redshift dimension is '
+                            'inconsistent with z_array')
+                    reference = interp.make_splrep(
+                        z_array, reference.T, s=0)(
+                            probes, extrapolate=False)
+                    selected_reference = interp.make_splrep(
+                        selected_z, selected_reference.T, s=0)(
+                            probes, extrapolate=False)
+                if not np.allclose(
+                        reference, selected_reference,
+                        rtol=1.e-10, atol=1.e-12, equal_nan=False):
+                    raise ValueError(
+                        'ClassSpectra reference normalizations differ over '
+                        'the shared redshift range; regenerate with a common '
+                        'reference or renormalize before joining')
+
+        return selected_z.copy(), copy.deepcopy(selected.y_ref)
+
+    @staticmethod
+    def join(y_models):
+        """Combine multiple compatible ClassSpectra instances."""
+
+        if not y_models:
+            raise ValueError('At least one ClassSpectra model is required')
+
+        first = y_models[0]
+        if not all(isinstance(model, ClassSpectra) for model in y_models):
+            raise ValueError('All models must be ClassSpectra instances')
+        if not all(model.hiclassy is first.hiclassy for model in y_models[1:]):
+            raise ValueError(
+                'ClassSpectra models use different hiclassy runtimes')
+
+        # Attributes defining the model and output representation must match.
+        common_attributes = (
+            'name', 'x_names', 'outputs', 'y_keys', 'n_y', 'y_names',
+            'y_headers', 'k_ranges', 'ell_ranges')
+        for attribute in common_attributes:
+            reference = getattr(first, attribute)
+            if not all(ClassSpectra._attributes_equal(
+                    getattr(model, attribute), reference)
+                    for model in y_models[1:]):
+                raise ValueError(
+                    'ClassSpectra models can not be joined because {} differs'
+                    ''.format(attribute))
+
+        reference_spectra = [
+            (type(spectrum), spectrum.name, spectrum.ratio)
+            for spectrum in first.spectra]
+        for model in y_models[1:]:
+            model_spectra = [
+                (type(spectrum), spectrum.name, spectrum.ratio)
+                for spectrum in model.spectra]
+            if model_spectra != reference_spectra:
+                raise ValueError(
+                    'ClassSpectra models can not be joined because spectra '
+                    'differ')
+
+        # Validate the arrays before aggregating them.
+        for model in y_models:
+            if len(model.y) != len(first.n_y):
+                raise ValueError(
+                    'ClassSpectra model has an inconsistent number of y '
+                    'arrays')
+            for index, (array, n_y) in enumerate(zip(model.y, first.n_y)):
+                expected_shape = (model.n_samples, n_y)
+                if array.shape != expected_shape:
+                    raise ValueError(
+                        'ClassSpectra y[{}] has shape {}, expected {}'
+                        ''.format(index, array.shape, expected_shape))
+
+        joined = ClassSpectra()
+
+        # Attributes copied after equality validation.
+        joined.name = first.name
+        joined.x_names = copy.deepcopy(first.x_names)
+        joined.outputs = copy.deepcopy(first.outputs)
+        joined.y_keys = copy.deepcopy(first.y_keys)
+        joined.n_y = copy.deepcopy(first.n_y)
+        joined.y_names = copy.deepcopy(first.y_names)
+        joined.y_headers = copy.deepcopy(first.y_headers)
+        joined.k_ranges = copy.deepcopy(first.k_ranges)
+        joined.ell_ranges = copy.deepcopy(first.ell_ranges)
+        joined.spectra = Spectra(joined.outputs)
+
+        # Attributes summed or stacked across models.
+        joined.n_samples = sum(model.n_samples for model in y_models)
+        joined.y = [
+            np.vstack([model.y[index] for model in y_models])
+            for index in range(len(joined.n_y))]
+
+        # Common runtime dependency; a fresh cosmo object will be created
+        # after the non-trivial metadata has been combined.
+        joined.hiclassy = first.hiclassy
+        joined.cosmo = None
+
+        # Merge parameter definitions. Only prior bounds may differ.
+        param_reducers = {}
+        for parameter in first.params:
+            param_reducers[(parameter, 'prior', 'min')] = min
+            param_reducers[(parameter, 'prior', 'max')] = max
+        joined.params = ClassSpectra._join_dicts(
+            [model.params for model in y_models],
+            reducers=param_reducers,
+            label='ClassSpectra params')
+
+        # Merge model arguments. z_max_pk controls only the calculation range;
+        # all physical and precision arguments must match.
+        joined.args = ClassSpectra._join_dicts(
+            [model.args for model in y_models],
+            reducers={('z_max_pk',): max},
+            optional_paths=(('z_max_pk',),),
+            label='ClassSpectra args')
+
+        joined.class_params = (
+            copy.deepcopy(joined.args)
+            | {parameter: None for parameter in joined.x_names})
+
+        # Merge reference CLASS parameters. z_max_pk is a calculation bound;
+        # every other cosmological and precision setting must match.
+        joined.ref_params = ClassSpectra._join_dicts(
+            [model.ref_params for model in y_models],
+            reducers={('z_max_pk',): max},
+            optional_paths=(('z_max_pk',),),
+            label='ClassSpectra ref_params')
+
+        if any(spectrum.is_pk for spectrum in joined.spectra):
+            joined.ref_params['z_max_pk'] = joined._required_z_max(
+                joined._get_z_max(),
+                configured_limit=joined.ref_params.get('z_max_pk', 0.1))
+
+        joined.z_array, joined.y_ref = ClassSpectra._join_references(
+            y_models, joined.ref_params)
+        joined.cosmo = (
+            None if joined.hiclassy is None else joined.hiclassy.HiClass())
+
+        return joined
+
+    def _required_z_max(self, z, configured_limit=None):
+        """Plan coverage from this request, without inheriting earlier rows."""
+        limit = (self.args.get('z_max_pk', 0.1)
+                 if configured_limit is None else configured_limit)
+        stencil_max = z
+        if any(sp.name in ('fk_m', 'fk_cb', 'fk_weyl') for sp in self.spectra):
+            step = GrowthRate.derivative_step
+            stencil_max = z + (2 * step if z < step else step)
+        return max(0.1, limit, stencil_max)
+
+    def _restrict_reference_grid(self, cosmo, z_max):
+        """Store a common output grid, excluding derivative-only coverage."""
+        common_z = None
+        for index, sp in enumerate(self.spectra):
+            if not sp.is_pk:
+                continue
+            native_z = np.asarray(sp.z_array)
+            keep = native_z <= z_max
+            output_z = native_z[keep]
+            table = self.y_ref[index][..., keep]
+            if not output_z.size or output_z[-1] < z_max:
+                output_z = np.append(output_z, z_max)
+                endpoint = np.asarray(sp.get(cosmo, z=z_max))[None, :, None]
+                table = np.concatenate((table, endpoint), axis=-1)
+            if common_z is not None and not np.array_equal(common_z, output_z):
+                raise ValueError(
+                    'Reference spectra must share a redshift grid')
+            common_z = output_z
+            sp.z_array = output_z.copy()
+            self.y_ref[index] = table
 
     def _get_z_max(self):
         z_max = 0.1
@@ -639,6 +1014,44 @@ class ClassSpectra(YModel):
         self.y_headers = self.spectra.get_headers()
         return self.y_headers
 
+    def _validate_reference_tables(self):
+        """
+        Check normalized reference tables, including references from FITS.
+        """
+        normalized = [(i, sp) for i, sp in enumerate(self.spectra)
+                      if sp.ratio and sp.is_pk]
+        if not normalized:
+            return
+        grid = np.asarray(self.z_array, dtype=float)
+        if (grid.ndim != 1 or grid.size < 4
+                or not np.all(np.isfinite(grid))
+                or np.any(np.diff(grid) <= 0)):
+            raise ValueError('Reference redshift grid must contain at least '
+                             'four finite, strictly increasing values')
+        for index, sp in normalized:
+            table = np.asarray(self.y_ref[index])
+            if table.shape != (1, sp.get_n_vec(), len(grid)):
+                raise ValueError(f'Reference table for {sp.name} does not '
+                                 'match its spectrum and redshift grid')
+            if not np.all(np.isfinite(table)):
+                raise ValueError(f'Reference table for {sp.name} contains '
+                                 'nonfinite values; regenerate the reference')
+
+    def _reference_at_z(self, index, z):
+        """Interpolate normalization only within the stored reference range."""
+        sp = self.spectra[index]
+        grid = np.asarray(self.z_array)
+        requested = np.asarray(z)
+        if (not np.all(np.isfinite(requested))
+                or np.any(requested < grid[0])
+                or np.any(requested > grid[-1])):
+            raise ValueError(
+                f'Reference for {sp.name} covers z=[{grid[0]}, {grid[-1]}], '
+                f'but z={z} was requested; regenerate the reference with '
+                'sufficient redshift coverage')
+        spline = interp.make_splrep(grid, self.y_ref[index].T, s=0)
+        return spline(z, extrapolate=False).T
+
     def evaluate(self, x, idx, **kwargs):
         """
         Arguments:
@@ -649,6 +1062,10 @@ class ClassSpectra(YModel):
 
         """
 
+        if self.hiclassy is None or self.cosmo is None:
+            raise RuntimeError(
+                'hiclassy is required to evaluate ClassSpectra outputs.')
+
         # Update parameter dictionary
         for npar, par in enumerate(self.x_names):
             self.class_params[par] = x[npar]
@@ -656,13 +1073,19 @@ class ClassSpectra(YModel):
         # Update z_max_pk if needed and get z
         z = 0
         if any([sp.is_pk for sp in self.spectra]):
-            self.class_params['z_max_pk'] = 0.1
-            try:
-                self.class_params['z_max_pk'] = max(
-                    self.class_params['z_pk'], self.class_params['z_max_pk'])
-                z = self.class_params['z_pk']
-            except KeyError:
-                z = 0.
+            z = self.class_params.get('z_pk', 0.)
+            self.class_params['z_max_pk'] = self._required_z_max(z)
+
+        # Check normalization before running CLASS or changing a stored row.
+        denominators = {}
+        for nsp, sp in enumerate(self.spectra):
+            if sp.ratio:
+                den = (self._reference_at_z(nsp, z) if sp.is_pk
+                       else self.y_ref[nsp])
+                if not np.all(np.isfinite(den)) or np.any(den == 0):
+                    raise ValueError(f'Reference normalization for {sp.name} '
+                                     f'is zero or nonfinite at z={z}')
+                denominators[nsp] = den
 
         try:
             # Compute class
@@ -671,22 +1094,16 @@ class ClassSpectra(YModel):
 
             y = [sp.get(self.cosmo, z=z)[np.newaxis] for sp in self.spectra]
 
-        except self.classy.CosmoComputationError:
+        except self.hiclassy.CosmoComputationError:
             # Fill with nans if error
             y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
-        except self.classy.CosmoSevereError:
+        except self.hiclassy.CosmoSevereError:
             # Fill with nans if error
             y = [np.full((n_y,), np.nan)[np.newaxis] for n_y in self.n_y]
 
         # Take the ratio
-        for nsp, sp in enumerate(self.spectra):
-            if sp.ratio:
-                # Get y_ref at the correct z
-                if sp.is_pk:
-                    den = interp.make_splrep(self.z_array, self.y_ref[nsp].T, s=0)(z).T
-                else:
-                    den = self.y_ref[nsp]
-                y[nsp] = y[nsp]/den
+        for nsp, den in denominators.items():
+            y[nsp] = y[nsp]/den
 
         # Store in self
         for ny in range(len(self.n_y)):
@@ -706,7 +1123,6 @@ class ClassSpectra(YModel):
             io.info('Saving reference spectra to {}'.format(path))
 
         fits = io.FitsFile(path)
-
 
         is_pk = False
         for nsp, sp in enumerate(self.spectra):
@@ -731,7 +1147,7 @@ class ClassSpectra(YModel):
                     data=self.ell_ranges[nsp],
                     header=None,
                 )
-        
+
         if is_pk:
             # Write z_array
             fits.write(
@@ -739,7 +1155,7 @@ class ClassSpectra(YModel):
                 data=self.z_array,
                 header=None,
             )
-        
+
         return
 
     def load(self, fname, root=None, verbose=False):
@@ -764,25 +1180,29 @@ class ClassSpectra(YModel):
             self.y_ref.append(fits.get_data('ref_{}'.format(sp.name)))
             if sp.is_pk:
                 # Read k_range
-                self.k_ranges.append(fits.get_data('k_range_{}'.format(sp.name)))
+                self.k_ranges.append(
+                    fits.get_data('k_range_{}'.format(sp.name)))
                 self.ell_ranges.append(None)
                 is_pk = True
             elif sp.is_cl:
                 # Read ell_range
                 self.k_ranges.append(None)
-                self.ell_ranges.append(fits.get_data('ell_range_{}'.format(sp.name)))
-        
+                self.ell_ranges.append(
+                    fits.get_data('ell_range_{}'.format(sp.name)))
+
         if is_pk:
             # read z_array
             self.z_array = fits.get_data('z_array')
 
+        self._validate_reference_tables()
         return
 
-    def plot(self, emu, data, path=None):
+    def plot(self, emu, data, max_data=1e4, path=None):
         """
         Plot single spectrum. Arguments:
         - emu (emu_like.FFNNEmu object);
         - data (src.emu_like.datasets.Dataset object);
+        - max_data (float, default: 1e4): maximum number of samples to plot;
         - path (str, default:None): path where to save the plots.
         """
 
@@ -791,17 +1211,21 @@ class ClassSpectra(YModel):
 
         def get_diff(emu, x, y):
             y_emu = get_y(emu, x)
-            diff =  y_emu/y-1
+            diff = y_emu/y-1
             return diff
 
         def get_idx_max_diff(diff):
             idx = np.argmax(np.mean(diff**2., axis=1))
             return idx
 
-        def get_ref(emu, data, idx_max):
+        def get_ref(emu, x, idx_max):
             if emu.y_model.spectra[0].is_pk:
-                z = data.x[idx_max, 0]
-                ref = interp.make_splrep(emu.y_model.z_array, emu.y_model.y_ref[0][0].T, s=0)(z)
+                if 'z_pk' in emu.y_model.x_names:
+                    z_index = emu.y_model.x_names.index('z_pk')
+                    z = x[idx_max, z_index]
+                else:
+                    z = emu.y_model.args.get('z_pk', 0.)
+                ref = emu.y_model._reference_at_z(0, z)[0]
             else:
                 ref = emu.y_model.y_ref[0][0]
             return ref
@@ -809,12 +1233,14 @@ class ClassSpectra(YModel):
         # Spectrum name
         spectrum = self.spectra.names[0]
 
-        fig, ax = plt.subplots(nrows=5, ncols=1, figsize=(6., 20.), sharex=True, squeeze=False)
+        fig, ax = plt.subplots(
+            nrows=5, ncols=1, figsize=(6., 20.), sharex=True, squeeze=False)
 
         ax[0, 0].set_ylabel('rel. diff. [%] -- Training set')
         ax[1, 0].set_ylabel('rel. diff. [%] -- Validation set')
         ax[2, 0].set_ylabel('rel. diff. [%] -- Worst fit')
-        ax[3, 0].set_ylabel('{}/{}(ref) -- Worst fit'.format(spectrum, spectrum))
+        ax[3, 0].set_ylabel('{}/{}(ref) -- Worst fit'.format(
+            spectrum, spectrum))
         ax[4, 0].set_ylabel('{} -- Worst fit'.format(spectrum))
 
         # x variable
@@ -830,19 +1256,42 @@ class ClassSpectra(YModel):
             ax[-1, 0].set_yscale('linear')
 
         # Training set
-        x_train = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(data.x_train))
-        y_train = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(data.y_train))
-        ax[0, 0].plot(x, get_diff(emu, x_train, y_train).T*100., 'k-', alpha=0.1)
+        if data.x_train.shape[0] > max_data:
+            rng = np.random.default_rng()
+            mask = rng.choice(
+                data.x_train.shape[0], size=int(max_data), replace=False)
+            x_train = data.x_train[mask]
+            y_train = data.y_train[mask]
+        else:
+            x_train = data.x_train
+            y_train = data.y_train
+        x_train = emu.x_scaler.inverse_transform(
+            emu.x_pca.inverse_transform(x_train))
+        y_train = emu.y_scaler.inverse_transform(
+            emu.y_pca.inverse_transform(y_train))
+        ax[0, 0].plot(x, get_diff(
+            emu, x_train, y_train).T*100., 'k-', alpha=0.1)
 
         # Validation set
-        x_test = emu.x_scaler.inverse_transform(emu.x_pca.inverse_transform(data.x_test))
-        y_test = emu.y_scaler.inverse_transform(emu.y_pca.inverse_transform(data.y_test))
+        if data.x_test.shape[0] > max_data:
+            rng = np.random.default_rng()
+            mask = rng.choice(
+                data.x_test.shape[0], size=int(max_data), replace=False)
+            x_test = data.x_test[mask]
+            y_test = data.y_test[mask]
+        else:
+            x_test = data.x_test
+            y_test = data.y_test
+        x_test = emu.x_scaler.inverse_transform(
+            emu.x_pca.inverse_transform(x_test))
+        y_test = emu.y_scaler.inverse_transform(
+            emu.y_pca.inverse_transform(y_test))
         ax[1, 0].plot(x, get_diff(emu, x_test, y_test).T*100., 'k-', alpha=0.1)
 
         diff = get_diff(emu, data.x, data.y)
         idx_max = get_idx_max_diff(diff)
         y_emu_max = get_y(emu, data.x)[idx_max]
-        ref_max = get_ref(emu, data, idx_max)
+        ref_max = get_ref(emu, data.x, idx_max)
 
         # Worst fit, rel diff
         ax[2, 0].plot(x, diff[idx_max]*100., 'k-')

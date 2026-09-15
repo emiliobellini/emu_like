@@ -5,16 +5,28 @@
 :Author: Emilio Bellini
 
 : Description: this module provides a list of classes for each
-spectrum that can be computed. It uses classy to get the spectra,
-the syntax and conventions are equivalent to those in Class. 
-Here we are assuming that a classy.Class() object has already
+spectrum that can be computed. It uses hiclassy to get the spectra,
+the syntax and conventions are equivalent to those in Class.
+Here we are assuming that a hiclassy.HiClass() object has already
 been initialised, and the output has been computed. This is done
 in src/emu_like/y_models.py.
 """
 
-import classy
+try:
+    import hiclassy  # type: ignore
+except ImportError:  # hiclassy is optional for dataset-based training
+    hiclassy = None  # type: ignore
+
+    class CosmoSevereError(Exception):
+        """
+        Placeholder raised when CLASS errors
+        are caught without hiclassy installed.
+        """
+        pass
+else:
+    CosmoSevereError = hiclassy.CosmoSevereError
+
 import numpy as np
-import scipy.interpolate as interp
 
 
 # ----------------- Generic Spectra ------------------------------------------#
@@ -24,7 +36,7 @@ class Spectra(object):
     This class acts as a container for all the spectra.
     It is useful to get common properties of the spectra,
     as well as to prepare the parameters that should be
-    passed to classy for a proper run.
+    passed to hiclassy for a proper run.
     """
 
     def __init__(self, dict_or_list):
@@ -34,12 +46,13 @@ class Spectra(object):
         - dict_or_list (dict or list): either nested dictionary
           of parameters for each spectrum, or a list of Spectrum objects.
         """
-        # Init classy
+        # Init hiclassy
         if isinstance(dict_or_list, dict):
-            self.list = [Spectrum.choose_one(sp, dict_or_list[sp]) for sp in dict_or_list]
+            self.list = [Spectrum.choose_one(sp, dict_or_list[sp])
+                         for sp in dict_or_list]
         elif isinstance(dict_or_list, list):
             self.list = dict_or_list
-        
+
         # List of names of the spectra
         self.names = self.get_names()
         return
@@ -264,7 +277,8 @@ class Pk(Spectrum):
     """
     Generic class for k-dependent power spectra (matter, cb, weyl).
 
-    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
+    NOTE: k is in h/Mpc. Matter power is in (Mpc/h)^3; Weyl uses
+    the historical h**3 normalization of physical rescaled power in 1/Mpc.
     """
 
     def __init__(self, name, params):
@@ -287,30 +301,38 @@ class Pk(Spectrum):
         self.hd_name = None
         return
 
-    def _get_2D_pk(self, cosmo, k_range, only_cb):
-        """
-        Here the k_range is expected to be in units of 1/Mpc
-        and pk is in units of Mpc^3.
-        """
+    @staticmethod
+    def _matter_pk_evaluator(cosmo, only_cb):
+        """Use total matter for cb only when non-cold matter is absent.
 
-        # Decide if non linear
-        if 'non_linear' in cosmo.pars:
-            nonlinear = True
-        else:
-            nonlinear = False
+        Inspect the computed density rather than swallowing CLASS errors:
+        an unavailable or invalid cb evaluation must otherwise propagate.
+        """
+        if only_cb and cosmo.Omega_nu != 0.:
+            return cosmo.pk_cb
+        return cosmo.pk
 
-        # Get array of pk
-        pk_array, k_array, z_array = cosmo.get_pk_and_k_and_z(
-            nonlinear=nonlinear,
-            only_clustering_species = only_cb,
+    def _get_2D_pk(self, cosmo, k_range, only_cb, evaluator=None):
+        """
+        Evaluate CLASS power on the native redshift grid at requested k.
+
+        k_range is in 1/Mpc; results have axes (k, z) and the evaluator
+        units (Mpc^3 for matter, 1/Mpc for Weyl). The native matter table
+        supplies only redshifts. The selected evaluator handles interpolation,
+        low-k extrapolation and the configured linear/nonlinear selection.
+        """
+        # A linear total-matter table is sufficient to obtain the time grid,
+        # including when no separate CDM+baryon spectrum is available.
+        _, _, z_array = cosmo.get_pk_and_k_and_z(
+            nonlinear=False,
+            only_clustering_species=False,
             h_units=False)
-
-        # Flip z_array (for the interpolation it has to be increasing)
         z_array = np.flip(z_array)
-        pk_array = np.flip(pk_array, axis=1)
 
-        # Evaluate pk at the requested range
-        pk = interp.make_splrep(k_array, pk_array, s=0)(k_range)
+        if evaluator is None:
+            evaluator = self._matter_pk_evaluator(cosmo, only_cb)
+        pk = np.array([[evaluator(k, z) for z in z_array]
+                       for k in k_range])
 
         return pk, z_array
 
@@ -379,7 +401,7 @@ class Cell(Spectrum):
         """
         Convenience method to get unlensed Cls.
         Arguments:
-        - cosmo: classy.Class() instance. We assume that
+        - cosmo: hiclassy.HiClass() instance. We assume that
           the output was previously computed;
         - cl_name (str): type of cl with the same syntax as Class.
         """
@@ -398,7 +420,7 @@ class Cell(Spectrum):
         """
         Convenience method to get lensed Cls.
         Arguments:
-        - cosmo: classy.Class() instance. We assume that
+        - cosmo: hiclassy.HiClass() instance. We assume that
           the output was previously computed;
         - cl_name (str): type of cl with the same syntax as Class.
         """
@@ -456,6 +478,8 @@ class GrowthRate(Pk):
     NOTE: k is in units of h/Mpc. f(k) is dimensionless.
     """
 
+    derivative_step = 1e-3
+
     def __init__(self, name, params):
         Pk.__init__(self, name, params)
         return
@@ -477,57 +501,55 @@ class GrowthRate(Pk):
         }
         return hd
 
-    def get(self, cosmo, z=None):
-        """
-        Get the growth rate of the desired spectrum.
-        This is the same for each spectrum, provided that
-        self.pk points to the write one (definition in __init__)
-        """
+    def _get_power_growth(self, cosmo, z):
+        """Differentiate power on one already computed CLASS run.
 
-        # Get array of pk
-        pk_array = self.pk.get(cosmo, z=None)
+        Use dz=1e-3 and second-order centered differences, switching to
+        forward/backward differences at the computed redshift boundaries.
+        In particular, native reference tables include their upper boundary.
+        """
+        _, _, native_z = cosmo.get_pk_and_k_and_z(
+            nonlinear=False, only_clustering_species=False, h_units=False)
+        native_z = np.flip(native_z)
+        redshifts = native_z if z is None else np.atleast_1d(z).astype(float)
+        if (redshifts.ndim != 1 or not redshifts.size
+                or not np.all(np.isfinite(redshifts))
+                or np.any(redshifts < native_z[0])
+                or np.any(redshifts > native_z[-1])):
+            raise ValueError(
+                'Growth redshifts must lie inside the CLASS table')
 
-        # If z is None return f(k, z)
+        step = self.derivative_step
+        samples = redshifts[:, None] + step * np.array([0., -1., 1.])
+        weights = np.tile([0., -0.5, 0.5], (len(redshifts), 1))
+        forward = redshifts - step < native_z[0]
+        backward = redshifts + step > native_z[-1]
+        samples[forward] = \
+            redshifts[forward, None] + step * np.array([0., 1., 2.])
+        weights[forward] = [-1.5, 2., -0.5]
+        samples[backward] = \
+            redshifts[backward, None] + step * np.array([0., -1., -2.])
+        weights[backward] = [1.5, -2., 0.5]
+        if samples.min() < native_z[0] or samples.max() > native_z[-1]:
+            raise ValueError(
+                'CLASS redshift coverage is too narrow for dz=1e-3')
+
+        # Reuse samples shared by multiple stencils. The power accessor keeps
+        # units, species fallback, and linear/nonlinear selection consistent.
+        unique_z, inverse = np.unique(samples, return_inverse=True)
+        values = np.column_stack([self.pk.get(cosmo, z=float(zi))
+                                  for zi in unique_z])
+        pk = values[:, inverse.ravel()].reshape(self.k_num, len(redshifts), 3)
+        dpkdz = np.sum((pk - pk[:, :, :1]) * weights, axis=-1) / step
+        fk = -0.5 * (1 + redshifts) * dpkdz / pk[:, :, 0]
         if z is None:
-            # Compute pk
-            pk = pk_array
-            # Compute derivative (d ln P / d ln z)
-            dpkdz = interp.make_splrep(
-                self.pk.z_array, pk_array.T, s=0).derivative()(self.pk.z_array).T
-            # Compute growth factor f
-            fk = -0.5 * (1+self.pk.z_array) * dpkdz/pk
-            # Store the z_array
-            self.z_array = self.pk.z_array
+            self.z_array = native_z
+            self.pk.z_array = native_z
+        return fk[:, 0] if z is not None and np.ndim(z) == 0 else fk
 
-        # Otherwise return f(k)
-        else:
-            # Compute pk
-            pk = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z)
-            # Compute derivative (d ln P / d ln z)
-            if True:
-                dpkdz = interp.make_splrep(
-                    self.pk.z_array, pk_array.T, s=0).derivative()(z)
-            # Here we keep also the manual derivative because the growth rate is noisy
-            # and we may want to check it is less noisy with this (for now they are equivalent)
-            else:
-                z_step = 0.1
-                if z - z_step >= 0.:
-                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    pk_m1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z-z_step)
-                    dpkdz = (pk_p1-pk_m1)/(2.*z_step)
-                elif z - z_step/10 >= 0.:
-                    z_step = z
-                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    pk_m1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z-z_step)
-                    dpkdz = (pk_p1-pk_m1)/(2.*z_step)
-                else:
-                    z_step /=10
-                    pk_p1 = interp.make_splrep(self.pk.z_array, pk_array.T, s=0)(z+z_step)
-                    dpkdz = (pk_p1-pk)/z_step
-            # Compute growth factor f
-            fk = -0.5 * (1+z) * dpkdz/pk
-
-        return fk
+    def get(self, cosmo, z=None):
+        """Use second-order differences of the HiClass power evaluator."""
+        return self._get_power_growth(cosmo, z)
 
 
 # ----------------- Pk -------------------------------------------------------#
@@ -607,10 +629,8 @@ class ColdBaryonPk(Pk):
 
         # Otherwise return P(k)
         else:
-            try:
-                pk = np.array([cosmo.pk_cb(k, z) for k in k_range])
-            except classy.CosmoSevereError:
-                pk = np.array([cosmo.pk(k, z) for k in k_range])
+            evaluator = self._matter_pk_evaluator(cosmo, only_cb=True)
+            pk = np.array([evaluator(k, z) for k in k_range])
 
         # The output is in units Mpc**3 and I want (Mpc/h)**3.
         pk *= cosmo.h()**3.
@@ -620,17 +640,21 @@ class ColdBaryonPk(Pk):
 class WeylPk(Pk):
     """
     Weyl power spectrum.
-    As in Class, we use the convention:
-    
+    For a single adiabatic initial condition, the physical convention is:
+
     Weyl_pk = matter_pk * ((phi+psi)/2./d_m)**2 * k**4
+
+    Here k is in 1/Mpc. HiClass constructs the general IC sum directly
+    from the potential sources and primordial auto/cross-spectra.
 
     The k**4 factor is just a convention. Since there is a factor
     k**2 in the Poisson equation this rescaled Weyl spectrum has
     a shape similar to the matter power spectrum.
 
-    NOTE: k is in units of h/Mpc. P(k) is in units of (Mpc/h)^3.
+    NOTE: k is in h/Mpc; values retain the legacy h**3 normalization
+    of the physical Weyl spectrum (1/Mpc).
 
-    TODO: this is ok at linear order. Beyond that I should check it.
+    Only linear Weyl power is currently supported by HiClass.
     """
 
     def __init__(self, name, params):
@@ -638,49 +662,32 @@ class WeylPk(Pk):
 
         # (list of str) list of spectra that Class should compute.
         # Use the same syntax of the Class output argument.
-        self.class_spectra = ['mPk', 'dTk']
+        self.class_spectra = ['mPk', 'wPk']
         # (str) name you want to appear in the header of the
         # file, see Pk.get_header
         self.hd_name = 'Weyl'
         return
 
+    def get_header(self):
+        """Describe the legacy Weyl normalization."""
+        header = super().get_header()
+        header['dimensions_Pk'] = 'h^3/Mpc'
+        return header
+
     def get(self, cosmo, z=None):
-        """
-        Return the correct spectrum sampled at k_range bins.
-        """
+        """Evaluate HiClass Weyl power with the legacy dataset normalization.
 
-        # convert k in units of 1/Mpc
+        k is in h/Mpc. Preserve h**3 times the physical 1/Mpc Weyl power;
+        this historical normalization is not a conversion to (Mpc/h)**3.
+        Nonlinear requests and unsupported low-k models propagate CLASS errors.
+        """
         k_range = self.k_range * cosmo.h()
-
-        # Decide if non linear
-        if 'non_linear' in cosmo.pars:
-            nonlinear = True
-        else:
-            nonlinear = False
-
-        # Get array of pk
-        pk_array, k_array, z_array = cosmo.get_Weyl_pk_and_k_and_z(
-            nonlinear=nonlinear,
-            h_units=False)
-
-        # Flip z_array (for the interpolation it has to be increasing)
-        z_array = np.flip(z_array)
-        pk_array = np.flip(pk_array, axis=1)
-
-        # Evaluate pk at the requested range
-        pk = interp.make_splrep(k_array, pk_array, s=0)(k_range)
-
-        # The output is in units Mpc**3 and I want (Mpc/h)**3.
-        pk *= cosmo.h()**3.
-
-        # Store the z_array
         if z is None:
-            self.z_array = z_array
-        # Or interpolate and get pk at the correct z
+            pk, self.z_array = self._get_2D_pk(
+                cosmo, k_range, only_cb=False, evaluator=cosmo.pk_weyl)
         else:
-            pk = interp.make_splrep(z_array, pk.T, s=0)(z)
-
-        return pk
+            pk = np.array([cosmo.pk_weyl(k, z) for k in k_range])
+        return pk * cosmo.h()**3
 
 
 class MatterGrowthRate(GrowthRate):
@@ -752,7 +759,7 @@ class WeylGrowthRate(GrowthRate):
 
         # (list of str) list of spectra that Class should compute.
         # Use the same syntax of the Class output argument.
-        self.class_spectra = ['mPk', 'dTk']
+        self.class_spectra = ['mPk', 'wPk']
         # (str) name you want to appear in the header of the
         # file, see Pk.get_header
         self.hd_name = 'Weyl'
@@ -767,7 +774,7 @@ class CellTT(Cell):
     """
     TT power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -798,7 +805,7 @@ class CellEE(Cell):
     """
     EE power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -955,7 +962,7 @@ class CellTTLensed(Cell):
     """
     TT lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -986,7 +993,7 @@ class CellEELensed(Cell):
     """
     EE lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1017,7 +1024,7 @@ class CellTELensed(Cell):
     """
     TE lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1048,7 +1055,7 @@ class CellBBLensed(Cell):
     """
     BB lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1079,7 +1086,7 @@ class CellppLensed(Cell):
     """
     Tp lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """
@@ -1110,7 +1117,7 @@ class CellTpLensed(Cell):
     """
     Tp lensed power spectrum.
     As in Class, we compute the dimensionless Cell using:
-    
+
     ell*(ell+1.)/2./pi * Cl
 
         """

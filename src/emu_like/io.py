@@ -7,9 +7,9 @@
 """
 
 import argparse
-import numpy as np
 import os
 import re
+import time
 import yaml
 from astropy.io import fits
 from collections import OrderedDict
@@ -49,13 +49,51 @@ def argument_parser():
         type=str,
         help='Parameters file (.yaml)')
     sample_parser.add_argument(
-        '--verbose', '-v',
-        help='Verbose (default: False)',
-        action='store_true')
-    sample_parser.add_argument(
         '--resume', '-r',
         help='Resume from a previous run.',
         action='store_true')
+    sample_parser.add_argument(
+        '--force', '-f',
+        help='Force sampling. If output folder exists resume sampling, '
+        'otherwise start from scratch.',
+        action='store_true')
+    sample_parser.add_argument(
+        '--num-workers', '-j',
+        type=int,
+        default=1,
+        help='Number of worker processes for sampling (default: 1).')
+    sample_parser.add_argument(
+        '--chunk-size', '-c',
+        type=int,
+        default=None,
+        help='Chunk size used to dispatch work to workers '
+        '(default: executor default).')
+    sample_parser.add_argument(
+        '--verbose', '-v',
+        help='Verbose (default: False)',
+        action='store_true')
+
+    sample_parser.add_argument(
+        '--start-row',
+        type=int)
+    sample_parser.add_argument(
+        '--stop-row',
+        type=int,
+        help='Exclusive stop row (zero-based).')
+    sample_parser.add_argument(
+        '--prepare-only',
+        action='store_true',
+        help='Save inputs and reference data without evaluating rows.')
+    sample_parser.add_argument(
+        '--merge-ranges',
+        nargs='+',
+        metavar='FITS',
+        help='Merge range files in listed order; last overlap wins. '
+        'Stop legacy writers first. Deletes merged files.')
+    sample_parser.add_argument(
+        '--keep-ranges',
+        action='store_true',
+        help='Keep range checkpoints after merging.')
 
     # Train arguments
     train_parser.add_argument(
@@ -63,23 +101,37 @@ def argument_parser():
         type=str,
         help='Parameters file (.yaml)')
     train_parser.add_argument(
+        '--resume-strict', '-r',
+        action='store_true',
+        help='Resume using the stored optimization problem. Only runtime '
+             'settings and the number of epochs may change.')
+    train_parser.add_argument(
+        '--resume-warm', '-w',
+        action='store_true',
+        help='Initialize from stored model weights while using the datasets, '
+             'preprocessing, loss, and training policy from PARAMS_FILE.')
+    train_parser.add_argument(
+        '--force', '-f',
+        help='If the output folder is not empty, resume using the selected '
+             'resume mode; otherwise start a new training. Requires either '
+             '--resume-strict or --resume-warm.',
+        action='store_true')
+    train_parser.add_argument(
+        '--epochs', '-e',
+        type=int,
+        default=None,
+        help='Number of epochs to run in this invocation. If omitted, use '
+             'the value selected by the resume mode.')
+    train_parser.add_argument(
+        '--timeout', '-t',
+        type=float,
+        default=None,
+        help='Timeout for training. If omitted, use the value selected '
+             'by the resume mode.')
+    train_parser.add_argument(
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')
-    train_parser.add_argument(
-        '--resume', '-r',
-        help='Resume from a previous run.',
-        action='store_true')
-    train_parser.add_argument(
-        '--additional_epochs', '-e',
-        type=int,
-        default=0,
-        help='Number of additional epochs (int)')
-    train_parser.add_argument(
-        '--learning_rate', '-lr',
-        type=float,
-        default=1.e-3,
-        help='New learning rate (float)')
 
     # MCMC arguments
     mcmc_parser.add_argument(
@@ -91,7 +143,7 @@ def argument_parser():
         help='Verbose (default: False)',
         action='store_true')
 
-    # Sample arguments
+    # Export arguments
     export_parser.add_argument(
         '--input', '-i',
         type=str,
@@ -101,11 +153,35 @@ def argument_parser():
         type=str,
         help='Output folder')
     export_parser.add_argument(
+        '--force', '-f',
+        help='Force export. If output exists override it.',
+        action='store_true')
+    export_parser.add_argument(
         '--verbose', '-v',
         help='Verbose (default: False)',
         action='store_true')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    # Cross-argument checks - Train mode
+    if args.mode == 'train':
+        if args.resume_strict and args.resume_warm:
+            parser.error(
+                '--resume-strict and --resume-warm cannot be used together.')
+        if args.force and not (args.resume_strict or args.resume_warm):
+            parser.error(
+                '--force requires either --resume-strict or --resume-warm.')
+        if args.epochs is not None and args.epochs <= 0:
+            parser.error('--epochs must be a positive integer.')
+
+    # Cross-argument checks - Export mode
+    if args.mode == 'export':
+        if args.input is None:
+            parser.error('--input is required for export mode.')
+        if args.output is None:
+            parser.error('--output is required for export mode.')
+
+    return args
 
 
 # ------------------- Folder -------------------------------------------------#
@@ -266,6 +342,69 @@ class Folder(object):
         path = os.path.join(self.path, subpath)
         return path
 
+    def is_sample_folder(self):
+        """
+        Check if a folder is a sample folder.
+
+        Return:
+            - True if folder is a sample folder, False otherwise
+        """
+
+        if not self.exists:
+            return False
+        if self.list_subfolders() != []:
+            return False
+
+        yaml_files = self.list_files(patterns='.+yaml')
+        fits_files = self.list_files(patterns='.+fits')
+
+        if len(yaml_files) == 0 or len(fits_files) == 0:
+            return False
+
+        yaml_files = [os.path.splitext(os.path.split(fn)[-1])[0]
+                      for fn in yaml_files]
+        fits_files = [os.path.splitext(os.path.split(fn)[-1])[0]
+                      for fn in fits_files]
+
+        yaml_files.sort()
+        fits_files.sort()
+
+        if yaml_files != fits_files:
+            return False
+
+        return True
+
+    def is_emulator_folder(self):
+        """
+        Check if a folder is an emulator folder.
+
+        Return:
+            - True if folder is an emulator folder, False otherwise
+        """
+
+        if not self.exists:
+            return False
+
+        subfolders = [os.path.split(fn)[-1] for fn in self.list_subfolders()]
+        files = [os.path.split(fn)[-1] for fn in self.list_files()]
+
+        required_folders = ['checkpoints']
+        required_files = [
+            'model.keras',
+            'params.yaml',
+            'data.fits',
+            'x_scaler.save',
+            'y_scaler.save',
+            'history_log.csv',
+            ]
+
+        if not all([x in subfolders for x in required_folders]):
+            return False
+        if not all([x in files for x in required_files]):
+            return False
+
+        return True
+
 
 # ------------------- Fits Files ---------------------------------------------#
 
@@ -286,10 +425,10 @@ class FitsFile(object):
 
     """
 
-    def __init__(self, fname=None, root=None):
+    def __init__(self, fname, root=None):
         # Define path
         if root is None:
-            self.path = fname
+            self.path = os.path.abspath(fname)
         else:
             self.path = os.path.abspath(os.path.join(root, fname))
         # Check existence
@@ -302,38 +441,45 @@ class FitsFile(object):
 
     def _flatten_dict(self, nested_dict, delimiter='__'):
         split_dict = {}
-        flat_dict = self._flatten_dict_recursive(nested_dict, delimiter=delimiter)
-        # In astropy, keys can not be longer than 8 characters. We then create a flat
-        # dict where both keys and values are values. This dictionary will have keys
-        # starting with two delimiters for the keys of the previous step dictionary,
-        # and keys starting with one delimiter for the values of the previous dictionary.
-        # To fix the correspondence each key ends with a different integer,
+        flat_dict = self._flatten_dict_recursive(
+            nested_dict, delimiter=delimiter)
+        # In astropy, keys can not be longer than 8 characters. We then create
+        # a flat dict where both keys and values are values. This dictionary
+        # will have keys starting with two delimiters for the keys of the
+        # previous step dictionary, and keys starting with one delimiter for
+        # the values of the previous dictionary. To fix the correspondence each
+        # key ends with a different integer,
         for nkey, (key, val) in enumerate(flat_dict.items()):
             split_dict['{}{}{}'.format(delimiter, delimiter, nkey)] = key
             split_dict['{}{}'.format(delimiter, nkey)] = val
         return split_dict
 
-    def _flatten_dict_recursive(self, nested_dict, parent_key='', delimiter='__'):
+    def _flatten_dict_recursive(
+            self, nested_dict, parent_key='', delimiter='__'):
         """Flatten a nested dictionary, preserving key order."""
         items = []
         for key, value in nested_dict.items():
             new_key = f"{parent_key}{delimiter}{key}" if parent_key else key
             if isinstance(value, dict):
-                items.extend(self._flatten_dict_recursive(value, new_key, delimiter).items())
+                items.extend(self._flatten_dict_recursive(
+                    value, new_key, delimiter).items())
             else:
                 items.append((new_key, value))
         return OrderedDict(items)
 
     def _unflatten_dict(self, flat_dict, delimiter='__'):
         current_dict = {}
-        # We first fix the correspondence between keys and values to get a list of
-        # flattened keys and values (si discussion in _flatten_dict above).
+        # We first fix the correspondence between keys and values to get a list
+        # of flattened keys and values (si discussion in _flatten_dict above).
         for key_flat in flat_dict.keys():
             if key_flat.startswith('{}{}'.format(delimiter, delimiter)):
                 key = flat_dict[key_flat]
                 val = flat_dict[key_flat[len(delimiter):]]
                 current_dict[key] = val
-        """Reconstruct a nested dictionary from flattened keys, preserving order."""
+        """
+        Reconstruct a nested dictionary from flattened keys,
+        preserving order.
+        """
         result = OrderedDict()
         for key, value in current_dict.items():
             parts = key.split(delimiter)
@@ -390,7 +536,8 @@ class FitsFile(object):
                     if isinstance(val2, str):
                         current_dict[key][nval2] = self._floatify(val2)
                     elif isinstance(val2, list):
-                        current_dict[key][nval2] = [self._floatify(x) for x in val2]
+                        current_dict[key][nval2] = [self._floatify(x)
+                                                    for x in val2]
                     else:
                         current_dict[key][nval2] = val2
         return current_dict
@@ -436,15 +583,17 @@ class FitsFile(object):
             with fits.open(self.path, mode='append') as hdul:
                 hdul.append(fits.ImageHDU(data, name=name, header=header))
         if verbose:
-            print_level(1, 'Appended {} to {}'.format(name.upper(), os.path.relpath(self.path)))
+            print_level(1, 'Appended {} to {}'.format(
+                'PRIMARY' if name is None else name.upper(),
+                os.path.relpath(self.path)))
         return
 
-    def update(self, name=None, data=None, header=None):
+    def update(self, name, data=None, header=None):
         """
         Update an HDU of a fits file. The HDU should already
         exists (otherwise use the .write method).
         Arguments:
-        - name (str, default: None): name of the HDU;
+        - name (str): name of the HDU;
         - data (array, default: None): data to be updated;
         - header (dict or fits.Header): header to be updated.
           If the input is a dictionary, it is manually
@@ -457,7 +606,8 @@ class FitsFile(object):
             header = self._delistify(header)
             header = fits.Header(header)
         with fits.open(self.path, mode='update') as hdul:
-            hdul[name].data = data
+            if data is not None:
+                hdul[name].data = data
             if header is not None:
                 hdul[name].header = header
         return
@@ -499,6 +649,16 @@ class FitsFile(object):
         with fits.open(self.path) as fn:
             return fn[name].data
 
+    def get_keys(self):
+        """
+        Return the list of HDU names stored in the fits file.
+        Return:
+        - list of HDU names.
+        """
+        with fits.open(self.path) as fn:
+            names = [hdu.name for hdu in fn]
+            return names
+
 
 # ------------------- Yaml Files ---------------------------------------------#
 
@@ -508,9 +668,18 @@ class YamlFile(object):
     """
 
     def __init__(self, fname=None, root=None):
+        # Defaults
+        self.default_name = 'params.yaml'
+        self.default_header = (
+            '# This is an automatically generated file. Do not modify it!\n'
+            '# It is used to resume training instead of the input one.\n\n')
         # Define path
-        if root is None:
-            self.path = fname
+        if fname is None and root is None:
+            self.path = os.path.abspath(self.default_name)
+        elif root is None:
+            self.path = os.path.abspath(fname)
+        elif fname is None:
+            self.path = os.path.abspath(os.path.join(root, self.default_name))
         else:
             self.path = os.path.abspath(os.path.join(root, fname))
         # Check existence
@@ -519,11 +688,6 @@ class YamlFile(object):
         is_yaml = self.path.endswith('.yaml')
         if not is_yaml:
             raise Exception('Expected .yaml file, found {}'.format(self.path))
-        # Defaults
-        self.default_name = 'params.yaml'
-        self.default_header = (
-            '# This is an automatically generated file. Do not modify it!\n'
-            '# It is used to resume training instead of the input one.\n\n')
         return
 
     def __setitem__(self, item, value):
@@ -560,14 +724,16 @@ class YamlFile(object):
 
         if not self.exists:
             raise FileNotFoundError(
-                'The file you want to read ({}) does not exists!'.format(self.path))
+                'The file you want to read ({}) does not exists!'.format(
+                    self.path))
 
         with open(self.path) as file:
             self.content = yaml.safe_load(file)
-        
+
         return self
 
-    def write(self, fname=None, root=None, header=None, overwrite=False, verbose=False):
+    def write(self, fname=None, root=None, header=None, overwrite=False,
+              skip_if_exists=False, verbose=False):
         """
         Save parameter to path, with the header if specified.
         Arguments:
@@ -575,20 +741,33 @@ class YamlFile(object):
         - root (str, default: None): root where to save the file;
         - header (str, optional): string to be prepended to destination file;
         - overwrite (bool, default: False): overwrite already existing file;
+        - skip_if_exists (bool, default: False): skip writing if file
+          already exists;
         - verbose (bool, default: False): verbosity.
         """
-
         # Define path
-        if root is None:
-            self.path = fname
+        if fname is None and root is None:
+            self.path = os.path.abspath(self.default_name)
+        elif root is None:
+            self.path = os.path.abspath(fname)
+        elif fname is None:
+            self.path = os.path.abspath(os.path.join(root, self.default_name))
         else:
             self.path = os.path.abspath(os.path.join(root, fname))
         # Check existence
         self.exists = os.path.isfile(self.path)
 
         if self.exists and not overwrite:
+            if skip_if_exists:
+                if verbose:
+                    print_level(
+                        1,
+                        'File {} already exists, skipping writing.'.format(
+                            self.path))
+                return
             raise FileNotFoundError(
-                'The file you want to read ({}) already exists!'.format(self.path))
+                'The file you want to read ({}) already exists!'.format(
+                    self.path))
 
         if header is None:
             header = self.default_header
@@ -607,9 +786,66 @@ class YamlFile(object):
             print_level(1, 'Saved parameters at: {}'.format(self.path))
         return
 
+    def nested_differences(self, reference, ignored_paths=()):
+        """Return differences between this YAML file and another.
+
+        Paths are tuples such as ('emulator', 'args', 'epochs').
+        Ignoring a path ignores that value or entire subtree.
+        """
+        if isinstance(reference, YamlFile):
+            reference = reference.content
+
+        ignored_paths = set(ignored_paths)
+        missing = object()
+
+        def compare(current, reference, path=()):
+            if path in ignored_paths:
+                return []
+
+            if isinstance(current, dict) and isinstance(reference, dict):
+                differences = []
+
+                # Preserve a predictable key order.
+                keys = dict.fromkeys(list(current) + list(reference))
+
+                for key in keys:
+                    differences.extend(compare(
+                        current.get(key, missing),
+                        reference.get(key, missing),
+                        path + (key,),
+                    ))
+
+                return differences
+
+            if current != reference:
+                return [(path, current, reference)]
+
+            return []
+
+        return compare(self.content, reference)
 
 
 # ------------------- Scripts ------------------------------------------------#
+
+def timeit(func):
+    def wrapper_function(*args, **kwargs):
+        try:
+            dotimeit = kwargs['timeit']
+        except KeyError:
+            dotimeit = False
+        try:
+            verbose = kwargs['verbose']
+        except KeyError:
+            verbose = True
+        if verbose and dotimeit:
+            start = time.time()
+        result = func(*args,  **kwargs)
+        if verbose and dotimeit:
+            print_level(1, '{} executed in {} seconds'.format(
+                func, time.time()-start))
+        return result
+    return wrapper_function
+
 
 def write_red(msg):
     return '\033[1;31m{}\033[00m'.format(msg)

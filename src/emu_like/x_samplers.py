@@ -290,7 +290,7 @@ class RandomNormalSampler(XSampler):
 
         means = [self.params[x]['prior']['loc'] for x in self.x_names]
         std = [self.params[x]['prior']['scale'] for x in self.x_names]
- 
+
         self.x = np.random.normal(
             means, std, size=(self.n_samples, len(means)))
         return self.x

@@ -6,16 +6,58 @@
 
 """
 
+import copy
 import numpy as np
+from scipy.interpolate import make_interp_spline
 import os
 import re
+from concurrent.futures import ProcessPoolExecutor
 import sklearn.model_selection as skl_ms
+import time
 import tqdm
 from . import io as io
 from . import scalers as sc
 from . import pca
 from .x_samplers import XSampler
 from .y_models import YModel
+from .range_sampling import writer_lock
+
+
+_worker_y_model = None
+
+
+def _init_y_model_worker(
+        y_name,
+        params,
+        outputs,
+        n_samples,
+        y_args,
+        load_path,
+        verbose):
+    """
+    Initializer for worker processes. Instantiates a YModel and optionally
+    loads auxiliary data (e.g., reference spectra).
+    """
+    global _worker_y_model
+    _worker_y_model = YModel.choose_one(
+        y_name,
+        params,
+        outputs,
+        n_samples,
+        verbose=verbose,
+        **(y_args or {}))
+    if load_path is not None:
+        _worker_y_model.load(fname=load_path, verbose=verbose)
+
+
+def _evaluate_one_sample(task):
+    """
+    Evaluate a single sample inside a worker process.
+    """
+    idx, x = task
+    if _worker_y_model is None:
+        raise RuntimeError('Worker model not initialized.')
+    return idx, _worker_y_model.evaluate(x, idx)
 
 
 class Dataset(object):
@@ -64,7 +106,12 @@ class Dataset(object):
             y_scaler=None,
             x_pca=None,
             y_pca=None,
-            path=None
+            path=None,
+            y_header=None,
+            x_sampler=None,
+            non_finites_x=None,
+            x_key=None,
+            settings=None
             ):
         """
         Placeholders.
@@ -88,16 +135,21 @@ class Dataset(object):
         # Labels
         self.x_names = x_names  # List of names of x data
         self.y_names = y_names  # List of names of y data
-        self.x_key = None # Name of the x image in fits file
+        self.x_key = x_key  # Name of the x image in fits file
+        self.y_header = y_header  # Header for y file
+
+        # Optional helpers and diagnostics
+        self.x_sampler = x_sampler
+        self.non_finites_x = non_finites_x
 
         # y_model
         self.y_model = y_model
 
-        # Path
-        self.path = path
+        # Source paths
+        self.path = self._normalize_paths(path)
 
         # Container for all the settings
-        self.settings = None
+        self.settings = settings
 
         # Placeholders
         self.x_scaler = x_scaler
@@ -107,7 +159,67 @@ class Dataset(object):
 
         self.x_ranges = x_ranges
 
+        if self.x is not None and self.y is not None:
+            self._set_and_validate_dimensions(
+                n_samples=n_samples, n_x=n_x, n_y=n_y)
+
         return
+
+    @staticmethod
+    def _normalize_paths(path):
+        """Return dataset source paths using a single representation."""
+        if path is None:
+            return []
+        if isinstance(path, (str, os.PathLike)):
+            return [os.fspath(path)]
+        return [os.fspath(source_path) for source_path in path]
+
+    def _clear_derived_state(self):
+        """Clear splits and transformations derived from the raw arrays."""
+        self.x_train = None
+        self.y_train = None
+        self.x_test = None
+        self.y_test = None
+        self.x_scaler = None
+        self.y_scaler = None
+        self.x_pca = None
+        self.y_pca = None
+
+    def _set_and_validate_dimensions(
+            self,
+            n_samples=None,
+            n_x=None,
+            n_y=None):
+        """Validate x/y shapes and synchronize cached dimensions."""
+        if self.x.ndim != 2:
+            raise ValueError(
+                'Dataset x must be two-dimensional, got shape {}'
+                ''.format(self.x.shape))
+        if self.y.ndim != 2:
+            raise ValueError(
+                'Dataset y must be two-dimensional, got shape {}'
+                ''.format(self.y.shape))
+        if self.x.shape[0] != self.y.shape[0]:
+            raise ValueError(
+                'Dataset x and y must have the same number of rows, got {} '
+                'and {}'.format(self.x.shape[0], self.y.shape[0]))
+
+        inferred = {
+            'n_samples': self.x.shape[0],
+            'n_x': self.x.shape[1],
+            'n_y': self.y.shape[1],
+        }
+        provided = {
+            'n_samples': n_samples,
+            'n_x': n_x,
+            'n_y': n_y,
+        }
+        for attribute, value in provided.items():
+            if value is not None and value != inferred[attribute]:
+                raise ValueError(
+                    '{}={} is inconsistent with the array dimension {}'
+                    ''.format(attribute, value, inferred[attribute]))
+            setattr(self, attribute, inferred[attribute])
 
     @staticmethod
     def _load_array(path):
@@ -118,11 +230,7 @@ class Dataset(object):
         - columns (default: None): slice object or list of
           column indices to be read.
         """
-        array = np.genfromtxt(path)
-        # Adjust array dimensions.
-        # If it has one feature I still want 1x2_samples
-        if array.ndim == 1:
-            array = array[:, np.newaxis]
+        array = np.genfromtxt(path, ndmin=2)
         return array
 
     @staticmethod
@@ -172,17 +280,19 @@ class Dataset(object):
 
     def slice(self, columns_x, columns_y, verbose=False):
         """
-        Given a Dataset select the columns wanted, both for
-        "x" and "y". It adjusts also the other attributes.
+        Select columns from a model-free Dataset and update its metadata.
+
         Arguments:
-        - columns_x (list of indices or slice object). Default: if "x"
-          and "y" data come from different files all columns. If "x" and
-          "y" are in the same file, all columns except the last one;
-        - columns_y (list of indices or slice object for each y file).
-          Default: if "x" and "y" data come from different files all
-          columns. If "x" and "y" are in the same file, last column;
+        - columns_x: list of x-column indices or a slice object;
+        - columns_y: list of y-column indices or a slice object;
         - verbose (bool, default: False): verbosity.
         """
+
+        if self.x_sampler is not None or self.y_model is not None:
+            raise ValueError(
+                'Dataset.slice only supports model-free datasets; slicing '
+                'a native dataset would invalidate x_sampler or y_model '
+                'metadata')
 
         if verbose:
             io.print_level(
@@ -191,6 +301,8 @@ class Dataset(object):
                 1, 'Slicing y data with columns: {}.'.format(columns_y))
 
         def slice_list(lst, slicing):
+            if lst is None:
+                return None
             if isinstance(slicing, list):
                 return [lst[i] for i in slicing]
             elif isinstance(slicing, slice):
@@ -213,9 +325,15 @@ class Dataset(object):
         self.x_names = slice_list(self.x_names, columns_x)
         self.y_names = slice_list(self.y_names, columns_y)
 
-        # Adjust shapes
-        self.n_samples, self.n_x = self.x.shape
-        _, self.n_y = self.y.shape
+        # Metadata tied to individual columns
+        self.x_ranges = slice_list(self.x_ranges, columns_x)
+        if self.y_header is not None:
+            self.y_header = self.y_header.copy()
+            if 'y_names' in self.y_header:
+                self.y_header['y_names'] = self.y_names
+
+        self._set_and_validate_dimensions()
+        self._clear_derived_state()
 
         return self
 
@@ -223,8 +341,8 @@ class Dataset(object):
         """
         Remove from the dataset non finite samples (inf and nan).
         Arguments:
-        - store_non_finites (bool, default: False): store x's that
-          give non finite y in non_finites_x.
+        - store_non_finites (bool, default: False): store x rows containing
+          non-finite values or corresponding to non-finite y rows.
         - verbose (bool, default: False): verbosity.
         """
 
@@ -232,18 +350,34 @@ class Dataset(object):
             io.print_level(1, 'Removing non finite values from x and y.')
 
         # Finite indices
-        only_finites = np.all(np.isfinite(self.y), axis=1)
+        only_finites = (
+            np.all(np.isfinite(self.x), axis=1)
+            & np.all(np.isfinite(self.y), axis=1))
 
-        # Sore non finite elements
+        # Store non-finite elements
         if store_non_finites:
-            only_non_finites = np.array([not elem for elem in only_finites])
+            only_non_finites = np.logical_not(only_finites)
             self.non_finites_x = self.x[only_non_finites]
+        else:
+            self.non_finites_x = None
 
         self.x = self.x[only_finites]
         self.y = self.y[only_finites]
 
-        # Adjust n_samples
-        self.n_samples = self.x.shape[0]
+        # Adjust and validate dimensions.
+        self._set_and_validate_dimensions()
+
+        # Keep attached data containers synchronized.
+        if self.x_sampler is not None:
+            self.x_sampler.x = self.x
+            self.x_sampler.n_samples = self.n_samples
+        if self.y_model is not None:
+            self.y_model.y = [self.y]
+            self.y_model.n_samples = self.n_samples
+
+        # Existing splits and fitted transformations refer to the unfiltered
+        # rows and must be recomputed.
+        self._clear_derived_state()
 
         return self
 
@@ -278,21 +412,27 @@ class Dataset(object):
         if verbose:
             io.info('Loading dataset.')
 
+        if columns_x is not None or columns_y is not None:
+            raise ValueError(
+                'columns_x and columns_y are not supported by Dataset.load; '
+                'native dataset metadata must remain aligned with its '
+                'sampler and y_model')
+
         # Init fits file
         fits = io.FitsFile(path)
 
         # Load settings
         self.settings = fits.get_header(0, unflat_dict=True)
+        if self.settings is None:
+            raise ValueError(
+                'Dataset.load requires a native dataset with settings in '
+                'the primary FITS header; use Dataset.load_external for '
+                'files without settings')
+        self._clear_derived_state()
+        self.non_finites_x = None
 
         # Main path
-        self.path = path
-        # Store y name
-        self.name = name
-
-        if columns_x is None:
-            columns_x = slice(None)
-        if columns_y is None:
-            columns_y = slice(None)
+        self.path = self._normalize_paths(path)
 
         # Init x sampler
         x_sampler = XSampler.choose_one(
@@ -311,36 +451,89 @@ class Dataset(object):
         self.x_names = x_sampler.get_x_names()
         self.x_key = x_sampler.x_key
 
-        if self.settings is None:
-            self.x_ranges = [[m, M] for m, M in zip(self.x.min(axis=0), self.x.max(axis=0))]
-        else:
-            self.x_ranges = [[
-                self.settings['params'][name]['prior']['min'],
-                self.settings['params'][name]['prior']['max']] for name in self.x_names]
+        self.x_ranges = [[
+            self.settings['params'][name]['prior']['min'],
+            self.settings['params'][name]['prior']['max']]
+            for name in self.x_names]
+
+        # Select exactly one configured output before initializing y_model.
+        configured_outputs = self.settings['y_model']['outputs']
+        if name is None and isinstance(configured_outputs, dict):
+            if len(configured_outputs) != 1:
+                raise ValueError(
+                    'Dataset name is required when the file contains {} '
+                    'outputs: {}'.format(
+                        len(configured_outputs),
+                        list(configured_outputs.keys())))
+            name = next(iter(configured_outputs))
 
         # Init y_model
+        if isinstance(configured_outputs, dict):
+            dataset_settings = {
+                name: configured_outputs[name]}
+        else:
+            dataset_settings = configured_outputs
         y_model = YModel.choose_one(
             self.settings['y_model']['name'],
             self.settings['params'],
-            {name: self.settings['y_model']['outputs'][name]},
+            dataset_settings,
             self.n_samples,
             **self.settings['y_model']['args'],
             verbose=False)
-        
+
         # Load y_model
         y_model.load(
-            self.path,
+            path,
             verbose=False,
         )
 
-        # Load y data.
-        y_model.y = fits.get_data(name)
-        self.y = y_model.y
+        # Infer the conventional key used by single-output simple models.
+        if name is None:
+            if len(y_model.y_keys) != 1:
+                raise ValueError(
+                    'Dataset requires exactly one output, but y_model '
+                    'contains {}'.format(len(y_model.y_keys)))
+            name = y_model.y_keys[0]
+        elif name not in y_model.y_keys:
+            raise ValueError(
+                'Output {} is not available; choose from {}'
+                ''.format(name, y_model.y_keys))
+        self.name = name
+
+        # Load y data
+        self.y = fits.get_data(self.name)
+        y_model.y = [self.y]
 
         # Get remaining y attributes
-        self.n_y = y_model.get_n_y()
-        self.y_names = y_model.get_y_names()
-        self.y_headers = y_model.get_y_headers()
+        model_n_y = y_model.get_n_y()
+        if len(model_n_y) != 1:
+            raise ValueError(
+                'Dataset requires exactly one output, but y_model '
+                'contains {}'.format(len(model_n_y)))
+        self._set_and_validate_dimensions(
+            n_samples=self.n_samples,
+            n_x=self.n_x,
+            n_y=model_n_y[0])
+        model_y_names = y_model.y_names
+        if not model_y_names:
+            model_y_names = y_model.get_y_names()
+        if len(model_y_names) != 1:
+            raise ValueError(
+                'Dataset requires exactly one y_names entry, but y_model '
+                'contains {}'.format(len(model_y_names)))
+        if len(model_y_names[0]) != self.n_y:
+            raise ValueError(
+                'The y array has {} columns, but y_model provides {} names'
+                ''.format(self.n_y, len(model_y_names[0])))
+        self.y_names = list(model_y_names[0])
+        model_y_headers = y_model.y_headers
+        if not model_y_headers:
+            model_y_headers = y_model.get_y_headers()
+        if len(model_y_headers) != 1:
+            raise ValueError(
+                'Dataset requires exactly one y_header entry, but y_model '
+                'contains {}'.format(len(model_y_headers)))
+        self.y_header = model_y_headers[0].copy()
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -391,7 +584,7 @@ class Dataset(object):
         if os.path.isfile(path) and path_y is None:
             path_x = path
             path_y = path
-            self.path = path
+            self.path = self._normalize_paths(path)
             # Change default columns
             if columns_x is None:
                 columns_x = slice(None, -1)
@@ -401,7 +594,7 @@ class Dataset(object):
         elif os.path.isfile(path) and os.path.isfile(path_y):
             path_x = path
             path_y = path_y
-            self.path = [path, path_y]
+            self.path = self._normalize_paths([path, path_y])
             # Change default columns
             if columns_x is None:
                 columns_x = slice(None)
@@ -412,19 +605,33 @@ class Dataset(object):
                             'Dataset could not be loaded!')
 
         # Load data
-        self.x  = self._load_array(path_x)
+        self.x = self._load_array(path_x)
         self.y = self._load_array(path_y)
 
         # Get shapes
-        self.n_samples, self.n_x = self.x.shape
-        _, self.n_y = self.y.shape
+        self._set_and_validate_dimensions()
 
         # Try to infer the names
-        self.x_names = Dataset._try_to_load_names_array(path_x, n_names=self.n_y)
-        self.y_names = Dataset._try_to_load_names_array(path_y, n_names=self.n_y)
+        self.x_names = Dataset._try_to_load_names_array(
+            path_x, n_names=self.n_x)
+        self.y_names = Dataset._try_to_load_names_array(
+            path_y, n_names=self.n_y)
+        if self.x_names is None:
+            self.x_names = [
+                'x_{}'.format(index) for index in range(self.n_x)]
+        if self.y_names is None:
+            self.y_names = [
+                'y_{}'.format(index) for index in range(self.n_y)]
 
         # Slice data
         self.slice(columns_x, columns_y, verbose=verbose)
+
+        # External datasets have no declared priors, so store the range
+        # covered by their samples.
+        self.x_ranges = [[float(minimum), float(maximum)]
+                         for minimum, maximum in zip(
+                             np.min(self.x, axis=0),
+                             np.max(self.x, axis=0))]
 
         # Print info
         if verbose:
@@ -439,77 +646,84 @@ class Dataset(object):
     @staticmethod
     def join(datasets, verbose=False):
         """
-        Join a list of datasets into a unique one.
-        This defines the minimum number of attributes
-        required to use a dataset for tranining, i.e.
-        x, y, n_x, n_y, n_samples, x_names and y_names.
-        Before joining them it checks that n_x and n_y are
-        the same for each dataset.
+        Join compatible datasets into a new Dataset.
+
         Arguments:
         - datasets (list of Dataset): list of Dataset classes (already loaded);
         - verbose (bool, default: False): verbosity.
         """
+
+        if not datasets:
+            raise ValueError('At least one Dataset is required')
 
         if verbose:
             io.info('Joining datasets')
             for dataset in datasets:
                 io.print_level(1, '{}'.format(dataset.path))
 
-        data = Dataset()
+        first = datasets[0]
 
-        # Name
-        data.name = datasets[0]
+        # Attributes that must remain the same.
+        common_attributes = (
+            'name', 'n_x', 'n_y', 'x_names', 'y_names', 'x_key',
+            'y_header')
+        for attribute in common_attributes:
+            reference = getattr(first, attribute)
+            if not all(getattr(dataset, attribute) == reference
+                       for dataset in datasets[1:]):
+                raise ValueError(
+                    'Datasets can not be joined because {} differs'
+                    ''.format(attribute))
 
-        # n_x
-        if all(s.n_x == datasets[0].n_x for s in datasets):
-            data.n_x = datasets[0].n_x
+        # Attributes that are stacked, summed, or concatenated.
+        x = np.vstack([dataset.x for dataset in datasets])
+        y = np.vstack([dataset.y for dataset in datasets])
+        n_samples = sum(dataset.n_samples for dataset in datasets)
+        paths = [path for dataset in datasets for path in dataset.path]
+        stored_non_finites = [
+            dataset.non_finites_x for dataset in datasets
+            if dataset.non_finites_x is not None]
+        non_finites_x = (
+            np.vstack(stored_non_finites) if stored_non_finites else None)
+
+        # Attributes requiring a specific combination rule.
+        if all(dataset.x_ranges is not None for dataset in datasets):
+            x_ranges = [[
+                min(dataset.x_ranges[index][0] for dataset in datasets),
+                max(dataset.x_ranges[index][1] for dataset in datasets)]
+                for index in range(first.n_x)]
         else:
-            raise ValueError('Datasets can not be joined as they have '
-                             'different number of x variables')
-        
-        # n_y
-        if all(s.n_y == datasets[0].n_y for s in datasets):
-            data.n_y = datasets[0].n_y
-        else:
-            raise ValueError('Datasets can not be joined as they have '
-                             'different number of x variables')
+            x_ranges = None
+        y_models = [dataset.y_model for dataset in datasets]
+        try:
+            join_y_models = y_models[0].join
+        except AttributeError as error:
+            raise NotImplementedError(
+                'Joining is not implemented for this YModel type') from error
+        y_model = join_y_models(y_models)
+        if len(y_model.y) != 1 or not np.array_equal(y_model.y[0], y):
+            raise ValueError(
+                'Joined y_model data are inconsistent with Dataset.y')
+        y_model.y = [y]
 
-        # x array
-        total = tuple([s.x for s in datasets])
-        data.x = np.vstack(total)
-
-        # y array
-        total = tuple([s.y for s in datasets])
-        data.y = np.vstack(total)
-
-        # x and y names
-        data.x_names = datasets[0].x_names
-        data.y_names = datasets[0].y_names
-        data.x_key = datasets[0].x_key
-
-        # n_samples
-        data.n_samples = sum([s.n_samples for s in datasets])
-
-        # y_model.
-        # NOTE: we are assuming that all datsets are sharing the
-        # same y_model, which is taken from the first one.
-        data.y_model = datasets[0].y_model
-
-        data.x_ranges = []
-        for nname, _ in enumerate(data.x_names):
-            data.x_ranges.append(
-                [min([dat.x_ranges[nname][0] for dat in datasets]),
-                max([dat.x_ranges[nname][1] for dat in datasets])]
-            )
-
-        # Adjust params
-        for var in datasets[0].y_model.params:
-            mins = [dat.y_model.params[var]['prior']['min'] for dat in datasets]
-            maxs = [dat.y_model.params[var]['prior']['max'] for dat in datasets]
-            data.y_model.params[var]['prior']['min'] = min(mins)
-            data.y_model.params[var]['prior']['max'] = max(maxs)
-
-        return data
+        # Splits, transformations, x_sampler, and settings are intentionally
+        # reset: they describe individual source datasets, not the joined one.
+        return Dataset(
+            name=first.name,
+            x=x,
+            y=y,
+            n_x=first.n_x,
+            n_y=first.n_y,
+            n_samples=n_samples,
+            x_names=copy.deepcopy(first.x_names),
+            y_names=copy.deepcopy(first.y_names),
+            y_model=y_model,
+            x_ranges=x_ranges,
+            path=paths,
+            y_header=copy.deepcopy(first.y_header),
+            non_finites_x=non_finites_x,
+            x_key=first.x_key,
+        )
 
     def train_test_split(self, frac_train, seed, verbose=False):
         """
@@ -521,9 +735,6 @@ class Dataset(object):
         - seed (int): seed to randomly split train and test;
         - verbose (bool, default: False): verbosity.
 
-        NOTE: this method assumes that both settings and the fulle x array
-        are already saved into the folder. The x array is then used to
-        calculate the missing row of the y array.
         """
 
         if verbose:
@@ -535,6 +746,7 @@ class Dataset(object):
         split = skl_ms.train_test_split(self.x, self.y,
                                         train_size=frac_train,
                                         random_state=seed)
+        self._clear_derived_state()
         self.x_train, self.x_test, self.y_train, self.y_test = split
         return
 
@@ -569,34 +781,50 @@ class Dataset(object):
             io.print_level(1, 'Rescaled bounds:')
             mins = np.min(self.x_train, axis=0)
             maxs = np.max(self.x_train, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'x_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'x_train = [{}, {}]'.format(
+                    np.min(self.x_train), np.max(self.x_train)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'x_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
             mins = np.min(self.x_test, axis=0)
             maxs = np.max(self.x_test, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'x_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'x_test = [{}, {}]'.format(
+                    np.min(self.x_test), np.max(self.x_test)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'x_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
             mins = np.min(self.y_train, axis=0)
             maxs = np.max(self.y_train, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'y_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'y_train = [{}, {}]'.format(
+                    np.min(self.y_train), np.max(self.y_train)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'y_train_{} = [{}, {}]'.format(nx, min, maxs[nx]))
             mins = np.min(self.y_test, axis=0)
             maxs = np.max(self.y_test, axis=0)
-            for nx, min in enumerate(mins):
-                io.print_level(
-                    2, 'y_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
+            if len(mins) > 10:
+                io.print_level(2, 'y_test = [{}, {}]'.format(
+                    np.min(self.y_test), np.max(self.y_test)))
+            else:
+                for nx, min in enumerate(mins):
+                    io.print_level(
+                        2, 'y_test_{} = [{}, {}]'.format(nx, min, maxs[nx]))
         return
 
     def apply_pca(self, num_x_pca=None, num_y_pca=None, verbose=False):
         """
         Apply PCA to x and/or y of a dataset.
         Arguments:
-        - num_pca_x (int): number of modes to be retained
-          for x (if 0 or negative PCA is not applied);
-        - num_pca_y (int): number of modes to be retained
-          for y (if 0 or negative PCA is not applied);
+        - num_x_pca (int or None): number of x modes to retain. If None,
+          all available modes are retained;
+        - num_y_pca (int or None): number of y modes to retain. If None,
+          all available modes are retained;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that we already splitted
@@ -610,9 +838,11 @@ class Dataset(object):
 
         if verbose:
             if num_x_pca is not None:
-                io.info('Applying PCA on x. Number of modes retained {}.'.format(num_x_pca))
+                io.info('Applying PCA on x. Number of modes retained {}.'
+                        ''.format(num_x_pca))
             if num_y_pca is not None:
-                io.info('Applying PCA on y. Number of modes retained {}.'.format(num_y_pca))
+                io.info('Applying PCA on y. Number of modes retained {}.'
+                        ''.format(num_y_pca))
 
         # PCA x
         self.x_pca = pca.PCA(n_components=num_x_pca)
@@ -626,6 +856,276 @@ class Dataset(object):
         self.y_test = self.y_pca.transform(self.y_test)
 
         return
+
+
+class SobolevDataset(Dataset):
+    """Dataset pairing a power spectrum with its growth-rate constraint.
+
+    The primary target remains the ``pk_*`` array inherited as ``y``.  The
+    matching ``fk_*`` array is retained separately because it is a derivative
+    target, rather than an additional emulator output.  All names are inferred
+    from the primary power-spectrum name; for example, ``pk_m`` maps to
+    ``fk_m``, ``REF_PK_M``, and ``REF_FK_M``.
+    """
+
+    def __init__(self, *args, **kwargs):
+        # These attributes must exist before Dataset.load calls the overridden
+        # _clear_derived_state method.
+        self.y_growth = None
+        self.y_growth_train = None
+        self.y_growth_test = None
+        self.growth_scaler = None
+        self.growth_pca = None
+        self.growth_name = None
+        self.growth_y_names = None
+        self.reference_pk = None
+        self.reference_growth = None
+        self.redshift_grid = None
+        super().__init__(*args, **kwargs)
+
+    @staticmethod
+    def _associated_names(pk_name):
+        """Return FITS extension names associated with a ``pk_*`` target."""
+        if not isinstance(pk_name, str) or not pk_name.startswith('pk_'):
+            raise ValueError(
+                'SobolevDataset requires a primary name of the form "pk_*", '
+                'got {!r}'.format(pk_name))
+        suffix = pk_name[3:]
+        return {
+            'growth': 'fk_{}'.format(suffix),
+            'reference_pk': 'REF_PK_{}'.format(suffix.upper()),
+            'reference_growth': 'REF_FK_{}'.format(suffix.upper()),
+            'redshift_grid': 'Z_ARRAY',
+        }
+
+    def _clear_derived_state(self):
+        """Clear primary and growth-target splits and transformations."""
+        super()._clear_derived_state()
+        self.y_growth_train = None
+        self.y_growth_test = None
+        self.growth_scaler = None
+        self.growth_pca = None
+
+    @staticmethod
+    def growth_from_reference_pk(reference_pk, redshift_grid):
+        """Differentiate the Pk normalization, independently of fk scaling."""
+        z = np.asarray(redshift_grid, dtype=float)
+        pk = np.asarray(reference_pk, dtype=float)
+        if (z.ndim != 1 or z.size < 2 or not np.all(np.isfinite(z))
+                or np.any(np.diff(z) <= 0)):
+            raise ValueError(
+                'Reference redshift grid must be finite and increasing')
+        if (
+                pk.ndim < 1
+                or pk.shape[-1] != z.size
+                or not np.all(np.isfinite(pk))
+                or np.any(pk <= 0)):
+            raise ValueError(
+                'Reference Pk must be finite, positive, and match the z grid')
+        derivative = make_interp_spline(
+            z, pk, k=min(3, z.size - 1), axis=-1).derivative()(z)
+        return -0.5 * (1.0 + z) * derivative / pk
+
+    def load(
+            self,
+            path,
+            name=None,
+            columns_x=None,
+            columns_y=None,
+            verbose=False):
+        """Load one native FITS sample and its inferred growth-rate arrays."""
+        if name is None:
+            raise ValueError('SobolevDataset.load requires a pk_* name')
+
+        names = self._associated_names(name)
+        super().load(
+            path=path,
+            name=name,
+            columns_x=columns_x,
+            columns_y=columns_y,
+            verbose=verbose)
+
+        fits = io.FitsFile(path)
+        # FITS extension lookup is case-insensitive, whereas get_keys()
+        # preserves the conventional uppercase spelling used on disk.
+        available = {key.upper() for key in fits.get_keys()}
+        required = [
+            names['growth'], names['reference_pk'],
+            names['reference_growth'], names['redshift_grid'],
+        ]
+        missing = [key for key in required if key.upper() not in available]
+        if missing:
+            raise ValueError(
+                'SobolevDataset requires FITS extensions {}, but {} are '
+                'missing from {}'.format(required, missing, path))
+
+        self.growth_name = names['growth']
+        self.y_growth = fits.get_data(self.growth_name)
+        self.reference_pk = fits.get_data(names['reference_pk'])
+        growth_normalization = fits.get_data(names['reference_growth'])
+        self.redshift_grid = fits.get_data(names['redshift_grid'])
+
+        if self.y_growth.ndim != 2 or self.y_growth.shape != self.y.shape:
+            raise ValueError(
+                'Growth target {} has shape {}, expected {} to match {}'
+                ''.format(
+                    self.growth_name, self.y_growth.shape, self.y.shape,
+                    self.name))
+        if self.redshift_grid.ndim != 1:
+            raise ValueError(
+                'Redshift grid {} must be one-dimensional, got {}'
+                ''.format(names['redshift_grid'], self.redshift_grid.shape))
+        if self.reference_pk.shape != growth_normalization.shape:
+            raise ValueError(
+                'Reference pk and growth arrays must have the same shape, '
+                'got {} and {}'.format(
+                    self.reference_pk.shape, growth_normalization.shape))
+        if self.reference_pk.shape[-1] != self.redshift_grid.size:
+            raise ValueError(
+                'Reference redshift axis has length {}, but Z_ARRAY has '
+                'length {}'.format(
+                    self.reference_pk.shape[-1], self.redshift_grid.size))
+
+        self.reference_growth = self.growth_from_reference_pk(
+            self.reference_pk, self.redshift_grid)
+        # FK_* stores f / normalization, whereas the Sobolev loss uses f.
+        # REF_FK_* is a normalization only, not the derivative of REF_PK_*.
+        z = self.x[:, self.x_names.index('z_pk')]
+        if np.any(z < self.redshift_grid[0]) or np.any(
+                z > self.redshift_grid[-1]):
+            raise ValueError('Sample redshifts lie outside the reference grid')
+        if not np.all(growth_normalization == 1):
+            normalization = make_interp_spline(
+                self.redshift_grid, growth_normalization[0],
+                k=min(3, self.redshift_grid.size - 1), axis=-1)(z).T
+            self.y_growth = self.y_growth * normalization
+
+        self.growth_y_names = [
+            'f_k_{}'.format(index) for index in range(self.n_y)]
+        return self
+
+    def remove_non_finite(self, store_non_finites=False, verbose=False):
+        """Remove rows non-finite in either the primary or growth target."""
+        if self.y_growth is None:
+            raise RuntimeError('Load the SobolevDataset before filtering it')
+        if verbose:
+            io.print_level(
+                1, 'Removing non finite values from x, pk, and growth.')
+
+        only_finites = (
+            np.all(np.isfinite(self.x), axis=1)
+            & np.all(np.isfinite(self.y), axis=1)
+            & np.all(np.isfinite(self.y_growth), axis=1))
+        if store_non_finites:
+            self.non_finites_x = self.x[~only_finites]
+        else:
+            self.non_finites_x = None
+
+        self.x = self.x[only_finites]
+        self.y = self.y[only_finites]
+        self.y_growth = self.y_growth[only_finites]
+        self._set_and_validate_dimensions()
+
+        if self.x_sampler is not None:
+            self.x_sampler.x = self.x
+            self.x_sampler.n_samples = self.n_samples
+        if self.y_model is not None:
+            self.y_model.y = [self.y]
+            self.y_model.n_samples = self.n_samples
+        self._clear_derived_state()
+        return self
+
+    def train_test_split(self, frac_train, seed, verbose=False):
+        """Split both targets using exactly the same sample indices."""
+        if self.y_growth is None:
+            raise RuntimeError('Load the SobolevDataset before splitting it')
+        indices = np.arange(self.n_samples)
+        train_indices, test_indices = skl_ms.train_test_split(
+            indices, train_size=frac_train, random_state=seed)
+        self._clear_derived_state()
+        self.x_train, self.x_test = self.x[train_indices], self.x[test_indices]
+        self.y_train, self.y_test = self.y[train_indices], self.y[test_indices]
+        self.y_growth_train = self.y_growth[train_indices]
+        self.y_growth_test = self.y_growth[test_indices]
+        return self
+
+    def rescale(self, rescale_x, rescale_y, rescale_growth, verbose=False):
+        """Rescale the primary and growth targets with independent scalers."""
+        if self.y_growth_train is None:
+            raise RuntimeError('Split the SobolevDataset before rescaling it')
+        super().rescale(rescale_x, rescale_y, verbose=verbose)
+        self.growth_scaler = sc.Scaler.choose_one(rescale_growth)
+        self.growth_scaler.fit(self.y_growth_train)
+        self.y_growth_train = self.growth_scaler.transform(
+            self.y_growth_train)
+        self.y_growth_test = self.growth_scaler.transform(
+            self.y_growth_test)
+        return self
+
+    def apply_pca(self, num_x_pca=None, num_y_pca=None, verbose=False):
+        """Reject PCA reductions for the Sobolev training representation."""
+        if num_x_pca == 'None':
+            num_x_pca = None
+        if num_y_pca == 'None':
+            num_y_pca = None
+        self.x_pca = None
+        self.y_pca = None
+        self.growth_pca = None
+        if num_x_pca is not None or num_y_pca is not None:
+            raise ValueError(
+                'PCA is not supported for SobolevDataset. Set both '
+                'num_x_pca and num_y_pca to null so the derivative loss is '
+                'defined directly in the physical pk/fk representation.')
+        return self
+
+    @staticmethod
+    def join(datasets, verbose=False):
+        """Join paired datasets while retaining their growth targets.
+
+        The ordinary Dataset join merges the primary ``pk`` metadata.  For
+        the separately stored growth reference, retain the source with the
+        densest redshift grid; it covers the lower-redshift samples and can
+        be used for interpolation in the Sobolev training step.
+        """
+        if not datasets:
+            raise ValueError('At least one Dataset is required')
+        if not all(isinstance(dataset, SobolevDataset)
+                   for dataset in datasets):
+            raise ValueError(
+                'SobolevDataset.join requires SobolevDataset inputs')
+
+        first = datasets[0]
+        if not all(dataset.growth_name == first.growth_name
+                   for dataset in datasets[1:]):
+            raise ValueError('Sobolev datasets have different growth targets')
+
+        primary = Dataset.join(datasets, verbose=verbose)
+        reference_source = max(
+            datasets, key=lambda dataset: dataset.redshift_grid.size)
+        joined = SobolevDataset(
+            name=primary.name,
+            x=primary.x,
+            y=primary.y,
+            n_x=primary.n_x,
+            n_y=primary.n_y,
+            n_samples=primary.n_samples,
+            x_names=primary.x_names,
+            y_names=primary.y_names,
+            y_model=primary.y_model,
+            x_ranges=primary.x_ranges,
+            path=primary.path,
+            y_header=primary.y_header,
+            non_finites_x=primary.non_finites_x,
+            x_key=primary.x_key,
+        )
+        joined.growth_name = first.growth_name
+        joined.growth_y_names = copy.deepcopy(first.growth_y_names)
+        joined.y_growth = np.vstack([dataset.y_growth for dataset in datasets])
+        joined.reference_pk = copy.deepcopy(reference_source.reference_pk)
+        joined.reference_growth = copy.deepcopy(
+            reference_source.reference_growth)
+        joined.redshift_grid = copy.deepcopy(reference_source.redshift_grid)
+        return joined
 
 
 class DataCollection(object):
@@ -679,8 +1179,8 @@ class DataCollection(object):
         self.x_names = None  # List of names of x data
         self.y_names = []  # List of names of y data per file
         self.y_headers = []  # Headers for y files
-        self.x_key = None # Name of the x image in fits file
-        self.y_keys = [] # Name of the y images in fits file
+        self.x_key = None  # Name of the x image in fits file
+        self.y_keys = []  # Name of the y images in fits file
 
         # Paths
         self.path = None  # Path of the dataset
@@ -690,6 +1190,7 @@ class DataCollection(object):
 
         # Placeholder for the YModel
         self.y_model = None
+        self.x_sampler = None
 
         # Useful to keep track of how many samples have been computed
         self.counter_samples = 0
@@ -706,27 +1207,62 @@ class DataCollection(object):
         - name (str, default:None): if specified it gets the y dataset
           with that name.
         """
-        # Get correct index
+        # Get correct index and resolve the selected output name.
         if name is not None:
-            idx = self.y_model.spectra.names.index(name)
-        elif len(self.y_model.spectra.names) == 1:
+            idx = self.y_keys.index(name)
+        elif len(self.y_keys) == 1:
             idx = 0
         else:
             raise Exception(
                 'It is not possible to extract a single dataset if no name '
                 'is specified and there are multiple datasets!')
+        selected_name = self.y_keys[idx]
+
+        # Preserve declared parameter ranges when available. Some external
+        # samplers do not define bounded priors, in which case use the range
+        # covered by the stored samples.
+        try:
+            x_ranges = [[
+                self.settings['params'][parameter]['prior']['min'],
+                self.settings['params'][parameter]['prior']['max']]
+                for parameter in self.x_names]
+        except (KeyError, TypeError):
+            x_ranges = [[minimum, maximum] for minimum, maximum in zip(
+                np.min(self.x, axis=0), np.max(self.x, axis=0))]
+
+        dataset_x = self.x.copy()
+        dataset_y = self.y[idx].copy()
+
+        x_sampler = None
+        if self.x_sampler is not None:
+            x_sampler = copy.copy(self.x_sampler)
+            x_sampler.x = dataset_x
+            x_sampler.n_samples = self.n_samples
+            x_sampler.params = copy.deepcopy(self.x_sampler.params)
+
+        y_model = None
+        if self.y_model is not None:
+            y_model = copy.copy(self.y_model[idx])
+            y_model.y = [dataset_y]
+            y_model.n_samples = self.n_samples
+            y_model.params = copy.deepcopy(y_model.params)
 
         dataset = Dataset(
-            name=name,
-            x=self.x,
-            y=self.y[idx],
+            name=selected_name,
+            x=dataset_x,
+            y=dataset_y,
             n_x=self.n_x,
             n_y=self.n_y[idx],
             n_samples=self.n_samples,
-            x_names=self.x_names,
-            y_names=self.y_names[idx],
-            y_model=self.y_model[idx],
+            x_names=list(self.x_names),
+            y_names=list(self.y_names[idx]),
+            y_model=y_model,
+            x_ranges=x_ranges,
             path=self.path,
+            y_header=copy.deepcopy(self.y_headers[idx]),
+            x_sampler=x_sampler,
+            x_key=self.x_key,
+            settings=copy.deepcopy(self.settings)
         )
 
         return dataset
@@ -761,26 +1297,53 @@ class DataCollection(object):
         - verbose (bool, default: False): verbosity.
         """
 
-        fits = io.FitsFile(
-            fname=fname,
-            root=root,
-        )
-
-        # Save settings
+        # Resolve and validate all content before writing anything.
+        if fname is None:
+            if root is None and self.path is not None:
+                fname = self.path
+            else:
+                raise ValueError('DataCollection.save requires a filename')
         if settings is None:
             settings = self.settings
-        fits.write(
-            name=None,
-            data=None,
-            header=self.settings,
-            verbose=verbose,
-        )
-
-        # Save x
+        if settings is None:
+            raise ValueError('DataCollection.save requires dataset settings')
         if data_x is None:
             data_x = self.x
         if name_x is None:
             name_x = self.x_key
+        if data_ys is None:
+            data_ys = self.y
+        if name_ys is None:
+            name_ys = self.y_keys
+        if hd_ys is None:
+            if len(self.y_headers) == len(data_ys):
+                hd_ys = self.y_headers
+            else:
+                hd_ys = [None for _ in range(len(data_ys))]
+        if len(name_ys) != len(data_ys) or len(hd_ys) != len(data_ys):
+            raise ValueError(
+                'data_ys, name_ys and hd_ys must have the same length')
+        if y_model is None:
+            y_model = self.y_model
+        if y_model is None:
+            raise ValueError('DataCollection.save requires a y_model')
+
+        fits = io.FitsFile(
+            fname=fname,
+            root=root,
+        )
+        self.path = fits.path
+        self.settings = settings
+
+        # Save settings
+        fits.write(
+            name=None,
+            data=None,
+            header=settings,
+            verbose=verbose,
+        )
+
+        # Save x
         fits.write(
             name=name_x,
             data=data_x,
@@ -789,12 +1352,6 @@ class DataCollection(object):
         )
 
         # Save y
-        if data_ys is None:
-            data_ys = self.y
-        if name_ys is None:
-            name_ys = self.y_keys
-        if hd_ys is None:
-            hd_ys = [None for _ in range(len(data_ys))]
         for idx in range(len(data_ys)):
             fits.write(
                 name=name_ys[idx],
@@ -802,10 +1359,8 @@ class DataCollection(object):
                 header=hd_ys[idx],
                 verbose=verbose,
             )
-        
+
         # Save y_model
-        if y_model is None:
-            y_model = self.y_model
         y_model.save(
             fname=self.path,
             verbose=verbose)
@@ -833,12 +1388,16 @@ class DataCollection(object):
 
         if verbose:
             io.info('Loading data collection.')
-        
+
         # Init fits file
         fits = io.FitsFile(path)
 
         # Load settings
         self.settings = fits.get_header(0, unflat_dict=True)
+        if self.settings is None:
+            raise ValueError(
+                'DataCollection.load requires settings in the primary FITS '
+                'header')
 
         # Main path
         self.path = path
@@ -868,7 +1427,7 @@ class DataCollection(object):
             self.n_samples,
             **self.settings['y_model']['args'],
             verbose=False)
-        
+
         # Load y_model
         y_model.load(
             self.path,
@@ -876,9 +1435,13 @@ class DataCollection(object):
         )
 
         # Load y data.
-        self.y_keys = y_model.spectra.names
+        self.y_keys = y_model.y_keys
         # 1) load ys.
         y = [fits.get_data(name) for name in self.y_keys]
+        if not y:
+            raise ValueError('DataCollection contains no y outputs')
+        if any(y_one.ndim != 2 for y_one in y):
+            raise ValueError('All DataCollection y arrays must be 2D')
         # 2) Infer dimensions
         n_rows = [y_one.shape[0] for y_one in y]
         n_y = [y_one.shape[1] for y_one in y]
@@ -887,6 +1450,9 @@ class DataCollection(object):
         if not all(row == n_rows[0] for row in n_rows):
             raise IOError('Not all the files have the same number of rows')
         self.counter_samples = n_rows[0]
+        if self.counter_samples > self.n_samples:
+            raise ValueError(
+                'Stored y arrays have more rows than the x array')
 
         # 3) Initialize list of zeros arrays with full or remaining samples.
         y_model.y = [np.zeros((self.n_samples, n_y_one)) for n_y_one in n_y]
@@ -894,6 +1460,12 @@ class DataCollection(object):
         # 4) Assign values.
         for ny_gen, y_gen in enumerate(y_model.y):
             y_gen[:self.counter_samples] = y[ny_gen]
+
+        from astropy.io import fits as afits
+        from .range_sampling import completion
+        with afits.open(path, memmap=False) as hdus:
+            self.completed = completion(hdus, self.y_keys, self.n_samples)
+        self.counter_samples = int(self.completed.sum())
 
         # 5) Synchronize with self.y.
         self.y = y_model.y
@@ -913,6 +1485,7 @@ class DataCollection(object):
 
         return self
 
+    @writer_lock('output')
     def sample(
             self,
             params,
@@ -922,7 +1495,13 @@ class DataCollection(object):
             y_args=None,
             y_outputs=None,
             output=None,
-            verbose=False):
+            timeout=None,
+            save_interval=None,
+            num_workers=1,
+            chunk_size=None,
+            debug=False,
+            verbose=False,
+            prepare_only=False):
         """
         Generate a dataset.
         Arguments:
@@ -939,23 +1518,40 @@ class DataCollection(object):
         - y_outputs (dict, default: None): dictionary dealing
           with multiple y outputs for a single x (see class_spectra);
         - output (str, default: None): if None nothing is saved;
-        - verbose (bool, default: False): verbosity.
+        - timeout (float, default None): after timeout (in hours) stop
+          sampling;
+        - save_interval (int, default=None): save every n steps. If None, it
+          saves only at the end;
+        - num_workers (int, default: 1): number of worker processes to use;
+        - chunk_size (int, default: None): chunk size passed to the process
+          pool (defaults to executor behaviour);
+        - debug (bool, default=False): if True print additional messages;
+        - verbose (bool, default: False): verbosity;
+        - prepare_only (bool): save inputs and references without sampling y.
         """
+
+        x_args = x_args or {}
+        y_args = y_args or {}
 
         # Preliminary checks on output
         save_it = False
         if output is not None:
             save_it = True
-            self.path = output
-            fits = io.FitsFile(self.path)
+            fits = io.FitsFile(output)
             if fits.exists:
                 raise Exception(
-                    'Output file exists! Exiting to avoid corruption of precious '
-                    'data! If you want to resume a previous run use the '
-                    '--resume (-r) option.')
+                    'Output file exists! Exiting to avoid corruption of '
+                    'precious data! If you want to resume a previous run use '
+                    'the --resume (-r) option.')
             elif verbose:
                 io.info('Generating dataset.')
                 io.print_level(1, 'Writing output in {}'.format(output))
+
+        # Reset state only after preliminary validation succeeds.
+        self.counter_samples = 0
+        self.path = output
+        self.x_sampler = None
+        self.y_model = None
 
         # Create settings dictionary
         self.settings = {
@@ -1019,36 +1615,137 @@ class DataCollection(object):
         self.n_y = y_model.get_n_y()
         self.y_names = y_model.get_y_names()
         self.y_headers = y_model.get_y_headers()
-        self.y_keys = y_model.spectra.names
+        self.y_keys = y_model.y_keys
 
         # Init self.y
         y_model.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
         self.y = y_model.y
 
-        # Start iteration in series
-        for nx, x in enumerate(tqdm.tqdm(self.x)):
-            y_one = y_model.evaluate(x, nx)
-            self.counter_samples += 1
+        if prepare_only:
+            if not save_it:
+                raise ValueError('prepare_only requires an output file')
+            for key, width, header in zip(
+                    self.y_keys, self.n_y, self.y_headers):
+                fits.write(name=key, data=np.empty((0, width)), header=header)
+            self.x_sampler, self.y_model = x_sampler, y_model
+            return
 
-            if any([np.isnan(yy).any() for yy in y_one]):
-                io.warning(' Found nans with parameters {}'.format(x))
+        def _append_data(data_part, y_one_line):
+            if data_part is None:
+                return y_one_line
+            return [np.vstack([x1, x2])
+                    for x1, x2 in zip(data_part, y_one_line)]
 
-            # Save array
-            if save_it:
-                for nname, name in enumerate(self.y_keys):
-                    try:
-                        data = fits.get_data(name)
-                        data = np.vstack([data, y_one[nname]])
-                        fits.update(
-                            name=name,
-                            data=data,
-                        )
-                    except KeyError:
-                        fits.write(
-                            name=name,
-                            data=y_one[nname],
-                            header=self.y_headers[nname]
-                        )
+        def _flush_data(data_part):
+            if not save_it or data_part is None:
+                return None
+            for nname, name in enumerate(self.y_keys):
+                try:
+                    data = fits.get_data(name)
+                    data = np.vstack([data, data_part[nname]])
+                    fits.update(
+                        name=name,
+                        data=data,
+                    )
+                except KeyError:
+                    fits.write(
+                        name=name,
+                        data=data_part[nname],
+                        header=self.y_headers[nname]
+                    )
+            return None
+
+        if num_workers is None or num_workers < 1:
+            num_workers = 1
+        if chunk_size is not None and chunk_size < 1:
+            raise ValueError('chunk_size must be a positive integer')
+
+        if timeout is not None:
+            start_time = time.time()
+        data_part = None
+
+        def _store_in_memory(idx, y_one_line):
+            for nout, arr in enumerate(self.y):
+                arr[idx] = y_one_line[nout]
+
+        if num_workers == 1:
+            for nx, x in enumerate(tqdm.tqdm(self.x)):
+                if debug:
+                    start_time_loop = time.time()
+                    start_time_part = time.time()
+                    io.print_level(0, 'Starting loop number {}'.format(nx))
+                y_one_line = y_model.evaluate(x, nx)
+                if debug:
+                    io.print_level(
+                        1, 'Class executed in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+                self.counter_samples += 1
+
+                if any([np.isnan(yy).any() for yy in y_one_line]):
+                    io.warning(' Found nans with parameters {}'.format(x))
+
+                _store_in_memory(nx, y_one_line)
+                if debug:
+                    start_time_part = time.time()
+                data_part = _append_data(data_part, y_one_line)
+                if debug:
+                    io.print_level(
+                        1, 'Appended to data in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+
+                if save_it and isinstance(save_interval, int):
+                    if np.mod(nx+1, save_interval) == 0:
+                        if debug:
+                            start_time_part = time.time()
+                        data_part = _flush_data(data_part)
+                        if debug:
+                            io.print_level(
+                                1, 'Saved arrays in {:.2f} seconds'.format(
+                                    time.time()-start_time_part))
+
+                if timeout is not None:
+                    if (time.time()-start_time)/60/60 > timeout:
+                        print('Reached maximum time!')
+                        break
+                if debug:
+                    io.print_level(
+                        1, 'Loop executed in {:.2f} seconds'.format(
+                            time.time()-start_time_loop))
+        else:
+            with ProcessPoolExecutor(
+                    max_workers=num_workers,
+                    initializer=_init_y_model_worker,
+                    initargs=(y_name, params, y_outputs,
+                              self.n_samples, y_args, self.path, False)
+                    ) as pool:
+                iterator = pool.map(
+                    _evaluate_one_sample,
+                    ((idx, x) for idx, x in enumerate(self.x)),
+                    chunksize=chunk_size or 1)
+                iterator = tqdm.tqdm(iterator, total=self.n_samples)
+                for local_idx, result in enumerate(iterator):
+                    idx, y_one_line = result
+                    self.counter_samples += 1
+
+                    if any([np.isnan(yy).any() for yy in y_one_line]):
+                        io.warning(' Found nans with parameters {}'.format(
+                            self.x[idx]))
+
+                    _store_in_memory(idx, y_one_line)
+                    data_part = _append_data(data_part, y_one_line)
+
+                    if save_it and isinstance(save_interval, int):
+                        if np.mod(local_idx+1, save_interval) == 0:
+                            data_part = _flush_data(data_part)
+
+                    if timeout is not None:
+                        if (time.time()-start_time)/60/60 > timeout:
+                            print('Reached maximum time!')
+                            pool.shutdown(cancel_futures=True)
+                            break
+
+        if save_it and data_part is not None:
+            data_part = _flush_data(data_part)
 
         # Propagate x_sampler and y_model
         self.x_sampler = x_sampler
@@ -1056,18 +1753,54 @@ class DataCollection(object):
 
         return
 
-    def resume(self, path, verbose=False):
+    @writer_lock('path')
+    def resume(
+            self,
+            path,
+            timeout=None,
+            save_interval=None,
+            num_workers=1,
+            chunk_size=None,
+            debug=False,
+            verbose=False):
         """
         Resume a dataset previously loaded (use load method
         before resuming). Many settings are already loaded.
         Arguments:
-        - path (str): path pointing to the folder containing the dataset;
+        - path (str): path pointing to the dataset FITS file;
+        - timeout (float, default None): after timeout (in hours) stop
+          sampling;
+        - save_interval (int, default=None): save every n steps. If None, it
+          saves only at the end;
+        - num_workers (int, default: 1): number of worker processes to use;
+        - chunk_size (int, default: None): chunk size passed to the process
+          pool (defaults to executor behaviour);
+        - debug (bool, default=False): if True print additional messages;
         - verbose (bool, default: False): verbosity.
 
         NOTE: this method assumes that both settings and the full x array
         are already saved into the folder. The x array is then used to
         calculate the missing row of the y array.
         """
+
+        # Indexed datasets may have holes: never append based on row count.
+        from astropy.io import fits as afits
+        from .range_sampling import MASK, sample_range, merge_ranges
+        with afits.open(path, memmap=False) as hdus:
+            indexed = MASK in hdus
+        if indexed:
+            self.load(path, verbose=verbose)
+            if self.counter_samples == self.n_samples:
+                return
+            if num_workers not in (None, 1):
+                raise ValueError(
+                    'Indexed resume is serial; use separate range jobs')
+            part = sample_range(
+                path, 0, self.n_samples, save_interval, timeout,
+                pending_only=True)
+            merge_ranges(path, [part], already_locked=True)
+            self.load(path, verbose=verbose)
+            return
 
         # Load the dataset
         self.load(path, verbose=verbose)
@@ -1083,20 +1816,129 @@ class DataCollection(object):
                 io.warning('Dataset complete, nothing to resume!')
             return
 
-        fits = io.FitsFile(fname=path)
+        if num_workers is None or num_workers < 1:
+            num_workers = 1
+        if chunk_size is not None and chunk_size < 1:
+            raise ValueError('chunk_size must be a positive integer')
+
+        if timeout is not None:
+            start_time = time.time()
+
+        data_part = None
         start = self.counter_samples
-        for ns, x in enumerate(tqdm.tqdm(self.x[start:])):
-            y_one = self.y_model.evaluate(x, start + ns)
-            self.counter_samples += 1
-        
-            # Save array
+        remaining = self.n_samples - start
+
+        def _append_data(data_part, y_one_line):
+            if data_part is None:
+                return y_one_line
+            return [np.vstack([x1, x2])
+                    for x1, x2 in zip(data_part, y_one_line)]
+
+        def _flush_data(data_part):
+            if data_part is None:
+                return None
+            fits = io.FitsFile(fname=path)
+            data = [fits.get_data(name) for name in self.y_keys]
+            data = [np.vstack([x1, x2]) for x1, x2 in zip(data, data_part)]
             for nname, name in enumerate(self.y_keys):
-                data = fits.get_data(name)
-                data = np.vstack([data, y_one[nname]])
                 fits.update(
                     name=name,
-                    data=data,
+                    data=data[nname],
                 )
+            return None
+
+        def _store_in_memory(idx, y_one_line):
+            for nout, arr in enumerate(self.y):
+                arr[idx] = y_one_line[nout]
+
+        if num_workers == 1:
+            for nx, x in enumerate(tqdm.tqdm(self.x[start:])):
+                if debug:
+                    start_time_loop = time.time()
+                    start_time_part = time.time()
+                    io.print_level(0, 'Starting loop number {}'.format(nx))
+                y_one_line = self.y_model.evaluate(x, start + nx)
+                if debug:
+                    io.print_level(
+                        1, 'Class executed in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+                self.counter_samples += 1
+
+                if any([np.isnan(yy).any() for yy in y_one_line]):
+                    io.warning(' Found nans with parameters {}'.format(x))
+
+                _store_in_memory(start + nx, y_one_line)
+
+                if debug:
+                    start_time_part = time.time()
+                data_part = _append_data(data_part, y_one_line)
+                if debug:
+                    io.print_level(
+                        1, 'Appended to data in {:.2f} seconds'.format(
+                            time.time()-start_time_part))
+
+                if isinstance(save_interval, int):
+                    if np.mod(nx+1, save_interval) == 0:
+                        if debug:
+                            start_time_part = time.time()
+                        data_part = _flush_data(data_part)
+                        if debug:
+                            io.print_level(
+                                1, 'Saved arrays in {:.2f} seconds'.format(
+                                    time.time()-start_time_part))
+
+                if timeout is not None:
+                    if (time.time()-start_time)/60/60 > timeout:
+                        print('Reached maximum time!')
+                        break
+                if debug:
+                    io.print_level(
+                        1, 'Loop executed in {:.2f} seconds'.format(
+                            time.time()-start_time_loop))
+        else:
+            y_args = self.settings['y_model'].get('args', {}) or {}
+            y_outputs = self.settings['y_model'].get('outputs')
+            y_name = self.settings['y_model']['name']
+            params = self.settings['params']
+
+            with ProcessPoolExecutor(
+                    max_workers=num_workers,
+                    initializer=_init_y_model_worker,
+                    initargs=(y_name, params, y_outputs, self.n_samples,
+                              y_args, self.path, False)) as pool:
+                iterator = pool.map(
+                    _evaluate_one_sample,
+                    ((start + idx, x) for idx, x in enumerate(
+                        self.x[start:])),
+                    chunksize=chunk_size or 1)
+                iterator = tqdm.tqdm(iterator, total=remaining)
+                for local_idx, result in enumerate(iterator):
+                    idx, y_one_line = result
+                    self.counter_samples += 1
+
+                    if any([np.isnan(yy).any() for yy in y_one_line]):
+                        io.warning(' Found nans with parameters {}'.format(
+                            self.x[idx]))
+
+                    _store_in_memory(idx, y_one_line)
+                    data_part = _append_data(data_part, y_one_line)
+
+                    if isinstance(save_interval, int):
+                        if np.mod(local_idx+1, save_interval) == 0:
+                            data_part = _flush_data(data_part)
+
+                    if timeout is not None:
+                        if (time.time()-start_time)/60/60 > timeout:
+                            print('Reached maximum time!')
+                            pool.shutdown(cancel_futures=True)
+                            break
+
+        if data_part is not None:
+            if debug:
+                start_time_part = time.time()
+            data_part = _flush_data(data_part)
+            if debug:
+                io.print_level(1, 'Saved arrays in {:.2f} seconds'.format(
+                    time.time()-start_time_part))
 
         return
-

@@ -1,44 +1,105 @@
-"""
-.. module:: loss_functions
+"""Loss functions used by emu_like models."""
 
-:Synopsis: Module containing user defined loss functions.
-:Author: Emilio Bellini
-
-Loss function should take as input y_true and y_predicted
-and a float as output.
-"""
-
-from tensorflow.python.keras import backend as keras_backend
+import numpy as np
 from tensorflow import keras
+from tensorflow.keras import backend as keras_backend
+from keras.saving import register_keras_serializable
 
 
-# @keras.saving.register_keras_serializable()
-# def max_absolute_error(y_true, y_pred):
-#     diff = keras_backend.abs(y_true - y_pred)
-#     return keras_backend.max(diff, axis=0)
+def _normalized_singular_values(kwargs, *, minimum=None):
+    """Return PCA singular values normalised to the leading mode.
+
+    Args:
+        kwargs (dict): Keyword arguments passed to the loss factory. The
+            ``data`` entry must expose ``y_pca.pca.singular_values_``.
+        minimum (float | None): Optional floor applied element-wise to the
+            normalised singular values.
+
+    Returns:
+        np.ndarray: Normalised (and optionally clamped) singular values.
+    """
+
+    data = kwargs['data']
+    singular_values = data.y_pca.pca.singular_values_
+    normalized = singular_values / singular_values[0]
+    if minimum is not None:
+        normalized = np.maximum(normalized, minimum)
+    return normalized
 
 
-# @keras.saving.register_keras_serializable()
-# def mean_absolute_error(y_true, y_pred):
-#     diff = keras_backend.abs(y_true - y_pred)
-#     return keras_backend.mean(diff, axis=0)
+def mean_squared_error(**kwargs):
+    """Return a standard mean squared error loss."""
+
+    scale = np.ones_like(_normalized_singular_values(kwargs))
+
+    @register_keras_serializable(package='emu_like', name='mean_squared_error')
+    def loss(y_true, y_pred):
+        return keras_backend.mean(
+            keras_backend.square((y_pred - y_true) * scale),
+            axis=-1,
+        )
+
+    return loss
 
 
-# @keras.saving.register_keras_serializable()
-# def max_relative_error(y_true, y_pred):
-#     den = keras_backend.clip(
-#         keras_backend.exp(y_true),
-#         keras_backend.epsilon(),
-#         None)
-#     diff = keras_backend.abs((y_true - y_pred)/den)
-#     return keras_backend.max(diff, axis=0)
+def mean_squared_error_pca(**kwargs):
+    """Return MSE weighted by PCA singular values with a lower bound."""
+
+    if kwargs['floor'] is None:
+        floor = 0.
+    else:
+        floor = kwargs['floor']
+    scale = _normalized_singular_values(kwargs, minimum=floor)
+
+    @register_keras_serializable(
+        package='emu_like',
+        name='mean_squared_error_pca',
+    )
+    def loss(y_true, y_pred):
+        return keras_backend.mean(
+            scale * keras_backend.square(y_pred - y_true),
+            axis=-1,
+        )
+
+    return loss
 
 
-# @keras.saving.register_keras_serializable()
-# def mean_relative_error(y_true, y_pred):
-#     den = keras_backend.clip(
-#         keras_backend.exp(y_true),
-#         keras_backend.epsilon(),
-#         None)
-#     diff = keras_backend.abs((y_true - y_pred)/den)
-#     return keras_backend.mean(diff, axis=0)
+def huber_pca(**kwargs):
+    """Return Huber loss applied to PCA-weighted residuals."""
+
+    if kwargs['floor'] is None:
+        floor = 0.
+    else:
+        floor = kwargs['floor']
+    scale = _normalized_singular_values(kwargs, minimum=floor)
+
+    if kwargs['delta'] is None:
+        delta = 1.0
+    else:
+        delta = kwargs['delta']
+
+    @register_keras_serializable(package='emu_like', name='huber_pca')
+    def loss(y_true, y_pred):
+        return keras.losses.huber(
+            y_true * scale,
+            y_pred * scale,
+            delta=delta,
+        )
+
+    return loss
+
+
+def huber(**kwargs):
+    """Return a standard Huber loss."""
+
+    scale = np.ones_like(_normalized_singular_values(kwargs))
+
+    @register_keras_serializable(package='emu_like', name='huber')
+    def loss(y_true, y_pred):
+        return keras.losses.huber(
+            y_true * scale,
+            y_pred * scale,
+            delta=1.0,
+        )
+
+    return loss
