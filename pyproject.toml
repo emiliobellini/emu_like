@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "emu_like"
-version = "0.1.0"
+version = "1.1.0"
 authors = [{name="Emilio Bellini"}]
-description = "TODO"
+description = "Build, train, and use emulators for cosmological spectra and likelihoods."
 requires-python = ">=3.8.0"
 dependencies = [
     "astropy",
