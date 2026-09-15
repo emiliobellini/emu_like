@@ -22,6 +22,33 @@ template_sh = """#!/bin/bash
 #SBATCH --cpus-per-task=32
 
 
+# ---- Optional row range: sbatch this_file.sh START STOP ----
+# No arguments keeps the usual fresh/resume sampling behaviour.
+# STOP is exclusive. The main FITS must already exist for range sampling.
+sample_range_args=()
+if [[ $# -eq 2 ]]; then
+    if [[ ! $1 =~ ^[0-9]{1,15}$ || ! $2 =~ ^[0-9]{1,15}$ ]]; then
+        echo "START and STOP must be non-negative integers \
+(at most 15 digits)." >&2
+        exit 1
+    fi
+    start_row=$((10#$1))
+    stop_row=$((10#$2))
+    if (( start_row >= stop_row )); then
+        echo "START must be smaller than STOP (exclusive)." >&2
+        exit 1
+    fi
+    sample_range_args=(--start-row "$start_row" --stop-row "$stop_row")
+    # SBATCH directives cannot expand $1/$2: rename when the job starts.
+    # Existing log filenames retain the submission-time job name.
+    range_job_name="TODO_NAME_rows_${start_row}_${stop_row}"
+    scontrol update JobId="$SLURM_JOB_ID" JobName="$range_job_name" || exit 1
+    export SLURM_JOB_NAME="$range_job_name"
+elif [[ $# -ne 0 ]]; then
+    echo "Usage: sbatch $0 [START_ROW STOP_ROW]" >&2
+    exit 1
+fi
+
 
 # ---- Prints  ----
 NOW=`date +%H:%M-%a-%d/%b/%Y`
@@ -36,7 +63,8 @@ echo 'SLURM: sbatch is running on      '$SLURM_SUBMIT_HOST
 echo 'SLURM: executing on cluster      '$SLURM_CLUSTER_NAME
 echo 'SLURM: executing on partition    '$SLURM_JOB_PARTITION
 echo 'SLURM: working directory is      '$SLURM_SUBMIT_DIR
-echo 'SLURM: current home directory is '$(getent passwd $SLURM_JOB_ACCOUNT | cut -d: -f6)
+echo 'SLURM: current home directory is '\
+$(getent passwd $SLURM_JOB_ACCOUNT | cut -d: -f6)
 echo ""
 echo 'JOBINFO:'
 echo 'SLURM: job identifier is         '$SLURM_JOBID
@@ -61,7 +89,9 @@ source ./venv/bin/activate
 cd emu_like
 
 #export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py sample TODO_PATH_YAML -v -f
+PYTHONPATH="${PWD}/src${PYTHONPATH:+:${PYTHONPATH}}" \
+python /ceph/hpc/home/bellinie/emu_like/main.py sample "TODO_PATH_YAML" \
+-v -f "${sample_range_args[@]}" || exit $?
 
 
 # ==== END OF JOB COMMANDS ===== #
@@ -84,7 +114,7 @@ template_yaml = {
         'args': {
             'n_samples': None,
             'seed': 12,
-        },      
+        },
     },
     'y_model': {
         'name': 'class_spectra',
@@ -95,7 +125,8 @@ template_yaml = {
 }
 
 parameters_list = {
-    'lcdm': ['z_pk', 'h', 'Omega_m', 'Omega_b', 'ln_A_s_1e10', 'n_s', 'tau_reio'],
+    'lcdm': ['z_pk', 'h', 'Omega_m', 'Omega_b', 'ln_A_s_1e10', 'n_s',
+             'tau_reio'],
     'nu': ['N_ur', 'm_ncdm'],
     'k': ['Omega_k'],
 }
@@ -104,10 +135,13 @@ exclude_parameters = {
     'pk': ['ln_A_s_1e10', 'n_s'],
     'cl': ['z_pk'],
 }
-    
+
 spectra_list = {
-    'pk': [('pk_m', True), ('pk_cb', True), ('pk_weyl', True), ('fk_m', False), ('fk_cb', False), ('fk_weyl', False)],
-    'cl': [('cl_TT_lensed', True), ('cl_TE_lensed', False), ('cl_EE_lensed', True), ('cl_pp_lensed', True), ('cl_Tp_lensed', False), ('cl_BB_lensed', True)],
+    'pk': [('pk_m', True), ('pk_cb', True), ('pk_weyl', True),
+           ('fk_m', False), ('fk_cb', False), ('fk_weyl', False)],
+    'cl': [('cl_TT_lensed', True), ('cl_TE_lensed', False),
+           ('cl_EE_lensed', True), ('cl_pp_lensed', True),
+           ('cl_Tp_lensed', False), ('cl_BB_lensed', True)],
 }
 
 parameters_ranges = {
@@ -192,10 +226,10 @@ args = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm'
+    model = 'lcdm_nu_k'
     n_samples_1000 = 100
     timeout = 47
-    save_interval = 1000
+    save_interval = 200
 
     data_root = '/ceph/hpc/data/s25r06-05-users/'
     k_min = 1.e-5
@@ -207,7 +241,8 @@ if __name__ == '__main__':
 
     time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
 
-    ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/sample/{}'.format(model)
+    ini_folder = (
+        '/ceph/hpc/home/bellinie/emu_like/init_files/sample/{}'.format(model))
     io.Folder(ini_folder).create()
 
     for spectrum in ['pk', 'cl']:
@@ -219,17 +254,24 @@ if __name__ == '__main__':
                 spectrum, n_samples_1000, parameter_space)
 
             # sh file
-            with open(os.path.join(ini_folder, 'run_'+file_name+'.sh'), 'w') as fn:
+            with open(os.path.join(ini_folder, 'run_'+file_name+'.sh'),
+                      'w') as fn:
                 template_sh_local = template_sh.replace('TODO_NAME', full_name)
-                template_sh_local = template_sh_local.replace('TODO_PATH_YAML', os.path.join(ini_folder, file_name+'.yaml'))
-                template_sh_local = template_sh_local.replace('TODO_TIME', time_string)
+                template_sh_local = template_sh_local.replace(
+                    'TODO_PATH_YAML',
+                    os.path.join(ini_folder, file_name+'.yaml'))
+                template_sh_local = template_sh_local.replace(
+                    'TODO_TIME', time_string)
                 fn.write(template_sh_local)
 
             # yaml file
-            template_yaml['output']['path'] = os.path.join(data_root, '{}/sample/{}_{}_{}.fits'.format(model, spectrum, n_samples_1000, parameter_space))
+            template_yaml['output']['path'] = os.path.join(
+                data_root, '{}/sample/{}_{}_{}.fits'.format(
+                    model, spectrum, n_samples_1000, parameter_space))
             template_yaml['output']['timeout'] = timeout
             template_yaml['output']['save_interval'] = save_interval
-            template_yaml['x_sampler']['args']['n_samples'] = 1000*n_samples_1000
+            template_yaml['x_sampler']['args']['n_samples'] = (
+                1000*n_samples_1000)
 
             # Get list of varied parameters
             parameters = []
@@ -250,7 +292,7 @@ if __name__ == '__main__':
                         'max': parameters_ranges[par][parameter_space][1],
                     }
                 }
-            
+
             # Get args
             for var in template_yaml['params']:
                 try:
@@ -266,11 +308,14 @@ if __name__ == '__main__':
                 if spectrum == 'pk':
                     template_yaml['y_model']['outputs'][sp]['k_min'] = k_min
                     template_yaml['y_model']['outputs'][sp]['k_max'] = k_max
-                    template_yaml['y_model']['outputs'][sp]['k_space'] = k_space
+                    template_yaml['y_model']['outputs'][sp]['k_space'] = (
+                        k_space)
                     template_yaml['y_model']['outputs'][sp]['k_num'] = k_num
                 if spectrum == 'cl':
-                    template_yaml['y_model']['outputs'][sp]['ell_min'] = ell_min
-                    template_yaml['y_model']['outputs'][sp]['ell_max'] = ell_max
+                    template_yaml['y_model']['outputs'][sp]['ell_min'] = (
+                        ell_min)
+                    template_yaml['y_model']['outputs'][sp]['ell_max'] = (
+                        ell_max)
                 if ratio is True:
                     template_yaml['y_model']['outputs'][sp]['ratio'] = True
 

@@ -42,6 +42,33 @@ def sample_emu(args):
     except KeyError:
         save_interval = None
 
+    from emu_like.range_sampling import sample_range, merge_ranges
+    start, stop = args.start_row, args.stop_row
+    ranged = start is not None or stop is not None
+    if sum([ranged, bool(args.merge_ranges), args.prepare_only]) > 1:
+        raise ValueError('Choose range sampling, merging, or preparation')
+    if args.keep_ranges and not args.merge_ranges:
+        raise ValueError('--keep-ranges requires --merge-ranges')
+    if ranged:
+        if start is None or stop is None:
+            raise ValueError('Specify both --start-row and --stop-row')
+        if args.num_workers != 1:
+            raise ValueError(
+                'Range jobs compute serially; use --num-workers 1')
+        print('Sampling ranges for: {}'.format(
+            params['output']['path']), flush=True)
+        part = sample_range(params['output']['path'], start, stop,
+                            save_interval=save_interval, timeout=timeout)
+        io.info('Range checkpoint: {}'.format(part))
+        return
+    if args.merge_ranges:
+        count = merge_ranges(params['output']['path'], args.merge_ranges,
+                             cleanup=not args.keep_ranges)
+        io.info('Merged dataset: {} completed rows'.format(count))
+        return
+    if args.prepare_only and (args.resume or args.force):
+        raise ValueError('--prepare-only requires a fresh output')
+
     # Force computation
     if args.force:
         if io.FitsFile(params['output']['path']).exists:
@@ -71,6 +98,7 @@ def sample_emu(args):
             verbose=args.verbose)
         # Sample the dataset
         data.sample(
+            prepare_only=args.prepare_only,
             params=params['params'],
             x_name=params['x_sampler']['name'],
             x_args=params['x_sampler']['args'],

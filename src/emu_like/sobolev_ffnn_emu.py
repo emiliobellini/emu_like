@@ -705,11 +705,12 @@ class SobolevFFNNEmu(FFNNEmu):
         state = fits.get_header(0, unflat_dict=True)
         try:
             sobolev_state = state['sobolev']
-            if sobolev_state.get('reference_growth_source') != 'differentiated_reference_pk':
+            if sobolev_state.get('reference_growth_source') != \
+                    'differentiated_reference_pk':
                 raise ValueError(
-                    'This Sobolev checkpoint predates the reference-growth fix. '
-                    'Start a fresh run; its saved growth reference and training '
-                    'objective may be incorrect.')
+                    'This Sobolev checkpoint predates the reference-growth '
+                    'fix. Start a fresh run; its saved growth reference and '
+                    'training objective may be incorrect.')
             self.z_index = int(sobolev_state['z_index'])
             self.reference_growth_key = sobolev_state[
                 'reference_growth_key']

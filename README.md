@@ -153,3 +153,76 @@ Confirm `emu_like.spectra.__file__` and `hi_fast.spectra.__file__` resolve to
 the intended checkouts. Source-tree tests using `PYTHONPATH` do not update
 previously installed package copies. The HiClass build in that environment
 must also expose all four Weyl accessors listed above.
+
+## Sampling independent row ranges on a cluster
+
+Several jobs can compute serial ranges of the **same saved input table**. Each
+writes a numbered FITS in the main file's folder. Row indices are zero-based;
+`--stop-row` is exclusive. Run from this checkout with `PYTHONPATH=src` if your
+Python installation otherwise imports an older installed copy of emu_like.
+
+For a new dataset, first save the inputs and reference spectra once:
+
+```bash
+PYTHONPATH=src python main.py sample spectra_sample.yaml --prepare-only
+```
+
+For an existing dataset, use its existing YAML with `output.path` pointing to
+the main FITS; preparation is unnecessary. Launch these as separate cluster
+jobs (one process per job):
+
+```bash
+PYTHONPATH=src python main.py sample spectra_sample.yaml --start-row 50000 --stop-row 60000
+PYTHONPATH=src python main.py sample spectra_sample.yaml --start-row 60000 --stop-row 70000
+```
+
+These commands read the settings, inputs and reference data saved in the main
+FITS. Only `output.path`, `output.save_interval` and `output.timeout` come from
+the YAML. Range mode implies resumption; `--resume` is unnecessary. Rerunning
+the identical command resumes its numbered checkpoint, skipping saved row IDs.
+A range always evaluates its assigned rows, even if they already exist in the
+main file. A calculated NaN is a completed result, not an unfinished row.
+
+For a main file called `sample.fits`, the first worker saves
+`sample.rows-000050000-000060000.fits`. This file **is the checkpoint** and stores
+all outputs and explicit row IDs together. Checkpoints are atomically replaced
+every `save_interval` rows (default 100), on timeout, and on handled exceptions.
+A killed node can lose work since its last checkpoint, without shifting rows.
+Do not launch two workers for the same range filename; use distinct ranges.
+Overlapping ranges with different filenames are supported.
+
+After the workers stop, merge their files, using their actual output paths:
+
+```bash
+PYTHONPATH=src python main.py sample spectra_sample.yaml --merge-ranges \
+  output/spectra/sample.rows-000050000-000060000.fits \
+  output/spectra/sample.rows-000060000-000070000.fits
+```
+
+Files merge in the listed order: **later files overwrite earlier overlapping
+rows**, including NaNs. Merging validates the input/settings/reference identity,
+row IDs and output dimensions. It preserves existing results outside those
+rows. Uncomputed rows contain NaNs, and the `SAMPLE_DONE` FITS extension records
+completion independently of the output values. Ordinary `--resume` on a merged
+dataset computes missing rows serially and merges them safely; use range jobs
+for concurrency. Once merged, training should exclude nonfinite rows as usual.
+
+The merge writes and verifies a temporary main FITS, then atomically replaces
+the main file. Only after success are the listed range files/checkpoints deleted.
+Use `--keep-ranges` to retain them. Allow space for a second main FITS during
+merging and memory for the full dataset. Merge can also consume a stopped,
+partially completed range; only its saved row IDs are copied.
+
+**Jobs already running may continue while new range jobs compute, but they must
+finish or stop before any merge into their main FITS.** Older processes do not
+honor the new writer locks. Avoid reading their main FITS during an in-place
+save; if a range job fails during initial loading, retry once that save finishes.
+Do not change the input table or reference data between range jobs. New-code
+writers and merges use advisory locks and reject competing writes; the cluster
+filesystem must support POSIX locks and atomic rename. Small `.lock` files are
+retained intentionally (they are not checkpoints); the OS releases their locks
+when a process exits or dies. An uncatchable kill during saving may also leave
+an unused `*.tmp` file; it is never used as a checkpoint.
+
+After the first merge, use the updated code for every subsequent writer:
+legacy versions cannot interpret the completion mask.

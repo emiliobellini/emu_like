@@ -20,6 +20,7 @@ from . import scalers as sc
 from . import pca
 from .x_samplers import XSampler
 from .y_models import YModel
+from .range_sampling import writer_lock
 
 
 _worker_y_model = None
@@ -1460,6 +1461,12 @@ class DataCollection(object):
         for ny_gen, y_gen in enumerate(y_model.y):
             y_gen[:self.counter_samples] = y[ny_gen]
 
+        from astropy.io import fits as afits
+        from .range_sampling import completion
+        with afits.open(path, memmap=False) as hdus:
+            self.completed = completion(hdus, self.y_keys, self.n_samples)
+        self.counter_samples = int(self.completed.sum())
+
         # 5) Synchronize with self.y.
         self.y = y_model.y
 
@@ -1478,6 +1485,7 @@ class DataCollection(object):
 
         return self
 
+    @writer_lock('output')
     def sample(
             self,
             params,
@@ -1492,7 +1500,8 @@ class DataCollection(object):
             num_workers=1,
             chunk_size=None,
             debug=False,
-            verbose=False):
+            verbose=False,
+            prepare_only=False):
         """
         Generate a dataset.
         Arguments:
@@ -1517,7 +1526,8 @@ class DataCollection(object):
         - chunk_size (int, default: None): chunk size passed to the process
           pool (defaults to executor behaviour);
         - debug (bool, default=False): if True print additional messages;
-        - verbose (bool, default: False): verbosity.
+        - verbose (bool, default: False): verbosity;
+        - prepare_only (bool): save inputs and references without sampling y.
         """
 
         x_args = x_args or {}
@@ -1610,6 +1620,15 @@ class DataCollection(object):
         # Init self.y
         y_model.y = [np.zeros((self.n_samples, n_y)) for n_y in self.n_y]
         self.y = y_model.y
+
+        if prepare_only:
+            if not save_it:
+                raise ValueError('prepare_only requires an output file')
+            for key, width, header in zip(
+                    self.y_keys, self.n_y, self.y_headers):
+                fits.write(name=key, data=np.empty((0, width)), header=header)
+            self.x_sampler, self.y_model = x_sampler, y_model
+            return
 
         def _append_data(data_part, y_one_line):
             if data_part is None:
@@ -1734,6 +1753,7 @@ class DataCollection(object):
 
         return
 
+    @writer_lock('path')
     def resume(
             self,
             path,
@@ -1762,6 +1782,25 @@ class DataCollection(object):
         are already saved into the folder. The x array is then used to
         calculate the missing row of the y array.
         """
+
+        # Indexed datasets may have holes: never append based on row count.
+        from astropy.io import fits as afits
+        from .range_sampling import MASK, sample_range, merge_ranges
+        with afits.open(path, memmap=False) as hdus:
+            indexed = MASK in hdus
+        if indexed:
+            self.load(path, verbose=verbose)
+            if self.counter_samples == self.n_samples:
+                return
+            if num_workers not in (None, 1):
+                raise ValueError(
+                    'Indexed resume is serial; use separate range jobs')
+            part = sample_range(
+                path, 0, self.n_samples, save_interval, timeout,
+                pending_only=True)
+            merge_ranges(path, [part], already_locked=True)
+            self.load(path, verbose=verbose)
+            return
 
         # Load the dataset
         self.load(path, verbose=verbose)

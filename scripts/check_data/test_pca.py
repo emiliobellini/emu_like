@@ -375,7 +375,8 @@ def main():
         f'/ceph/hpc/home/bellinie/emu_like/output/test_pca/{model}')
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    for spectrum, spectrum_type, min_mode, max_mode, x_scaler_name, y_scaler_name in SPECTRUM_CONFIGS:
+    for (spectrum, spectrum_type, min_mode, max_mode,
+         x_scaler_name, y_scaler_name) in SPECTRUM_CONFIGS:
         output_path_x = output_dir / f'{spectrum}_x_pca_errors.pdf'
         output_path_y = output_dir / f'{spectrum}_y_pca_errors.pdf'
         if output_path_x.exists() and output_path_y.exists():

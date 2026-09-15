@@ -73,6 +73,28 @@ def argument_parser():
         help='Verbose (default: False)',
         action='store_true')
 
+    sample_parser.add_argument(
+        '--start-row',
+        type=int)
+    sample_parser.add_argument(
+        '--stop-row',
+        type=int,
+        help='Exclusive stop row (zero-based).')
+    sample_parser.add_argument(
+        '--prepare-only',
+        action='store_true',
+        help='Save inputs and reference data without evaluating rows.')
+    sample_parser.add_argument(
+        '--merge-ranges',
+        nargs='+',
+        metavar='FITS',
+        help='Merge range files in listed order; last overlap wins. '
+        'Stop legacy writers first. Deletes merged files.')
+    sample_parser.add_argument(
+        '--keep-ranges',
+        action='store_true',
+        help='Keep range checkpoints after merging.')
+
     # Train arguments
     train_parser.add_argument(
         'params_file',
