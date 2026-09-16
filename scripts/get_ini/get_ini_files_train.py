@@ -13,7 +13,7 @@ template_sh = """#!/bin/bash
 
 # ---- Resources configuration  ----
 #SBATCH --partition=cpu
-#SBATCH --mem=62G
+#SBATCH --mem=TODO_MEM
 #SBATCH --time=2-00:00:00
 #SBATCH --output=logs/o%j.%x
 #SBATCH --error=logs/e%j.%x
@@ -137,7 +137,7 @@ spectra_config = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm'
+    model = 'lcdm_k'
     timeout = 47
     learning_rate = 1.e-3
     neurons_hidden = [1024, 1024]
@@ -164,6 +164,11 @@ if __name__ == '__main__':
     for spectrum in spectra_config:
         spectrum_type, num_y_pca, rescale_y = spectra_config[spectrum]
 
+        if spectrum_type == 'pk':
+            mem_string = '24G'
+        elif spectrum_type == 'cl':
+            mem_string = '62G'
+
         # Loss function
         if num_y_pca is None:
             loss = 'mean_squared_error'
@@ -181,6 +186,8 @@ if __name__ == '__main__':
             template_sh_local = template_sh.replace('TODO_NAME', full_name)
             template_sh_local = template_sh_local.replace(
                 'TODO_PATH_YAML', os.path.join(ini_folder, spectrum+'.yaml'))
+            template_sh_local = template_sh_local.replace(
+                'TODO_MEM', mem_string)
             template_sh_local = template_sh_local.replace(
                 'TODO_TIME', time_string)
             fn.write(template_sh_local)

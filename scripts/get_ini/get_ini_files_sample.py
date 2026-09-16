@@ -13,7 +13,7 @@ template_sh = """#!/bin/bash
 
 # ---- Resources configuration  ----
 #SBATCH --partition=cpu
-#SBATCH --mem=60G
+#SBATCH --mem=TODO_MEM
 #SBATCH --time=TODO_TIME
 #SBATCH --output=logs/o%j.%x
 #SBATCH --error=logs/e%j.%x
@@ -246,6 +246,10 @@ if __name__ == '__main__':
     io.Folder(ini_folder).create()
 
     for spectrum in ['pk', 'cl']:
+        if spectrum == 'pk':
+            mem_string = '16G'
+        elif spectrum == 'cl':
+            mem_string = '60G'
         for parameter_space in ['thin', 'std', 'ext']:
 
             full_name = 'sample_{}_{}_{}_{}'.format(
@@ -260,6 +264,8 @@ if __name__ == '__main__':
                 template_sh_local = template_sh_local.replace(
                     'TODO_PATH_YAML',
                     os.path.join(ini_folder, file_name+'.yaml'))
+                template_sh_local = template_sh_local.replace(
+                    'TODO_MEM', mem_string)
                 template_sh_local = template_sh_local.replace(
                     'TODO_TIME', time_string)
                 fn.write(template_sh_local)
