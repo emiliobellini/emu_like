@@ -47,4 +47,3 @@ if __name__ == '__main__':
     plt.legend()
     plt.xscale('log')
     plt.savefig('output/check_data_{}.png'.format(args.spectrum))
-
