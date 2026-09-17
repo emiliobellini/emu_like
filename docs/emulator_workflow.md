@@ -363,6 +363,27 @@ To restore or update Vega from the Meteo copy:
 emu_sync pull "${MODEL}"
 ```
 
+To synchronize just one subdirectory, add its path relative to the model:
+
+```bash
+emu_sync check "${MODEL}" emulator_files
+emu_sync push "${MODEL}" emulator_files
+emu_sync pull "${MODEL}" emulator_files
+# Nested directories are supported too:
+emu_sync push "${MODEL}" logs/train
+```
+
+The selected directory keeps the same location inside the model on both
+machines; other model subdirectories are not transferred. Omitting `SUBDIR`
+synchronizes the whole model. Absolute paths and `..` components are rejected.
+Missing destination subdirectories are created (the archive root must exist).
+
+For partial recomputation on Vega, push the updated files first, then pull
+the same selection to restore files held only on Meteo. Transfers overwrite
+differing destination files even if the destination is newer. The existing
+`check` mode uses `--update`, so it skips newer destination files and is not
+an exact preview of those overwrites.
+
 `rsync` is incremental, so repeating these commands transfers only changed
 content. The trailing slashes in the helper definitions mean “copy the
 contents of this model directory,” avoiding an extra nested model directory.
@@ -414,38 +435,82 @@ putting the following definitions in `~/.bashrc` on the relevant machine:
 export EMU_METEO_LOGIN="ebellini@meteo.ung.si"
 export EMU_METEO_JUMP="ebellini@ajdovscina.ung.si"
 export EMU_METEO_ROOT="/d4/CAC/ebellini/data/emu_like"
-export EMU_VEGA_DATA_ROOT="/ceph/hpc/home/bellinie/Data_folder"
+export EMU_LOCAL_DATA_ROOT="/ceph/hpc/home/bellinie/Data_folder"
 export HI_FAST_EMU_ROOT="${HOME}/Codes/hi_fast/emu"
 
 emu_sync() {
-    local direction="$1"
-    local model="$2"
+    local direction="${1:-}"
+    local model="${2:-}"
+    local subdir="${3:-}"
 
-    if [[ -z "$model" || ( "$direction" != "push" && "$direction" != "pull" ) ]]; then
-        echo "Usage: emu_sync {push|pull} MODEL"
+    if [[ $# -gt 3 || -z "$model" || ( "$direction" != "check" && "$direction" != "push" && "$direction" != "pull" ) ]]; then
+        echo "Usage: emu_sync {check|push|pull} MODEL [SUBDIR]"
         return 2
     fi
 
-    local source_path destination_path
-    local vega_path="${EMU_VEGA_DATA_ROOT:?}/${model}/"
+    # Keep the selection inside the model directory.
+    if [[ "$subdir" == /* || "/$subdir/" == */../* ]]; then
+        echo "SUBDIR must be a relative path inside MODEL (no .. components)." >&2
+        return 2
+    fi
+
+    local source_path destination_path push_report pull_report
+    local local_path="${EMU_LOCAL_DATA_ROOT:?}/${model}/"
     local meteo_path="${EMU_METEO_LOGIN:?}:${EMU_METEO_ROOT:?}/${model}/"
     local ssh_command="ssh -J ${EMU_METEO_JUMP:?}"
+    local local_source="$local_path" meteo_source="$meteo_path"
+    local selected_path="$local_path"
+    local -a scope_options=()
+    if [[ -n "$subdir" ]]; then
+        # /./ marks where rsync starts preserving the relative directory tree.
+        local_source="${local_path}./${subdir%/}/"
+        meteo_source="${meteo_path}./${subdir%/}/"
+        selected_path="${local_path}${subdir}/"
+        scope_options=(--relative)
+    fi
 
-    if [[ "$direction" == "push" ]]; then
-        if [[ ! -d "$vega_path" ]]; then
-            echo "Local model directory not found: $vega_path" >&2
+    if [[ "$direction" == "check" ]]; then
+        if [[ ! -d "$selected_path" ]]; then
+            echo "Local model directory not found: $selected_path" >&2
             return 1
         fi
-        source_path="$vega_path"
+        push_report=$(rsync -e "$ssh_command" -ahcu \
+            --dry-run --itemize-changes \
+            "${scope_options[@]}" "$local_source" "$meteo_path") || return
+        pull_report=$(rsync -e "$ssh_command" -ahcu \
+            --dry-run --itemize-changes \
+            "${scope_options[@]}" "$meteo_source" "$local_path") || return
+
+        echo
+        echo "Local files newer than or missing from Meteo (would push):"
+        if [[ -n "$push_report" ]]; then
+            printf '%s\n' "$push_report"
+        else
+            echo "  None"
+        fi
+        echo
+        echo "Meteo files newer than or missing locally (would pull):"
+        if [[ -n "$pull_report" ]]; then
+            printf '%s\n' "$pull_report"
+        else
+            echo "  None"
+        fi
+        return
+    elif [[ "$direction" == "push" ]]; then
+        if [[ ! -d "$selected_path" ]]; then
+            echo "Local model directory not found: $selected_path" >&2
+            return 1
+        fi
+        source_path="$local_source"
         destination_path="$meteo_path"
     else
-        mkdir -p "$vega_path"
-        source_path="$meteo_path"
-        destination_path="$vega_path"
+        mkdir -p "$local_path" || return
+        source_path="$meteo_source"
+        destination_path="$local_path"
     fi
 
     rsync -e "$ssh_command" -avhc --progress --partial \
-        "$source_path" "$destination_path"
+        "${scope_options[@]}" "$source_path" "$destination_path"
 }
 
 hi_fast_sync() {
