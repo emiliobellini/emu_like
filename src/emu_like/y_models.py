@@ -957,7 +957,9 @@ class ClassSpectra(YModel):
             if sp.is_pk and joined.z_array is not None:
                 sp.z_array = joined.z_array.copy()
         joined._stored_headers = spectrum_headers(
-            joined.spectra, joined.args, joined.x_names, GrowthRate.derivative_step,
+            joined.spectra,
+            joined.args, joined.x_names,
+            GrowthRate.derivative_step,
             provenance='reconstructed_for_join')
         joined.cosmo = (
             None if joined.hiclassy is None else joined.hiclassy.HiClass())
@@ -1085,7 +1087,9 @@ class ClassSpectra(YModel):
         return self.y_headers
 
     def get_storage_headers(self):
-        """Include calculation provenance without changing spectrum identity."""
+        """
+        Include calculation provenance without changing spectrum identity.
+        """
         if hasattr(self, '_stored_headers'):
             return copy.deepcopy(self._stored_headers)
         return spectrum_headers(
@@ -1250,7 +1254,8 @@ class ClassSpectra(YModel):
 
         reference_headers = [fits.get_header('ref_{}'.format(sp.name))
                              for sp in self.spectra]
-        if any(header != reference_headers[0] for header in reference_headers[1:]):
+        if any(header != reference_headers[0]
+               for header in reference_headers[1:]):
             raise ValueError('Reference CLASS parameter headers disagree')
         if not reference_headers or not reference_headers[0]:
             raise ValueError('Missing reference CLASS parameters')
