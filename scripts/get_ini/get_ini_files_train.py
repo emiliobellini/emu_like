@@ -137,7 +137,7 @@ spectra_config = {
 if __name__ == '__main__':
 
     # Settings
-    model = 'lcdm_k'
+    model = 'lcdm'
     timeout = 47
     learning_rate = 1.e-3
     neurons_hidden = [1024, 1024]
@@ -149,13 +149,6 @@ if __name__ == '__main__':
     data_root = '/ceph/hpc/data/s25r06-05-users/'
     time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
     num_x_pca = None
-
-    # Hard-coded scalers
-    if model == 'lcdm_k' or model == 'lcdm_nu_k':
-        spectra_config['pk_weyl'] = ('pk', None, 'StandardScaler')
-        spectra_config['fk_cb'] = ('pk', None, 'None')
-        spectra_config['fk_m'] = ('pk', None, 'None')
-        spectra_config['fk_weyl'] = ('pk', None, 'None')
 
     ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/train/{}'.format(
         model)

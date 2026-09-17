@@ -27,6 +27,7 @@ except ImportError:  # hiclassy is optional for dataset-based workflows
 
 from .spectra import Spectra, GrowthRate
 from .x_samplers import XSampler
+from .header_metadata import spectrum_headers
 
 
 # Base function
@@ -629,6 +630,8 @@ class ClassSpectra(YModel):
             name: copy.deepcopy(self.outputs[name])}
         oneclassspectrum.x_names = list(self.x_names)
 
+        oneclassspectrum._stored_headers = [self.get_storage_headers()[idx]]
+
         # ClassSpectra metadata
         oneclassspectrum.spectra = Spectra(oneclassspectrum.outputs)
         oneclassspectrum.y_keys = list(oneclassspectrum.spectra.names)
@@ -953,6 +956,9 @@ class ClassSpectra(YModel):
         for sp in joined.spectra:
             if sp.is_pk and joined.z_array is not None:
                 sp.z_array = joined.z_array.copy()
+        joined._stored_headers = spectrum_headers(
+            joined.spectra, joined.args, joined.x_names, GrowthRate.derivative_step,
+            provenance='reconstructed_for_join')
         joined.cosmo = (
             None if joined.hiclassy is None else joined.hiclassy.HiClass())
 
@@ -1077,6 +1083,13 @@ class ClassSpectra(YModel):
         """
         self.y_headers = self.spectra.get_headers()
         return self.y_headers
+
+    def get_storage_headers(self):
+        """Include calculation provenance without changing spectrum identity."""
+        if hasattr(self, '_stored_headers'):
+            return copy.deepcopy(self._stored_headers)
+        return spectrum_headers(
+            self.spectra, self.args, self.x_names, GrowthRate.derivative_step)
 
     def _validate_reference_tables(self):
         """
@@ -1235,6 +1248,23 @@ class ClassSpectra(YModel):
 
         fits = io.FitsFile(fname=path)
 
+        reference_headers = [fits.get_header('ref_{}'.format(sp.name))
+                             for sp in self.spectra]
+        if any(header != reference_headers[0] for header in reference_headers[1:]):
+            raise ValueError('Reference CLASS parameter headers disagree')
+        if not reference_headers or not reference_headers[0]:
+            raise ValueError('Missing reference CLASS parameters')
+        self.ref_params = copy.deepcopy(reference_headers[0])
+        # Preserve recorded/inferred provenance across a load/save cycle.
+        keys = fits.get_keys()
+        stored = [fits.get_header(sp.name) if sp.name.upper() in keys else {}
+                  for sp in self.spectra]
+        fallback = spectrum_headers(
+            self.spectra, self.args, self.x_names, GrowthRate.derivative_step,
+            provenance='inferred_from_input_and_current_code')
+        self._stored_headers = [old if 'class_metadata' in old else new
+                                for old, new in zip(stored, fallback)]
+
         is_pk = False
         self.y_ref = []
         self.k_ranges = []
@@ -1258,6 +1288,12 @@ class ClassSpectra(YModel):
             # read z_array
             self.z_array = fits.get_data('z_array')
 
+        for index, sp in enumerate(self.spectra):
+            if sp.is_pk:
+                sp.k_range = self.k_ranges[index].copy()
+                sp.z_array = self.z_array.copy()
+            elif sp.is_cl:
+                sp.ell_range = self.ell_ranges[index].copy()
         self._validate_reference_tables()
         return
 

@@ -21,6 +21,7 @@ from . import pca
 from .x_samplers import XSampler
 from .y_models import YModel, ClassSpectra
 from .range_sampling import writer_lock
+from .header_metadata import input_header
 
 
 _worker_y_model = None
@@ -1350,6 +1351,12 @@ class DataCollection(object):
             verbose=verbose,
         )
 
+        if hd_x is None:
+            hd_x = input_header(settings['params'])
+        if isinstance(y_model, ClassSpectra):
+            hd_ys = [(header or {}) | storage for header, storage in zip(
+                hd_ys, y_model.get_storage_headers())]
+
         # Save x
         fits.write(
             name=name_x,
@@ -1564,14 +1571,14 @@ class DataCollection(object):
         self.settings = {
             'x_sampler': {
                 'name': x_name,
-                'args': x_args,
+                'args': copy.deepcopy(x_args),
             },
             'y_model': {
                 'name': y_name,
-                'args': y_args,
-                'outputs': y_outputs,
+                'args': copy.deepcopy(y_args),
+                'outputs': copy.deepcopy(y_outputs),
             },
-            'params': params,
+            'params': copy.deepcopy(params),
         }
         # Save settings
         if save_it:
@@ -1600,7 +1607,7 @@ class DataCollection(object):
             fits.write(
                 name=x_sampler.x_key,
                 data=self.x,
-                header=None,
+                header=input_header(params),
             )
 
         # Init y_model
@@ -1621,7 +1628,9 @@ class DataCollection(object):
         # Get y attributes
         self.n_y = y_model.get_n_y()
         self.y_names = y_model.get_y_names()
-        self.y_headers = y_model.get_y_headers()
+        self.y_headers = (y_model.get_storage_headers()
+                          if isinstance(y_model, ClassSpectra)
+                          else y_model.get_y_headers())
         self.y_keys = y_model.y_keys
 
         # Init self.y

@@ -601,7 +601,8 @@ class FitsFile(object):
           as header (see NOTE at the beginning of the class).
         - verbose (bool, default: False): verbosity.
         """
-        if isinstance(header, dict):
+        dictionary_header = isinstance(header, dict)
+        if dictionary_header:
             header = self._flatten_dict(header)
             header = self._delistify(header)
             header = fits.Header(header)
@@ -609,7 +610,16 @@ class FitsFile(object):
             if data is not None:
                 hdul[name].data = data
             if header is not None:
-                hdul[name].header = header
+                if dictionary_header:
+                    # Replace custom metadata without deleting required FITS
+                    # structural cards (XTENSION, NAXIS, PCOUNT, EXTNAME, ...).
+                    target = hdul[name].header
+                    for key in list(target):
+                        if key.startswith('__'):
+                            del target[key]
+                    target.update(header)
+                else:
+                    hdul[name].header = header
         return
 
     def print_info(self):
