@@ -19,7 +19,7 @@ from . import io as io
 from . import scalers as sc
 from . import pca
 from .x_samplers import XSampler
-from .y_models import YModel
+from .y_models import YModel, ClassSpectra
 from .range_sampling import writer_lock
 
 
@@ -677,7 +677,6 @@ class Dataset(object):
 
         # Attributes that are stacked, summed, or concatenated.
         x = np.vstack([dataset.x for dataset in datasets])
-        y = np.vstack([dataset.y for dataset in datasets])
         n_samples = sum(dataset.n_samples for dataset in datasets)
         paths = [path for dataset in datasets for path in dataset.path]
         stored_non_finites = [
@@ -700,8 +699,19 @@ class Dataset(object):
         except AttributeError as error:
             raise NotImplementedError(
                 'Joining is not implemented for this YModel type') from error
-        y_model = join_y_models(y_models)
-        if len(y_model.y) != 1 or not np.array_equal(y_model.y[0], y):
+        if isinstance(y_models[0], ClassSpectra):
+            for dataset in datasets:
+                if (len(dataset.y_model.y) != 1 or not np.array_equal(
+                        dataset.y_model.y[0], dataset.y, equal_nan=True)):
+                    raise ValueError('Dataset.y differs from its y_model data')
+            y_model = join_y_models(
+                y_models, x_values=[dataset.x for dataset in datasets])
+            y = y_model.y[0]
+        else:
+            y = np.vstack([dataset.y for dataset in datasets])
+            y_model = join_y_models(y_models)
+        if len(y_model.y) != 1 or not np.array_equal(
+                y_model.y[0], y, equal_nan=True):
             raise ValueError(
                 'Joined y_model data are inconsistent with Dataset.y')
         y_model.y = [y]
@@ -1082,10 +1092,9 @@ class SobolevDataset(Dataset):
     def join(datasets, verbose=False):
         """Join paired datasets while retaining their growth targets.
 
-        The ordinary Dataset join merges the primary ``pk`` metadata.  For
-        the separately stored growth reference, retain the source with the
-        densest redshift grid; it covers the lower-redshift samples and can
-        be used for interpolation in the Sobolev training step.
+        Rebase pk targets onto the common reference through Dataset.join.
+        Growth targets are already physical f, so only their reference
+        derivative must be rebuilt from the selected common pk table.
         """
         if not datasets:
             raise ValueError('At least one Dataset is required')
@@ -1100,8 +1109,6 @@ class SobolevDataset(Dataset):
             raise ValueError('Sobolev datasets have different growth targets')
 
         primary = Dataset.join(datasets, verbose=verbose)
-        reference_source = max(
-            datasets, key=lambda dataset: dataset.redshift_grid.size)
         joined = SobolevDataset(
             name=primary.name,
             x=primary.x,
@@ -1121,10 +1128,10 @@ class SobolevDataset(Dataset):
         joined.growth_name = first.growth_name
         joined.growth_y_names = copy.deepcopy(first.growth_y_names)
         joined.y_growth = np.vstack([dataset.y_growth for dataset in datasets])
-        joined.reference_pk = copy.deepcopy(reference_source.reference_pk)
-        joined.reference_growth = copy.deepcopy(
-            reference_source.reference_growth)
-        joined.redshift_grid = copy.deepcopy(reference_source.redshift_grid)
+        joined.reference_pk = copy.deepcopy(primary.y_model.y_ref[0])
+        joined.redshift_grid = copy.deepcopy(primary.y_model.z_array)
+        joined.reference_growth = SobolevDataset.growth_from_reference_pk(
+            joined.reference_pk, joined.redshift_grid)
         return joined
 
 

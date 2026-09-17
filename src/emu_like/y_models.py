@@ -724,7 +724,7 @@ class ClassSpectra(YModel):
         return joined
 
     @staticmethod
-    def _join_references(y_models, ref_params):
+    def _join_references(y_models, ref_params, allow_renormalization=False):
         """Select the widest reference grid and validate common values."""
         first = y_models[0]
         if not all(len(model.y_ref) == len(first.spectra.names)
@@ -804,6 +804,15 @@ class ClassSpectra(YModel):
                         raise ValueError(
                             'ClassSpectra y_ref redshift dimension is '
                             'inconsistent with z_array')
+                    if allow_renormalization and spectrum.ratio:
+                        if (not np.all(np.isfinite(reference))
+                                or not np.all(np.isfinite(selected_reference))
+                                or np.any(reference == 0)
+                                or np.any(selected_reference == 0)):
+                            raise ValueError(
+                                'Reference normalization must be finite '
+                                'and nonzero')
+                        continue
                     reference = interp.make_splrep(
                         z_array, reference.T, s=0)(
                             probes, extrapolate=False)
@@ -821,8 +830,12 @@ class ClassSpectra(YModel):
         return selected_z.copy(), copy.deepcopy(selected.y_ref)
 
     @staticmethod
-    def join(y_models):
-        """Combine multiple compatible ClassSpectra instances."""
+    def join(y_models, x_values=None):
+        """Combine compatible models using the widest stored reference.
+
+        With one x array per model, rebase normalized Pk targets onto that
+        reference. Without row coordinates, require equivalent references.
+        """
 
         if not y_models:
             raise ValueError('At least one ClassSpectra model is required')
@@ -933,11 +946,62 @@ class ClassSpectra(YModel):
                 configured_limit=joined.ref_params.get('z_max_pk', 0.1))
 
         joined.z_array, joined.y_ref = ClassSpectra._join_references(
-            y_models, joined.ref_params)
+            y_models, joined.ref_params,
+            allow_renormalization=x_values is not None)
+        if x_values is not None:
+            joined._renormalize_joined_rows(y_models, x_values)
+        for sp in joined.spectra:
+            if sp.is_pk and joined.z_array is not None:
+                sp.z_array = joined.z_array.copy()
         joined.cosmo = (
             None if joined.hiclassy is None else joined.hiclassy.HiClass())
 
         return joined
+
+    def _renormalize_joined_rows(self, models, x_values):
+        """Rebase normalized targets in bounded batches; never run CLASS."""
+        if len(x_values) != len(models):
+            raise ValueError('One input array is required per joined model')
+        for model, x in zip(models, x_values):
+            if np.shape(x) != (model.n_samples, len(model.x_names)):
+                raise ValueError('Join input rows do not match the model')
+        for index, sp in enumerate(self.spectra):
+            if not (sp.is_pk and sp.ratio):
+                continue
+            common = interp.make_splrep(
+                self.z_array, self.y_ref[index].T, s=0)
+            offset = 0
+            for model, x in zip(models, x_values):
+                same = (np.array_equal(model.z_array, self.z_array)
+                        and np.array_equal(
+                            model.y_ref[index], self.y_ref[index]))
+                original = common if same else interp.make_splrep(
+                    model.z_array, model.y_ref[index].T, s=0)
+                for start in range(0, model.n_samples, 1024):
+                    stop = min(start + 1024, model.n_samples)
+                    z = (np.asarray(x)[start:stop, model.x_names.index('z_pk')]
+                         if 'z_pk' in model.x_names else
+                         np.full(stop - start, model.args.get('z_pk', 0.)))
+                    if (not np.all(np.isfinite(z))
+                            or np.any(z < model.z_array[0])
+                            or np.any(z > model.z_array[-1])
+                            or np.any(z < self.z_array[0])
+                            or np.any(z > self.z_array[-1])):
+                        raise ValueError(
+                            'Join samples lie outside the reference grid')
+                    new = common(z, extrapolate=False)[..., 0]
+                    old = new if same else original(
+                        z, extrapolate=False)[..., 0]
+                    if (not np.all(np.isfinite(old))
+                            or not np.all(np.isfinite(new))
+                            or np.any(old == 0) or np.any(new == 0)):
+                        raise ValueError(
+                            'Reference normalization must be finite '
+                            'and nonzero')
+                    if not same:
+                        self.y[index][offset + start:offset + stop] *= \
+                            old / new
+                offset += model.n_samples
 
     def _required_z_max(self, z, configured_limit=None):
         """Plan coverage from this request, without inheriting earlier rows."""
