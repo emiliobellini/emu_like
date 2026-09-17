@@ -4,9 +4,45 @@ This guide describes the complete workflow for building a cosmological
 emulator: sample and train on Vega, archive the results on Meteo, export the
 emulator, and install the exported files in `hi_fast`.
 
+**Contents**
+
+- [Paths used in this guide](#paths-used-in-this-guide)
+- [1. Generate the samples on Vega](#1-generate-the-samples-on-vega)
+  - [Create the sampling configuration](#create-the-sampling-configuration)
+  - [Submit or resume sampling](#submit-or-resume-sampling)
+  - [Run independent row ranges](#run-independent-row-ranges)
+  - [Monitor saved sampling progress](#monitor-saved-sampling-progress)
+  - [Merge range results into the main FITS](#merge-range-results-into-the-main-fits)
+  - [Validate the samples](#validate-the-samples)
+- [2. Train the emulators on Vega](#2-train-the-emulators-on-vega)
+  - [Inspect bounds before selecting scalers](#inspect-bounds-before-selecting-scalers)
+  - [Inspect distributions and choose PCA settings](#inspect-distributions-and-choose-pca-settings)
+  - [Create the training configuration](#create-the-training-configuration)
+  - [Submit or resume training](#submit-or-resume-training)
+  - [Inspect training](#inspect-training)
+- [3. Archive the model on Meteo](#3-archive-the-model-on-meteo)
+- [4. Export the emulator on Vega](#4-export-the-emulator-on-vega)
+- [5. Install the export in `hi_fast`](#5-install-the-export-in-hi_fast)
+- [Portable synchronization helpers](#portable-synchronization-helpers)
+- [6. Reclaim Vega storage](#6-reclaim-vega-storage)
+- [Optional diagnostics and older utilities](#optional-diagnostics-and-older-utilities)
+- [Quick checklist](#quick-checklist)
+
 Run Vega commands from the root of the `emu_like` repository unless stated
 otherwise. Replace `lcdm` in the examples with the model being built, such as
 `lcdm_k`, `lcdm_nu`, or `lcdm_nu_k`.
+
+The commands below assume this repository is installed in the active Python
+environment. If needed, activate the environment used by your Slurm jobs and
+install from the repository root:
+
+```bash
+python -m pip install -e '.[sampling]'
+```
+
+The editable install keeps imports aligned with this checkout. The `sampling`
+extra includes `hiclassy` for sampling and CLASS validation; use
+`python -m pip install -e .` if you only train on existing datasets.
 
 ## Paths used in this guide
 
@@ -101,7 +137,7 @@ prepare the input table and reference spectra once, in your sampling Python
 environment, before submitting any range jobs:
 
 ```bash
-PYTHONPATH=src python main.py sample \
+python main.py sample \
     "init_files/sample/${MODEL}/cl_100_ext.yaml" --prepare-only
 ```
 
@@ -148,7 +184,7 @@ It works for ordinary sampling and independent range jobs, without requiring
 progress bars in the Slurm logs. Show one compact summary row per dataset:
 
 ```bash
-PYTHONPATH=src python scripts/check_data/check_sampling_status.py \
+python scripts/check_data/check_sampling_status.py \
     "${MODEL_DATA}/sample"
 ```
 
@@ -156,7 +192,7 @@ Alternatively, pass a particular main FITS or sampling YAML. Add `--ranges`
 to show the saved count and percentage for each numbered checkpoint:
 
 ```bash
-PYTHONPATH=src python scripts/check_data/check_sampling_status.py \
+python scripts/check_data/check_sampling_status.py \
     "init_files/sample/${MODEL}/cl_100_ext.yaml" --ranges
 ```
 
@@ -184,7 +220,7 @@ whether its job is running or stopped; use `squeue --me` for job state.
 For periodic refreshes from the repository root:
 
 ```bash
-PYTHONPATH=src watch -n 60 python scripts/check_data/check_sampling_status.py \
+watch -n 60 python scripts/check_data/check_sampling_status.py \
     "${MODEL_DATA}/sample"
 ```
 
@@ -202,7 +238,7 @@ Wait until the selected range workers and any ordinary writer to the main
 FITS have stopped, then merge the range files explicitly:
 
 ```bash
-PYTHONPATH=src python main.py sample \
+python main.py sample \
     "init_files/sample/${MODEL}/cl_100_ext.yaml" \
     --merge-ranges \
     "${MODEL_DATA}/sample/cl_100_ext.rows-000000000-000001000.fits" \
@@ -265,6 +301,77 @@ mv logs/o<JOB_ID>.<JOB_NAME> logs/e<JOB_ID>.<JOB_NAME> \
 
 ## 2. Train the emulators on Vega
 
+### Inspect bounds before selecting scalers
+
+Run [`scripts/check_data/check_min_max.py`](../scripts/check_data/check_min_max.py)
+on the completed, merged samples **before choosing the training scalers**.
+Use the same files, file order, train fraction, and random seed as the intended
+training configuration. For the generator's current defaults:
+
+```bash
+for spectrum_type in cl pk; do
+    python scripts/check_data/check_min_max.py \
+        --files "${MODEL_DATA}/sample/${spectrum_type}_100_thin.fits" \
+                "${MODEL_DATA}/sample/${spectrum_type}_100_std.fits" \
+                "${MODEL_DATA}/sample/${spectrum_type}_100_ext.fits" \
+        --frac-train 0.9 --train-test-random-seed 1543
+done
+```
+
+Adjust `100` and the range selection to match your samples. Inspect `cl` and
+`pk` separately: a spectrum must exist in every file passed to one invocation.
+Messages about missing spectra from the other family are expected.
+
+The table reports the minimum and maximum of each spectrum's unscaled target
+values in both splits. By default, rows with non-finite targets are removed,
+as in the training generator; this report does not establish sampling
+completeness. Check both splits before using `LogStandardScaler`, which
+requires strictly positive values. For targets containing zeros or changing
+sign, use a suitable scaler such as `StandardScaler`. Record the per-spectrum
+choices in `spectra_config` in the training generator (`rescale_y` in the
+generated YAML); review `rescale_x` separately for input parameters.
+
+### Inspect distributions and choose PCA settings
+
+Use [`scripts/check_data/inspect_data.py`](../scripts/check_data/inspect_data.py)
+to plot the target density across modes for a selected spectrum. For example,
+inspect signed TE targets with standard scaling:
+
+```bash
+mkdir -p "${MODEL_DATA}/diagnostics/data"
+python scripts/check_data/inspect_data.py \
+    --files "${MODEL_DATA}/sample/cl_100_thin.fits" \
+            "${MODEL_DATA}/sample/cl_100_std.fits" \
+            "${MODEL_DATA}/sample/cl_100_ext.fits" \
+    --name cl_TE_lensed \
+    --rescale-x StandardScaler --rescale-y StandardScaler \
+    --frac-train 0.9 --train-test-random-seed 1543 \
+    --output-folder "${MODEL_DATA}/diagnostics/data"
+```
+
+Omit the `--rescale-x` and `--rescale-y` options to inspect unscaled data.
+Optional `--num-pca-x` and `--num-pca-y` arguments plot the transformed
+components instead. Repeat for the outputs and scalers being considered.
+
+If using PCA, run
+[`scripts/check_data/test_pca.py`](../scripts/check_data/test_pca.py) to inspect
+reconstruction errors as the number of retained components changes:
+
+```bash
+python scripts/check_data/test_pca.py --model "${MODEL}"
+```
+
+First review its `ROOT`, `DATASET_RANGES`, `SPECTRUM_CONFIGS` (including scalers
+and component ranges), and `output_dir`. It currently reads `*_100_*.fits`,
+uses a 0.9/1543 train/test split, and saves PDFs under
+`/ceph/hpc/home/bellinie/emu_like/output/test_pca/${MODEL}/`.
+It skips a spectrum when both output PDFs already exist; move previous plots
+aside before rerunning with changed settings. Use the reconstruction errors
+to choose the per-spectrum PCA counts in the training generator.
+The optional `test_pca.sh` Slurm wrapper needs its model, environment, and
+Python path updated: it currently points to `scripts/test_pca.py` rather than
+`scripts/check_data/test_pca.py`.
+
 ### Create the training configuration
 
 Edit the `Settings` block in
@@ -275,6 +382,9 @@ Check at least:
 - network size, learning rate, batch size, and patience;
 - timeout, PCA settings, scalers, and loss settings;
 - the repository and virtual-environment paths in the Slurm template.
+
+Apply the scaler and PCA choices from the preceding checks to `spectra_config`
+and `template_yaml`; these settings are not all in the `Settings` block.
 
 Then generate and review the configurations:
 
@@ -301,6 +411,21 @@ loading the stored weights while taking the datasets, preprocessing, loss,
 and training policy from a new parameter file.
 
 ### Inspect training
+
+For a text summary of saved training progress, pass selected training stdout
+logs to
+[`scripts/check_train/check_training_status.py`](../scripts/check_train/check_training_status.py):
+
+```bash
+python scripts/check_train/check_training_status.py \
+    logs/o<JOB_ID>.<JOB_NAME>
+```
+
+It reports the last and best epochs, epochs without improvement, learning
+rates, and training/validation losses. It requires a recognizable output-path
+message within the first 40 log lines and an existing, non-empty
+`history_log.csv`; use it after training has recorded epochs. Use `squeue --me`
+to check whether the job is still running.
 
 Plot loss histories:
 
@@ -557,18 +682,36 @@ Also confirm that `hi_fast_sync` can retrieve the exported files. Deletion is
 deliberately not wrapped in a shortcut: verify `MODEL` and `MODEL_DATA`, then
 remove the exact model directory manually.
 
+## Optional diagnostics and older utilities
+
+The other scripts are useful for specific investigations rather than required
+steps for every emulator:
+
+| Script | When to use it |
+| --- | --- |
+| [`check_cross_package.py`](../scripts/check_data/check_cross_package.py) | After changes to sampling/extraction code, compare linear spectra from `emu_like` and `hi_fast` on built-in cosmologies. Requires `hiclassy` and the `hi_fast` source checkout; accepts `--hi-fast-src` and `--output-dir`. It does not validate trained emulator weights. |
+| [`update_fits_headers.py`](../scripts/check_data/update_fits_headers.py) | Add missing metadata to older datasets. Pass explicit FITS paths; the default is a dry run. `--apply` updates files in place after creating `.before_header_update.bak` backups. Inferred metadata describes current code assumptions, not proven historical settings. |
+| [`check_same_fits.py`](../scripts/check_data/check_same_fits.py) | Compare input and spectrum arrays in two compatible FITS files. It ignores positions that are NaN in the second file and does not compare all metadata, so it is not a complete archive-integrity check. |
+| [`check_random_points_dataset.py`](../scripts/check_data/check_random_points_dataset.py) | An alternative random CLASS recomputation diagnostic (`INPUT_FITS --number-points N`). Prefer the `tests/sampler.py` validation above for the routine workflow. Its `.sh` wrapper has a hard-coded dataset and environment. |
+| [`check_one_point_with_class.py`](../scripts/check_data/check_one_point_with_class.py), [`check_class.py`](../scripts/check_data/check_class.py) | Investigate individual matter-spectrum or CLASS interpolation discrepancies. Review their metadata, path, and plotting assumptions before use. |
+| [`check_fits.py`](../scripts/check_data/check_fits.py), [`check_nans.py`](../scripts/check_data/check_nans.py) | Older shape/NaN diagnostics with fixed layout or spectrum assumptions. They need review for current FITS files, especially range checkpoints and `SAMPLE_DONE`; use `check_sampling_status.py` for completeness. |
+| [`repair_fits.py`](../scripts/check_data/repair_fits.py) | Legacy in-place truncation of spectrum arrays to their shortest row count. It is not a range-checkpoint recovery tool; review compatibility and work on a backup if this repair is needed. |
+| [`run_inspect_training.sh`](../scripts/check_train/run_inspect_training.sh) | An older notebook-based Slurm wrapper. Its referenced `scripts/inspect_training_lcdm_k.ipynb` is absent from this checkout; use the plotting commands above or update the wrapper for an available notebook. |
+
 ## Quick checklist
 
-- Generate and review sampling YAML/Slurm files.
-- Run or resume every sampling job.
-- If using range jobs, merge their checkpoints after writers stop.
-- Validate all FITS samples and preserve the logs.
-- Push the sampled model to Meteo.
-- Generate and review training YAML/Slurm files.
-- Run or resume every training job.
-- Inspect losses and error histograms; preserve the logs.
-- Push the trained model to Meteo.
-- Export into an empty `emulator_files/` directory.
-- Push the export to Meteo.
-- From the laptop, pull the export with `hi_fast_sync`.
-- Verify both copies before reclaiming Vega storage.
+- [ ] Generate and review sampling YAML/Slurm files.
+- [ ] Run or resume every sampling job.
+- [ ] If using range jobs, merge their checkpoints after writers stop.
+- [ ] Validate all FITS samples and preserve the logs.
+- [ ] Push the sampled model to Meteo.
+- [ ] Inspect train/test target bounds with `check_min_max.py` before selecting scalers.
+- [ ] Inspect target distributions and, if using PCA, reconstruction errors.
+- [ ] Generate and review training YAML/Slurm files.
+- [ ] Run or resume every training job.
+- [ ] Check saved training progress, losses, and error histograms; preserve the logs.
+- [ ] Push the trained model to Meteo.
+- [ ] Export into an empty `emulator_files/` directory.
+- [ ] Push the export to Meteo.
+- [ ] From the laptop, pull the export with `hi_fast_sync`.
+- [ ] Verify both copies before reclaiming Vega storage.
