@@ -1,7 +1,6 @@
 import argparse
 import hiclassy
 import numpy as np
-import scipy.interpolate as interp
 import tqdm
 import emu_like.io as io
 from emu_like.y_models import YModel
@@ -11,20 +10,24 @@ def _compare_reference_spectra(y_model, threshold):
     """Recompute reference spectra and compare with the model-stored ones."""
     spectra = y_model.spectra
 
-    if any(sp.is_pk for sp in spectra):
-        z_max = {'z_max_pk': y_model._get_z_max()}
-    else:
-        z_max = {}
-
     cosmo_ref = hiclassy.HiClass()
-    ref_params = y_model.ref_params | z_max
-    cosmo_ref.set(ref_params)
+    # Keep the reference run's coverage, including growth-derivative padding.
+    cosmo_ref.set(dict(y_model.ref_params))
     cosmo_ref.compute()
 
-    y_ref_calc = [sp.get(cosmo_ref, z=None)[np.newaxis] for sp in spectra]
-    for nsp, sp in enumerate(spectra):
+    y_ref_calc = []
+    for sp, reference in zip(spectra, y_model.y_ref):
         if not sp.ratio:
-            y_ref_calc[nsp] = np.ones_like(y_ref_calc[nsp])
+            values = np.ones_like(reference)
+        elif sp.is_pk:
+            # Native CLASS nodes can extend beyond the stored output grid.
+            # Scalar evaluation also preserves sp.z_array for later checks.
+            values = np.column_stack([
+                sp.get(cosmo_ref, z=float(z)) for z in y_model.z_array
+            ])[np.newaxis]
+        else:
+            values = sp.get(cosmo_ref, z=None)[np.newaxis]
+        y_ref_calc.append(values)
 
     io.print_level(0, 'Reference spectra check:')
     for nsp, sp in enumerate(spectra):
@@ -50,12 +53,8 @@ def _evaluate_with_class(y_model, x, cosmo, class_params):
 
     z_eval = 0.0
     if any(sp.is_pk for sp in spectra):
-        class_params['z_max_pk'] = 0.1
-        if 'z_pk' in class_params:
-            class_params['z_max_pk'] = max(
-                class_params['z_pk'],
-                class_params['z_max_pk'])
-            z_eval = class_params['z_pk']
+        z_eval = class_params.get('z_pk', 0.0)
+        class_params['z_max_pk'] = y_model._required_z_max(z_eval)
 
     try:
         cosmo.set(class_params)
@@ -68,16 +67,12 @@ def _evaluate_with_class(y_model, x, cosmo, class_params):
 
     by_name = {}
     for nsp, sp in enumerate(spectra):
-        if sp.is_cl:
-            den = y_model.y_ref[nsp][0]
-            num = sp.get(cosmo)
-        else:
-            den = interp.make_splrep(
-                y_model.z_array,
-                y_model.y_ref[nsp][0].T,
-                s=0)(z_eval).T
-            num = sp.get(cosmo, z=z_eval)
-        by_name[sp.name] = num / den
+        num = sp.get(cosmo, z=z_eval)
+        if sp.ratio:
+            den = (y_model._reference_at_z(nsp, z_eval)[0] if sp.is_pk
+                   else y_model.y_ref[nsp][0])
+            num = num / den
+        by_name[sp.name] = num
     return by_name
 
 
