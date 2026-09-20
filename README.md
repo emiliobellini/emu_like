@@ -84,17 +84,22 @@ Ready to use parameter files can also be found in the main directory
 - `planck_train.yaml`: to train an emulator for the Planck total likelihood.
 
 Resume training with `--resume-strict` or `--resume-warm`. Both modes recover
-early-stopping progress from `history_log.csv`, including histories produced by
-older versions. This applies to standard and Sobolev emulators, with either
+early-stopping and learning-rate plateau progress from `history_log.csv`,
+including histories produced by older versions. This applies to standard and Sobolev emulators, with either
 absolute or relative improvement: epochs without a qualifying improvement
 count across restarts. If the recorded history already exhausts patience,
 training returns without running additional epochs. Warm resumes that change
 patience or the improvement criterion reinterpret the history using the new
 settings. The wall-time limit starts afresh for each job.
 
-This recovers early-stopping counters; learning-rate plateau counters still
-restart, and the existing resume modes load best checkpoints, so resumed
-training is not guaranteed to follow an uninterrupted run's exact trajectory.
+Strict resumes also recover the next learning rate, including a reduction at
+the last recorded epoch and reductions missed by older runs. Recorded rate
+increases establish a new rate base. Warm resumes use the learning rate from
+the input YAML while retaining the reconstructed plateau counters. Both
+absolute and relative schedulers recover their best value, wait and cooldown.
+The existing resume modes load best checkpoints, so resumed training is not
+guaranteed to follow an uninterrupted run's exact trajectory; missed training
+updates cannot be recovered retroactively.
 
 Finally, it is possible to test the emulator created with
 ```

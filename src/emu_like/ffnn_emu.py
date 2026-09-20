@@ -370,6 +370,62 @@ class RelativeReduceLROnPlateau(keras.callbacks.Callback):
         self.cooldown_counter = self.cooldown
 
 
+class LearningRateHistory(keras.callbacks.Callback):
+    """Recover plateau counters and the next learning rate from epoch logs.
+
+    Rates are logged before plateau callbacks run. Replay therefore includes
+    the final epoch's reduction, which is absent from its CSV row. Observed
+    reductions cap the replayed rate; missed reductions remain in effect.
+    An observed increase starts a new rate base (e.g. a prior warm resume).
+    """
+
+    def __init__(self, scheduler, epochs, val_loss, learning_rate):
+        super().__init__()
+        self.scheduler = scheduler
+        self.state = {}
+        self.next_learning_rate = None
+        self.restore_learning_rate = True
+        if not epochs:
+            return
+        if not (len(epochs) == len(val_loss) == len(learning_rate)):
+            raise ValueError('Epoch, loss and learning-rate histories must match')
+        rates = np.asarray(learning_rate, dtype=float)
+        if not np.all(np.isfinite(rates)) or np.any(rates < 0):
+            raise ValueError('Learning-rate history must be finite and nonnegative')
+        # A separate optimizer supports both Keras and relative callbacks,
+        # without touching the training model's weights or optimizer slots.
+        optimizer = keras.optimizers.SGD(learning_rate=float(rates[0]))
+        original_model = scheduler.model
+        verbose = scheduler.verbose
+        try:
+            scheduler.set_model(SimpleNamespace(optimizer=optimizer))
+            scheduler.verbose = 0
+            scheduler.on_train_begin()
+            for index, (epoch, loss, rate) in enumerate(
+                    zip(epochs, val_loss, rates)):
+                current_rate = float(tf.keras.backend.get_value(
+                    optimizer.learning_rate))
+                if index and rate > rates[index - 1]:
+                    current_rate = float(rate)
+                else:
+                    current_rate = min(current_rate, float(rate))
+                optimizer.learning_rate.assign(current_rate)
+                scheduler.on_epoch_end(epoch, {'val_loss': loss})
+            self.next_learning_rate = float(tf.keras.backend.get_value(
+                optimizer.learning_rate))
+            self.state = {name: getattr(scheduler, name) for name in
+                          ('best', 'wait', 'cooldown_counter')}
+        finally:
+            scheduler.set_model(original_model)
+            scheduler.verbose = verbose
+
+    def on_train_begin(self, logs=None):
+        for name, value in self.state.items():
+            setattr(self.scheduler, name, value)
+        if self.restore_learning_rate and self.next_learning_rate is not None:
+            self.model.optimizer.learning_rate = self.next_learning_rate
+
+
 class FFNNEmu(Emulator):
     """
     Feed Forward Neural Network emulator.
@@ -507,6 +563,7 @@ class FFNNEmu(Emulator):
                     monitor='val_loss',
                     factor=0.5,
                     min_delta=0.,
+                    mode='min',
                     patience=max(1, patience // 2),
                     verbose=verbose)
 
@@ -544,6 +601,9 @@ class FFNNEmu(Emulator):
             callbacks.extend([csv_logger, checkpoint])
         if reduce_learning_rate:
             callbacks.append(reduce_on_plateau)
+            callbacks.append(LearningRateHistory(
+                reduce_on_plateau, self.epochs, self.val_loss,
+                self.learning_rate))
         if patience is not None:
             callbacks.append(early_stopping)
             callbacks.append(EarlyStoppingHistory(
@@ -556,6 +616,14 @@ class FFNNEmu(Emulator):
             callbacks.append(strict_state_checkpoint)
 
         return callbacks
+
+    @staticmethod
+    def _configure_learning_rate_recovery(callbacks, restore_learning_rate):
+        # Warm starts explicitly choose a new rate; strict starts continue
+        # the historical schedule, even when loading an older best model.
+        for callback in callbacks:
+            if isinstance(callback, LearningRateHistory):
+                callback.restore_learning_rate = restore_learning_rate
 
     @staticmethod
     def _early_stopping_exhausted(callbacks):
@@ -1222,6 +1290,10 @@ class FFNNEmu(Emulator):
             self.model.optimizer.learning_rate = resume_learning_rate
         elif not preserve_optimizer_state:
             self.model.optimizer.learning_rate = learning_rate
+
+        self._configure_learning_rate_recovery(
+            callbacks,
+            preserve_optimizer_state or resume_learning_rate is not None)
 
         # A new or warm-started run must immediately have a valid strict
         # checkpoint, even if it never improves on the prior validation loss.

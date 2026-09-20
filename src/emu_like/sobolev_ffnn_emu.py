@@ -498,6 +498,10 @@ class SobolevFFNNEmu(FFNNEmu):
         elif not preserve_optimizer_state:
             self.model.optimizer.learning_rate = learning_rate
 
+        self._configure_learning_rate_recovery(
+            callbacks,
+            preserve_optimizer_state or resume_learning_rate is not None)
+
         # A new or warm-started run must immediately have a valid strict
         # checkpoint, even if it never improves on the prior validation loss.
         if path and (not preserve_optimizer_state or
