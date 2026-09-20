@@ -488,6 +488,11 @@ class SobolevFFNNEmu(FFNNEmu):
                 io.info(
                     'Profiling training batches {}-{} to {}'.format(
                         start_batch, stop_batch, profile_log_dir))
+        if self._early_stopping_exhausted(callbacks):
+            io.info('Early-stopping patience is already exhausted in the '
+                    'saved history; no additional epochs will run.')
+            return
+
         if resume_learning_rate is not None:
             self.model.optimizer.learning_rate = resume_learning_rate
         elif not preserve_optimizer_state:

@@ -196,6 +196,61 @@ class RelativeEarlyStopping(keras.callbacks.Callback):
             self.model.set_weights(self.absolute_best_weights)
 
 
+class EarlyStoppingHistory(keras.callbacks.Callback):
+    """Replay recorded losses, then restore counters after Keras resets them.
+
+    Replay uses a dummy model and disables weight restoration, so it cannot
+    alter the loaded model or optimizer. The loaded best weights provide the
+    restoration fallback until a new best is reached.
+    """
+
+    def __init__(self, early_stopping, epochs, val_loss):
+        super().__init__()
+        self.early_stopping = early_stopping
+        self.state = {}
+        self.exhausted = False
+        if not epochs:
+            return
+        if len(epochs) != len(val_loss):
+            raise ValueError('Epoch and validation-loss histories must match')
+        callback = early_stopping
+        replay_model = SimpleNamespace(stop_training=False)
+        original_model = callback.model
+        restore = callback.restore_best_weights
+        verbose = callback.verbose
+        try:
+            callback.set_model(replay_model)
+            callback.restore_best_weights = False
+            callback.verbose = 0
+            callback.on_train_begin()
+            for epoch, value in zip(epochs, val_loss):
+                # Old runs may already have continued past patience because
+                # of restarts. Reconstruct the state at the end of the log.
+                replay_model.stop_training = False
+                callback.on_epoch_end(epoch, {'val_loss': value})
+            self.exhausted = replay_model.stop_training
+            for name in ('best', 'wait', 'best_epoch', 'absolute_best'):
+                if hasattr(callback, name):
+                    self.state[name] = getattr(callback, name)
+        finally:
+            callback.set_model(original_model)
+            callback.restore_best_weights = restore
+            callback.verbose = verbose
+        if hasattr(callback, 'stopped_epoch'):
+            callback.stopped_epoch = 0
+
+    def on_train_begin(self, logs=None):
+        callback = self.early_stopping
+        for name, value in self.state.items():
+            setattr(callback, name, value)
+        if self.state and callback.restore_best_weights:
+            weights = self.model.get_weights()
+            if isinstance(callback, RelativeEarlyStopping):
+                callback.absolute_best_weights = weights
+            else:
+                callback.best_weights = weights
+
+
 class TimeBasedEarlyStopping(keras.callbacks.Callback):
     def __init__(self, max_time_hours, verbose=False):
         super().__init__()
@@ -473,7 +528,7 @@ class FFNNEmu(Emulator):
                     min_delta=0,
                     patience=patience,
                     verbose=n_verbose,
-                    mode="auto",
+                    mode="min",
                     baseline=None,
                     restore_best_weights=True,
                 )
@@ -491,6 +546,8 @@ class FFNNEmu(Emulator):
             callbacks.append(reduce_on_plateau)
         if patience is not None:
             callbacks.append(early_stopping)
+            callbacks.append(EarlyStoppingHistory(
+                early_stopping, self.epochs, self.val_loss))
         if timeout is not None:
             callbacks.append(time_early_stopping)
         if strict_state_checkpoint is not None:
@@ -499,6 +556,11 @@ class FFNNEmu(Emulator):
             callbacks.append(strict_state_checkpoint)
 
         return callbacks
+
+    @staticmethod
+    def _early_stopping_exhausted(callbacks):
+        return any(isinstance(callback, EarlyStoppingHistory)
+                   and callback.exhausted for callback in callbacks)
 
     def _plot_loss_per_epoch(self, path=None):
         """
@@ -724,7 +786,8 @@ class FFNNEmu(Emulator):
         # Load history
         try:
             fname = os.path.join(path, self.log_fname)
-            history = np.genfromtxt(fname, delimiter=',', skip_header=1)
+            history = np.genfromtxt(
+                fname, delimiter=',', skip_header=1, ndmin=2)
             self.epochs = [int(x) for x in history[:, 0]]
             self.learning_rate = list(history[:, 1])
             self.loss = list(history[:, 2])
@@ -1149,6 +1212,11 @@ class FFNNEmu(Emulator):
             reduce_learning_rate=reduce_learning_rate,
             relative_improvement=relative_improvement,
             verbose=verbose)
+
+        if self._early_stopping_exhausted(callbacks):
+            io.info('Early-stopping patience is already exhausted in the '
+                    'saved history; no additional epochs will run.')
+            return
 
         if resume_learning_rate is not None:
             self.model.optimizer.learning_rate = resume_learning_rate
