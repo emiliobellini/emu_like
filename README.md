@@ -244,3 +244,9 @@ an unused `*.tmp` file; it is never used as a checkpoint.
 
 After the first merge, use the updated code for every subsequent writer:
 legacy versions cannot interpret the completion mask.
+
+## Joint power and growth diagnostics
+
+To compare standard and Sobolev checkpoints on common validation inputs,
+including growth derived from standard power and finite-difference checks,
+see [the diagnostic guide](docs/compare_pk_fk.md).
