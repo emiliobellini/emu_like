@@ -388,10 +388,12 @@ class LearningRateHistory(keras.callbacks.Callback):
         if not epochs:
             return
         if not (len(epochs) == len(val_loss) == len(learning_rate)):
-            raise ValueError('Epoch, loss and learning-rate histories must match')
+            raise ValueError(
+                'Epoch, loss and learning-rate histories must match')
         rates = np.asarray(learning_rate, dtype=float)
         if not np.all(np.isfinite(rates)) or np.any(rates < 0):
-            raise ValueError('Learning-rate history must be finite and nonnegative')
+            raise ValueError(
+                'Learning-rate history must be finite and nonnegative')
         # A separate optimizer supports both Keras and relative callbacks,
         # without touching the training model's weights or optimizer slots.
         optimizer = keras.optimizers.SGD(learning_rate=float(rates[0]))
@@ -773,6 +775,9 @@ class FFNNEmu(Emulator):
             }
         else:
             return
+
+        # Artifacts may be moved together without changing the training setup.
+        ignored_paths.add(('output', 'path'))
 
         differences = params.nested_differences(
             params_ref,

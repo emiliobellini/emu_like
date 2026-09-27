@@ -1,78 +1,12 @@
-import numpy as np
-import os
+"""Generate standard or Sobolev training configurations and Slurm launchers."""
+import argparse
+from copy import deepcopy
+from pathlib import Path
+import shlex
+
 import yaml
-import emu_like.io as io
 
-template_sh = """#!/bin/bash
-
-# ---- Metadata configuration ----
-#SBATCH --job-name=TODO_NAME
-#SBATCH --mail-type=END
-#SBATCH --mail-user=emilio.bellini@ung.si
-
-
-# ---- Resources configuration  ----
-#SBATCH --partition=cpu
-#SBATCH --mem=TODO_MEM
-#SBATCH --time=2-00:00:00
-#SBATCH --output=logs/o%j.%x
-#SBATCH --error=logs/e%j.%x
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=32
-
-
-
-# ---- Prints  ----
-NOW=`date +%H:%M-%a-%d/%b/%Y`
-echo '------------------------------------------------------'
-echo 'This job is allocated on '$SLURM_JOB_CPUS_PER_NODE' cpu(s)'
-echo 'Job is running on node(s): '
-echo  $SLURM_JOB_NODELIST
-echo '------------------------------------------------------'
-echo 'WORKINFO:'
-echo 'SLURM: job starting at           '$NOW
-echo 'SLURM: sbatch is running on      '$SLURM_SUBMIT_HOST
-echo 'SLURM: executing on cluster      '$SLURM_CLUSTER_NAME
-echo 'SLURM: executing on partition    '$SLURM_JOB_PARTITION
-echo 'SLURM: working directory is      '$SLURM_SUBMIT_DIR
-home_dir=$(getent passwd "$SLURM_JOB_ACCOUNT" | cut -d: -f6)
-echo "SLURM: current home directory is $home_dir"
-echo ""
-echo 'JOBINFO:'
-echo 'SLURM: job identifier is         '$SLURM_JOBID
-echo 'SLURM: job name is               '$SLURM_JOB_NAME
-echo ""
-echo 'NODEINFO:'
-echo 'SLURM: number of nodes is        '$SLURM_JOB_NUM_NODES
-echo 'SLURM: number of cpus/node is    '$SLURM_JOB_CPUS_PER_NODE
-echo 'SLURM: number of gpus/node is    '$SLURM_GPUS_PER_NODE
-echo '------------------------------------------------------'
-
-cd $SLURM_SUBMIT_DIR
-
-
-
-# ==== JOB COMMANDS ===== #
-
-module load Python/3.12.3-GCCcore-13.3.0
-module load libffi/3.4.5-GCCcore-13.3.0
-cd /ceph/hpc/home/bellinie
-source ./venv/bin/activate
-cd emu_like
-
-#export OMP_NUM_THREADS=${SLURM_CPUS_PER_TASK}
-python /ceph/hpc/home/bellinie/emu_like/main.py train TODO_PATH_YAML -v -f -r
-
-
-# ==== END OF JOB COMMANDS ===== #
-
-
-# Wait for processes, if any.
-echo 'Done!'
-wait
-
-"""
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 template_yaml = {
     'output': {
@@ -133,81 +67,112 @@ spectra_config = {
 }
 
 
-# -----------------MAIN-CALL-----------------------------------------
+def generate(model='lcdm', sobolev=False, GPU=False, *,
+             repo_root=REPO_ROOT, data_root='/ceph/hpc/data/s25r06-05-users',
+             timeout=47):
+    """Write one YAML and launcher per spectrum; GPU variants use _gpu names.
+
+    Sobolev generates only pk_* networks, each learning its paired fk_* target.
+    CPU and GPU variants share the same training output directory.
+    """
+    repo_root = Path(repo_root).resolve()
+    ini_folder = repo_root / 'init_files' / 'train' / model
+    output_root = Path(data_root) / model / 'train'
+    if sobolev:
+        ini_folder /= 'sobolev'
+        output_root /= 'sobolev'
+    ini_folder.mkdir(parents=True, exist_ok=True)
+    (repo_root / 'logs').mkdir(exist_ok=True)
+    days, hours = divmod(timeout + 1, 24)
+    time_string = f'{days}-{hours:02d}:00:00'
+    generated = []
+
+    for spectrum, config in spectra_config.items():
+        spectrum_type, num_y_pca, rescale_y = config
+        if sobolev and not spectrum.startswith('pk_'):
+            continue
+        params = deepcopy(template_yaml)
+        params['output'].update(path=str(output_root / spectrum) + '/',
+                                timeout=timeout)
+        args = params['emulator']['args']
+        args.update(
+            learning_rate=1.e-3, neurons_hidden=[1024, 1024],
+            loss=('mean_squared_error_pca' if num_y_pca
+                  else 'mean_squared_error'),
+            loss_floor=1.e-4 if num_y_pca else None,
+            loss_delta=1.e-2 if num_y_pca else None,
+            batch_size=512 if sobolev else 128, patience=2000,
+            reduce_learning_rate=True, relative_improvement=True)
+        params['datasets'].update(
+            name=spectrum,
+            paths=[str(Path(data_root) / model / 'sample' /
+                       f'{spectrum_type}_100_{region}.fits')
+                   for region in ['thin', 'std', 'ext']],
+            rescale_y=rescale_y, num_x_pca=None, num_y_pca=num_y_pca)
+        if sobolev:
+            params['emulator']['name'] = 'sobolev_ffnn_emu'
+            for key in ('loss', 'loss_floor', 'loss_delta'):
+                del args[key]
+            args.update(activation='tanh', pk_weight=1.0, fk_weight=1.0,
+                        fk_loss='standardized_mse', fk_warmup_epochs=2000,
+                        fk_ramp_epochs=2000)
+            params['datasets']['rescale_growth'] = 'StandardScaler'
+
+        stem = spectrum + ('_gpu' if GPU else '')
+        yaml_path = ini_folder / (stem + '.yaml')
+        yaml_path.write_text(yaml.safe_dump(params, sort_keys=False))
+        job_name = f'train_{model}_' + ('sobolev_' if sobolev else '') + stem
+        mem = '62G' if sobolev or spectrum_type == 'cl' else '24G'
+        gpu_resources = '#SBATCH --gres=gpu:1\n' if GPU else ''
+        gpu_setup = """module load CUDA/12.6.0
+module load cuDNN/9.10.2.21-CUDA-12.6.0
+nvidia-smi
+python - <<'PY'
+import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+print('TensorFlow GPUs:', gpus)
+assert gpus, 'No GPU visible to TensorFlow'
+PY
+""" if GPU else ''
+        script = f"""#!/bin/bash
+#SBATCH --job-name={job_name}
+#SBATCH --mail-type=END
+#SBATCH --mail-user=emilio.bellini@ung.si
+#SBATCH --partition={'gpu' if GPU else 'cpu'}
+{gpu_resources}#SBATCH --mem={mem}
+#SBATCH --time={time_string}
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task={16 if GPU else 32}
+#SBATCH --output={repo_root}/logs/o%j.%x
+#SBATCH --error={repo_root}/logs/e%j.%x
+
+set -euo pipefail
+REPO_ROOT={shlex.quote(str(repo_root))}
+cd "$REPO_ROOT"
+module load Python/3.12.3-GCCcore-13.3.0
+module load libffi/3.4.5-GCCcore-13.3.0
+source /ceph/hpc/home/bellinie/venv/bin/activate
+export PYTHONPATH="$REPO_ROOT/src${{PYTHONPATH:+:$PYTHONPATH}}"
+{gpu_setup}
+# Resume strictly when output exists; otherwise start a new training.
+srun --cpu-bind=cores python "$REPO_ROOT/main.py" train \\
+  {shlex.quote(str(yaml_path))} -v -f -r "$@"
+"""
+        sh_path = ini_folder / ('run_' + stem + '.sh')
+        sh_path.write_text(script)
+        sh_path.chmod(sh_path.stat().st_mode | 0o111)
+        generated.append((yaml_path, sh_path))
+    return generated
+
+
 if __name__ == '__main__':
-
-    # Settings
-    model = 'lcdm'
-    timeout = 47
-    learning_rate = 1.e-3
-    neurons_hidden = [1024, 1024]
-    batch_size = 128
-    patience = 2000
-    reduce_learning_rate = True
-    relative_improvement = True
-    n_samples_1000 = 100
-    data_root = '/ceph/hpc/data/s25r06-05-users/'
-    time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
-    num_x_pca = None
-
-    ini_folder = '/ceph/hpc/home/bellinie/emu_like/init_files/train/{}'.format(
-        model)
-    io.Folder(ini_folder).create()
-
-    for spectrum in spectra_config:
-        spectrum_type, num_y_pca, rescale_y = spectra_config[spectrum]
-
-        if spectrum_type == 'pk':
-            mem_string = '24G'
-        elif spectrum_type == 'cl':
-            mem_string = '62G'
-
-        # Loss function
-        if num_y_pca is None:
-            loss = 'mean_squared_error'
-            loss_floor = None
-            loss_delta = None
-        else:
-            loss = 'mean_squared_error_pca'
-            loss_floor = 1.e-4
-            loss_delta = 1.e-2
-
-        full_name = 'train_{}_{}'.format(model, spectrum)
-
-        # sh
-        with open(os.path.join(ini_folder, 'run_'+spectrum+'.sh'), 'w') as fn:
-            template_sh_local = template_sh.replace('TODO_NAME', full_name)
-            template_sh_local = template_sh_local.replace(
-                'TODO_PATH_YAML', os.path.join(ini_folder, spectrum+'.yaml'))
-            template_sh_local = template_sh_local.replace(
-                'TODO_MEM', mem_string)
-            template_sh_local = template_sh_local.replace(
-                'TODO_TIME', time_string)
-            fn.write(template_sh_local)
-
-        # yaml
-        template_yaml['output']['path'] = os.path.join(
-            data_root, '{}/train/{}/'.format(model, spectrum))
-        template_yaml['output']['timeout'] = timeout
-        template_yaml['emulator']['args']['learning_rate'] = learning_rate
-        template_yaml['emulator']['args']['neurons_hidden'] = neurons_hidden
-        template_yaml['emulator']['args']['loss'] = loss
-        template_yaml['emulator']['args']['loss_floor'] = loss_floor
-        template_yaml['emulator']['args']['loss_delta'] = loss_delta
-        template_yaml['emulator']['args']['batch_size'] = batch_size
-        template_yaml['emulator']['args']['patience'] = patience
-        template_yaml['emulator']['args']['reduce_learning_rate'] = \
-            reduce_learning_rate
-        template_yaml['emulator']['args']['relative_improvement'] = \
-            relative_improvement
-        template_yaml['datasets']['name'] = spectrum
-        template_yaml['datasets']['paths'] = [os.path.join(
-            data_root, '{}/sample/{}_{}_{}.fits'.format(
-                model, spectrum_type, n_samples_1000, x))
-                for x in ['thin', 'std', 'ext']]
-        template_yaml['datasets']['rescale_y'] = rescale_y
-        template_yaml['datasets']['num_x_pca'] = num_x_pca
-        template_yaml['datasets']['num_y_pca'] = num_y_pca
-
-        with open(os.path.join(ini_folder, spectrum+'.yaml'), 'w') as fn:
-            yaml.safe_dump(template_yaml, fn, sort_keys=False)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--model', default='lcdm')
+    parser.add_argument('--sobolev', action=argparse.BooleanOptionalAction,
+                        default=False, help='Generate paired Pk/fk training')
+    parser.add_argument('--GPU', '--gpu', dest='GPU',
+                        action=argparse.BooleanOptionalAction, default=False,
+                        help='Generate GPU launchers and *_gpu.yaml files')
+    cli = parser.parse_args()
+    generate(model=cli.model, sobolev=cli.sobolev, GPU=cli.GPU)

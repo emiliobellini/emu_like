@@ -6,10 +6,10 @@ The original training FITS files must still contain the same data used during
 training. Run from the repository root with the training Python environment:
 
 ```bash
-PYTHONPATH=src python scripts/check_train/compare_pk_fk.py \
+python scripts/check_train/compare_pk_fk.py \
   --standard-pk /ceph/hpc/data/s25r06-05-users/lcdm_k/train/pk_m \
   --standard-fk /ceph/hpc/data/s25r06-05-users/lcdm_k/train/fk_m \
-  --sobolev /ceph/hpc/data/s25r06-05-users/sobolev_lcdm_k/train/pk_m \
+  --sobolev /ceph/hpc/data/s25r06-05-users/lcdm_k/train/sobolev/pk_m \
   --output output/lcdm_k_pk_fk_comparison
 ```
 

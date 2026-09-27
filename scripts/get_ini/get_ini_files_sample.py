@@ -1,7 +1,7 @@
-import numpy as np
+"""Generate sampling configurations and Slurm launchers for a model."""
+import argparse
 import os
 import yaml
-import emu_like.io as io
 
 template_sh = """#!/bin/bash
 
@@ -224,9 +224,15 @@ args = {
 
 # -----------------MAIN-CALL-----------------------------------------
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        '--model', default='lcdm_nu_k',
+        choices=['lcdm', 'lcdm_nu', 'lcdm_k', 'lcdm_nu_k'],
+        help='Model to sample (default: %(default)s)')
+    cli = parser.parse_args()
 
     # Settings
-    model = 'lcdm_nu_k'
+    model = cli.model
     n_samples_1000 = 100
     timeout = 47
     save_interval = 200
@@ -239,11 +245,11 @@ if __name__ == '__main__':
     ell_min = 2
     ell_max = 3000
 
-    time_string = '{:01d}-{:02d}:00:00'.format(*np.divmod(timeout+1, 24))
+    time_string = '{:01d}-{:02d}:00:00'.format(*divmod(timeout+1, 24))
 
     ini_folder = (
         '/ceph/hpc/home/bellinie/emu_like/init_files/sample/{}'.format(model))
-    io.Folder(ini_folder).create()
+    os.makedirs(ini_folder, exist_ok=True)
 
     for spectrum in ['pk', 'cl']:
         if spectrum == 'pk':

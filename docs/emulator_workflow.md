@@ -84,7 +84,7 @@ Before running the generator, edit the `Settings` block in
 [`scripts/get_ini/get_ini_files_sample.py`](../scripts/get_ini/get_ini_files_sample.py).
 In particular, check:
 
-- `model`;
+- the model selected with `--model` (default: `lcdm_nu_k`);
 - `n_samples_1000` (the actual number of samples is 1,000 times this value);
 - `timeout` and `save_interval`;
 - `data_root`;
@@ -97,7 +97,7 @@ the repository or environment has moved.
 Generate the YAML and Slurm files:
 
 ```bash
-python scripts/get_ini/get_ini_files_sample.py
+python scripts/get_ini/get_ini_files_sample.py --model "${MODEL}"
 ```
 
 Review the generated files under `init_files/sample/${MODEL}/` before
@@ -374,26 +374,47 @@ Python path updated: it currently points to `scripts/test_pca.py` rather than
 
 ### Create the training configuration
 
-Edit the `Settings` block in
+Review `generate()`, `spectra_config`, and `template_yaml` in
 [`scripts/get_ini/get_ini_files_train.py`](../scripts/get_ini/get_ini_files_train.py).
 Check at least:
 
-- `model`, `n_samples_1000`, and `data_root`;
+- the model selected with `--model`, the sample count (100), and `data_root`;
 - network size, learning rate, batch size, and patience;
 - timeout, PCA settings, scalers, and loss settings;
 - the repository and virtual-environment paths in the Slurm template.
 
 Apply the scaler and PCA choices from the preceding checks to `spectra_config`
-and `template_yaml`; these settings are not all in the `Settings` block.
+and `template_yaml`, checking the overrides inside `generate()` as well.
 
 Then generate and review the configurations:
 
 ```bash
-python scripts/get_ini/get_ini_files_train.py
+python scripts/get_ini/get_ini_files_train.py --model "${MODEL}"
 ```
 
 The generated files are stored under `init_files/train/${MODEL}/` and files
 with matching names are overwritten.
+
+For Sobolev training on a GPU:
+
+```bash
+python scripts/get_ini/get_ini_files_train.py --model "${MODEL}" --sobolev --GPU
+```
+
+Both options default to false and can be used independently. The Python API
+is `generate(model='lcdm', sobolev=False, GPU=False)`. Sobolev generates only
+`pk_m`, `pk_cb`, and `pk_weyl`, each trained with its matching growth target.
+Its configurations are stored under `init_files/train/${MODEL}/sobolev/`,
+and its outputs under `${MODEL_DATA}/train/sobolev/<spectrum>/`.
+GPU YAML files and launchers have a `_gpu` suffix; CPU and GPU variants use
+the same output directory, so submit only one variant per training run.
+Standard outputs remain under `${MODEL_DATA}/train/<spectrum>/`.
+
+The export command currently visits immediate subdirectories only. With this
+layout, export individual spectrum directories when assembling a bundle;
+passing the entire `train/` directory also encounters the `sobolev/`
+container, which is not itself a trained emulator. Export the desired
+Sobolev spectrum last with `--force` to replace the standard spectrum.
 
 ### Submit or resume training
 
