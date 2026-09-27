@@ -15,6 +15,11 @@ from emu_like.emu import Emulator
 from emu_like.sobolev_ffnn_emu import SobolevFFNNEmu
 matplotlib.use('Agg')
 
+if __package__:
+    from ._plot_paths import plot_path, source_root
+else:
+    from _plot_paths import plot_path, source_root
+
 
 class EmuData(object):
 
@@ -357,24 +362,14 @@ def show_summary(
         root,
         vlines=[0.01, 0.05, 0.1, 1.],
         save_dir=None,
-        compare_to_all=False
+        compare_to_all=False,
+        relative_to=None
         ):
 
-    # Fix save directory
-    if save_dir is None:
-        save_path_hist = os.path.join(root, 'histograms.png')
-        save_path_sum = os.path.join(root, 'summary_table.txt')
-    else:
-        if os.path.split(root)[-1] == '':
-            fname_hist = 'histograms_{}.png'.format(
-                os.path.basename(os.path.dirname(root)))
-            fname_sum = 'summary_table_{}.txt'.format(
-                os.path.basename(os.path.dirname(root)))
-        else:
-            fname_hist = 'histograms_{}.png'.format(os.path.basename(root))
-            fname_sum = 'summary_table_{}.txt'.format(os.path.basename(root))
-        save_path_hist = os.path.join(save_dir, fname_hist)
-        save_path_sum = os.path.join(save_dir, fname_sum)
+    save_path_hist = plot_path(
+        root, save_dir, 'histograms.png', relative_to)
+    save_path_sum = plot_path(
+        root, save_dir, 'summary_table.txt', relative_to)
 
     with open(os.path.join(root, 'params.yaml')) as f:
         params = yaml.safe_load(f)
@@ -517,18 +512,11 @@ def plot_worst_modes(
         use_growth=False,
         n_modes_kept=3,
         vlines=[0.01, 0.05, 0.1, 1.],
-        save_dir=None):
+        save_dir=None,
+        relative_to=None):
 
-    # Fix save directory
-    if save_dir is None:
-        save_path = os.path.join(root, 'worst_modes.png')
-    else:
-        if os.path.split(root)[-1] == '':
-            fname = 'worst_modes_{}.png'.format(
-                os.path.basename(os.path.dirname(root)))
-        else:
-            fname = 'worst_modes_{}.png'.format(os.path.basename(root))
-        save_path = os.path.join(save_dir, fname)
+    save_path = plot_path(
+        root, save_dir, 'worst_modes.png', relative_to)
 
     ranges = list(emudata.keys())
     n_ranges = len(ranges)
@@ -602,29 +590,34 @@ if __name__ == '__main__':
         '-r',
         type=str,
         nargs='+',
+        required=True,
         help='Path to the emulator root folder.')
     parser.add_argument(
         '--save-dir',
         '-s',
         type=str,
-        help='Directory to save figures. Defaults to script directory.')
+        help=('Save here with relative run paths joined by underscores. '
+              'Defaults to saving beside each training run.'))
     args = parser.parse_args()
 
     if args.save_dir is not None:
         os.makedirs(args.save_dir, exist_ok=True)
 
     # Find all folders containing history_log.csv in the provided roots
+    relative_to = source_root(args.roots)
     roots = []
     for root in args.roots:
         for folder, folders, files in os.walk(root):
             if 'history_log.csv' in files:
-                roots.append(folder)
+                if folder not in roots:
+                    roots.append(folder)
 
     for root in roots:
 
         emudata, spectrum, diff, use_growth = show_summary(
             root,
             save_dir=args.save_dir,
+            relative_to=relative_to,
             compare_to_all=True)
 
         plot_worst_modes(
@@ -632,4 +625,5 @@ if __name__ == '__main__':
             emudata,
             spectrum, diff, use_growth=use_growth,
             n_modes_kept=3,
-            save_dir=args.save_dir)
+            save_dir=args.save_dir,
+            relative_to=relative_to)

@@ -7,6 +7,11 @@ import numpy as np
 import os
 matplotlib.use('Agg')
 
+if __package__:
+    from ._plot_paths import plot_path, source_root
+else:
+    from _plot_paths import plot_path, source_root
+
 
 def last_relative_improvement(
         values,
@@ -37,21 +42,13 @@ def last_relative_improvement(
     return best_idx
 
 
-def plot_loss(roots, save_dir=None):
+def plot_loss(roots, save_dir=None, relative_to=None):
     for root in roots:
         path = os.path.join(root, 'history_log.csv')
         data = np.genfromtxt(path, delimiter=',', names=True)
 
-        # Fix save directory
-        if save_dir is None:
-            save_path = os.path.join(root, 'loss_vs_epoch.png')
-        else:
-            if os.path.split(root)[-1] == '':
-                fname = 'loss_vs_epoch_{}.png'.format(
-                    os.path.basename(os.path.dirname(root)))
-            else:
-                fname = 'loss_vs_epoch_{}.png'.format(os.path.basename(root))
-            save_path = os.path.join(save_dir, fname)
+        save_path = plot_path(
+            root, save_dir, 'loss_vs_epoch.png', relative_to)
 
         # Last epoch
         last_epoch = data['epoch'][-1]
@@ -174,22 +171,26 @@ if __name__ == '__main__':
         '-r',
         type=str,
         nargs='+',
+        required=True,
         help='Paths to training run folders containing history_log.csv.')
     parser.add_argument(
         '--save-dir',
         '-s',
         type=str,
-        help='Directory to save figures. Defaults to script directory.')
+        help=('Save here with relative run paths joined by underscores. '
+              'Defaults to saving beside each training run.'))
     args = parser.parse_args()
 
     if args.save_dir is not None:
         os.makedirs(args.save_dir, exist_ok=True)
 
     # Find all folders containing history_log.csv in the provided roots
+    relative_to = source_root(args.roots)
     roots = []
     for root in args.roots:
         for folder, folders, files in os.walk(root):
             if 'history_log.csv' in files:
-                roots.append(folder)
+                if folder not in roots:
+                    roots.append(folder)
 
-    plot_loss(roots, save_dir=args.save_dir)
+    plot_loss(roots, save_dir=args.save_dir, relative_to=relative_to)

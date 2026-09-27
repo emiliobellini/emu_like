@@ -88,6 +88,53 @@ class FFNNCSVLogger(keras.callbacks.Callback):
             self.file = None
 
 
+class MonitorAfterEpoch:
+    """Ignore changing objectives until the configured training epoch."""
+
+    def __init__(self, *args, start_from_epoch=0, **kwargs):
+        self.monitor_start_epoch = int(start_from_epoch)
+        super().__init__(*args, **kwargs)
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch >= self.monitor_start_epoch:
+            super().on_epoch_end(epoch, logs)
+
+
+class CheckpointAfterEpoch:
+    """Keep provisional warmup checkpoints without setting the final best."""
+
+    def __init__(self, *args, start_from_epoch=0, **kwargs):
+        self.monitor_start_epoch = int(start_from_epoch)
+        super().__init__(*args, **kwargs)
+        self.warmup_best = np.inf
+
+    def on_epoch_end(self, epoch, logs=None):
+        if epoch < self.monitor_start_epoch:
+            final_best = self.best
+            self.best = self.warmup_best
+            try:
+                super().on_epoch_end(epoch, logs)
+                self.warmup_best = self.best
+            finally:
+                self.best = final_best
+        else:
+            super().on_epoch_end(epoch, logs)
+
+
+class DelayedModelCheckpoint(
+        CheckpointAfterEpoch, keras.callbacks.ModelCheckpoint):
+    pass
+
+
+class DelayedEarlyStopping(MonitorAfterEpoch, keras.callbacks.EarlyStopping):
+    pass
+
+
+class DelayedReduceLROnPlateau(
+        MonitorAfterEpoch, keras.callbacks.ReduceLROnPlateau):
+    pass
+
+
 class StrictStateCheckpoint(keras.callbacks.Callback):
     """Save a complete, optimizer-consistent state on val-loss improvement."""
 
@@ -213,6 +260,10 @@ class EarlyStoppingHistory(keras.callbacks.Callback):
             return
         if len(epochs) != len(val_loss):
             raise ValueError('Epoch and validation-loss histories must match')
+        eligible = [(epoch, value) for epoch, value in zip(epochs, val_loss)
+                    if epoch >= getattr(early_stopping, 'monitor_start_epoch', 0)]
+        if not eligible:
+            return
         callback = early_stopping
         replay_model = SimpleNamespace(stop_training=False)
         original_model = callback.model
@@ -223,7 +274,7 @@ class EarlyStoppingHistory(keras.callbacks.Callback):
             callback.restore_best_weights = False
             callback.verbose = 0
             callback.on_train_begin()
-            for epoch, value in zip(epochs, val_loss):
+            for epoch, value in eligible:
                 # Old runs may already have continued past patience because
                 # of restarts. Reconstruct the state at the end of the log.
                 replay_model.stop_training = False
@@ -428,6 +479,19 @@ class LearningRateHistory(keras.callbacks.Callback):
             self.model.optimizer.learning_rate = self.next_learning_rate
 
 
+class DelayedRelativeEarlyStopping(MonitorAfterEpoch, RelativeEarlyStopping):
+    pass
+
+
+class DelayedRelativeReduceLROnPlateau(
+        MonitorAfterEpoch, RelativeReduceLROnPlateau):
+    pass
+
+
+class DelayedStrictStateCheckpoint(CheckpointAfterEpoch, StrictStateCheckpoint):
+    pass
+
+
 class FFNNEmu(Emulator):
     """
     Feed Forward Neural Network emulator.
@@ -486,7 +550,8 @@ class FFNNEmu(Emulator):
             timeout=None,
             reduce_learning_rate=True,
             relative_improvement=True,
-            verbose=False):
+            verbose=False,
+            monitor_start_epoch=0):
         """
         Define and initialise callbacks.
         Arguments:
@@ -502,6 +567,8 @@ class FFNNEmu(Emulator):
           instead of absolute improvement for early stopping and learning
           rate reduction;
         - verbose (bool, default: False): verbosity.
+        - monitor_start_epoch (int, default: 0): first epoch eligible for
+          stopping, plateau reduction and best-model selection.
 
         Callbacks implemented:
         - Checkpoint: save the weights of a model each time that
@@ -530,8 +597,9 @@ class FFNNEmu(Emulator):
                 checkpoint_folder.path,
                 self.checkpoint_fname)
             # TODO: understand what should be passed by the user
-            checkpoint = keras.callbacks.ModelCheckpoint(
+            checkpoint = DelayedModelCheckpoint(
                 fname,
+                start_from_epoch=monitor_start_epoch,
                 monitor='val_loss',
                 verbose=int(verbose),
                 save_best_only=True,
@@ -542,15 +610,22 @@ class FFNNEmu(Emulator):
             # Logfile
             fname = os.path.join(path, self.log_fname)
             csv_logger = FFNNCSVLogger(fname)
-            initial_best = min(self.val_loss) if self.val_loss else np.inf
-            strict_state_checkpoint = StrictStateCheckpoint(
+            eligible_losses = [value for epoch, value in
+                               zip(self.epochs, self.val_loss)
+                               if epoch >= monitor_start_epoch]
+            initial_best = min(eligible_losses, default=np.inf)
+            if monitor_start_epoch:
+                checkpoint.best = initial_best
+            strict_state_checkpoint = DelayedStrictStateCheckpoint(
                 lambda: self._save_strict_state(path),
+                start_from_epoch=monitor_start_epoch,
                 initial_best=initial_best)
 
         # Reduce learning rate on plateau
         if reduce_learning_rate:
             if relative_improvement is True:
-                reduce_on_plateau = RelativeReduceLROnPlateau(
+                reduce_on_plateau = DelayedRelativeReduceLROnPlateau(
+                    start_from_epoch=monitor_start_epoch,
                     monitor='val_loss',
                     factor=0.5,
                     patience=max(1, patience // 2),
@@ -561,7 +636,8 @@ class FFNNEmu(Emulator):
                     mode='min',
                     verbose=verbose)
             else:
-                reduce_on_plateau = keras.callbacks.ReduceLROnPlateau(
+                reduce_on_plateau = DelayedReduceLROnPlateau(
+                    start_from_epoch=monitor_start_epoch,
                     monitor='val_loss',
                     factor=0.5,
                     min_delta=0.,
@@ -572,7 +648,8 @@ class FFNNEmu(Emulator):
         # Early Stopping
         if patience is not None:
             if relative_improvement is True:
-                early_stopping = RelativeEarlyStopping(
+                early_stopping = DelayedRelativeEarlyStopping(
+                    start_from_epoch=monitor_start_epoch,
                     monitor="val_loss",
                     patience=patience,
                     min_rel_delta=1e-3,
@@ -582,7 +659,8 @@ class FFNNEmu(Emulator):
                     restore_best_weights=True,
                 )
             else:
-                early_stopping = keras.callbacks.EarlyStopping(
+                early_stopping = DelayedEarlyStopping(
+                    start_from_epoch=monitor_start_epoch,
                     monitor="val_loss",
                     min_delta=0,
                     patience=patience,

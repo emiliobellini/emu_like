@@ -248,6 +248,12 @@ class SobolevFFNNEmu(FFNNEmu):
         self.strict_state_fname = 'strict_training_state.weights.h5'
         self.strict_optimizer_fname = 'strict_training_state.optimizer.npz'
 
+    def _monitor_start_epoch(self):
+        """Compare losses only after all warmup and ramp epochs finish."""
+        params = self.sobolev_params or {}
+        return (int(params.get('fk_warmup_epochs', 0))
+                + int(params.get('fk_ramp_epochs', 0)))
+
     def _callbacks(
             self, path=None, patience=None, timeout=None,
             reduce_learning_rate=True, relative_improvement=True,
@@ -259,7 +265,8 @@ class SobolevFFNNEmu(FFNNEmu):
             timeout=timeout,
             reduce_learning_rate=reduce_learning_rate,
             relative_improvement=relative_improvement,
-            verbose=verbose)
+            verbose=verbose,
+            monitor_start_epoch=self._monitor_start_epoch())
         if path is not None:
             for index, callback in enumerate(callbacks):
                 if isinstance(callback, FFNNCSVLogger):
@@ -794,12 +801,16 @@ class SobolevFFNNEmu(FFNNEmu):
             self.model.compile(optimizer='adam', jit_compile=False)
             self._restore_strict_state(path)
         elif model_to_load == 'best' and self.val_loss:
-            best_epoch = self.epochs[int(np.argmin(self.val_loss))] + 1
-            candidate = os.path.join(
-                path, self.checkpoint_folder,
-                self.checkpoint_fname.format(epoch=best_epoch))
-            if os.path.isfile(candidate):
-                checkpoint_path = candidate
+            eligible = [(loss, epoch) for epoch, loss in
+                        zip(self.epochs, self.val_loss)
+                        if epoch >= self._monitor_start_epoch()]
+            if eligible:
+                best_epoch = min(eligible)[1] + 1
+                candidate = os.path.join(
+                    path, self.checkpoint_folder,
+                    self.checkpoint_fname.format(epoch=best_epoch))
+                if os.path.isfile(candidate):
+                    checkpoint_path = candidate
         elif isinstance(model_to_load, int):
             candidate = os.path.join(
                 path, self.checkpoint_folder,

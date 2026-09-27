@@ -92,6 +92,14 @@ training returns without running additional epochs. Warm resumes that change
 patience or the improvement criterion reinterpret the history using the new
 settings. The wall-time limit starts afresh for each job.
 
+For Sobolev training, early stopping and learning-rate plateau monitoring
+start at zero-based epoch `fk_warmup_epochs + fk_ramp_epochs`. Earlier losses
+use changing FK weights and do not set the best validation loss or consume
+patience. Best-model selection uses the same boundary; provisional checkpoints
+remain available during warmup and ramp for recovery. Resume replay also
+ignores those earlier losses when reconstructing convergence counters.
+The epoch and wall-time limits still apply during warmup and ramp.
+
 Strict resumes also recover the next learning rate, including a reduction at
 the last recorded epoch and reductions missed by older runs. Recorded rate
 increases establish a new rate base. Warm resumes use the learning rate from
