@@ -1,5 +1,50 @@
 # Comparing standard and Sobolev power/growth
 
+## Per-model histograms
+
+`plot_histograms.py` also plots growth histograms independently for every
+`pk_*` model it discovers, using the same derivative and histogram helpers:
+
+```bash
+python scripts/check_train/plot_histograms.py \
+  --roots /path/to/train --save-dir output/histograms
+```
+
+For each dataset range, `fk_*_<range>_accuracy_absolute_histograms.png` and
+`fk_*_<range>_accuracy_relative_percent_histograms.png` compare power-derived
+growth with the matching FITS growth data. Sobolev runs overlay `eval_fk`
+accuracy and add `consistency_absolute` and `consistency_relative_percent`
+histograms of `eval_fk - fk_from_pk`. Each figure shows bin errors, per-spectrum
+RMS, and per-spectrum maximum error. Files under `--save-dir` include the
+relative training-run path, as with the existing plots.
+
+Only the histograms are added: no derivative checks, diagnostic JSON/NPZ
+files, or error-versus-k plots from `compare_pk_fk.py` are run. The existing
+summary table and worst-mode plots remain available. Growth predictions
+and FITS targets are compared in physical units using their respective saved
+references. Relative errors divide by physical FITS growth, excluding bins
+with absolute growth at or below `--growth-floor` (default `1e-6`).
+
+All per-run histograms, summary statistics, and worst-mode plots use only
+validation rows. The split is reconstructed from each run's `params.yaml`:
+apply the training finite-row filter (including growth for Sobolev), join
+the listed datasets in order, and split once using `frac_train` and
+`train_test_random_seed`. Only ranges listed in that run are evaluated.
+The original FITS files must be unchanged since training; an unseeded split
+cannot be reconstructed and raises an error. Growth diagnostics further
+exclude validation rows with nonfinite growth targets. The matching
+`FK_*`, `REF_FK_*`, `K_RANGE_FK_*`, and `Z_ARRAY` FITS extensions are required.
+Use `--growth-batch-size` (default 128) to control derivative memory, or
+`--skip-growth-histograms` to skip the added plots. Standalone `fk_*` runs
+retain their existing accuracy plots: a consistency comparison against a
+separate power model requires the three-model workflow below.
+
+For Sobolev, `eval_fk` is itself derivative-based; its comparison with the
+independent reconstruction also probes reference interpolation differences,
+as explained below.
+
+## Joint validation comparison
+
 Run `scripts/check_train/compare_pk_fk.py` after the three training runs have
 stopped writing checkpoints. It loads their best validation checkpoints.
 The original training FITS files must still contain the same data used during
