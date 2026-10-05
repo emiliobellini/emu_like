@@ -1,4 +1,4 @@
-"""Plot histograms of emulator error and worst modes."""
+"""Compact validation diagnostics for power, growth, and angular spectra."""
 
 import argparse
 import matplotlib
@@ -409,7 +409,7 @@ class ValidationFits:
     def __init__(self, path, rows, spectra):
         self.dataset = io.FitsFile(path)
         self.rows = rows
-        self.sample_keys = {'x_data', *spectra}
+        self.sample_keys = {'x_data', *(name.lower() for name in spectra)}
 
     def get_data(self, name):
         data = self.dataset.get_data(name)
@@ -476,267 +476,240 @@ def growth_residuals(emudata, dataset, spectrum, batch_size=128,
                     'evaluated_rows': int(len(x))}
 
 
-def show_growth_histograms(root, emudata, dataset, spectrum, dr,
-                           save_dir=None, relative_to=None, batch_size=128,
-                           growth_floor=1e-6):
-    """Save accuracy and consistency separately, with shared histogram bins."""
-    groups, _ = growth_residuals(
-        emudata, dataset, spectrum, batch_size, growth_floor)
-    for kind, residuals in groups.items():
-        path = plot_path(root, save_dir,
-                         f'{spectrum}_{dr}_{kind}_histograms.png', relative_to)
-        growth_diagnostics.plot_histograms(
-            residuals, path, f'{spectrum} - {dr} (validation): {kind}')
+METHOD_STYLES = {
+    'emulator': ('#2878b5', '-'),
+    'fk_from_pk': ('#2878b5', '-'),
+    'eval_fk': ('#d97921', '--'),
+}
+
+
+def complete_errors(residual):
+    """Use the same complete spectra for tables and both figures."""
+    residual = np.asarray(residual)
+    complete = np.isfinite(residual).all(axis=1)
+    values = np.abs(residual[complete])
+    return values, np.sqrt(np.mean(values**2, axis=1))
+
+
+def relative_accuracy_row(dr, method, residual_percent, input_rows, vlines):
+    _, rms = complete_errors(residual_percent)
+    quantiles = ([f'{v:.6g}' for v in
+                  [np.median(rms), np.percentile(rms, 95), np.max(rms)]]
+                 if len(rms) else ['N/A'] * 3)
+    return [dr, method, input_rows, len(rms), input_rows - len(rms)] + quantiles + [
+        f'{100 * np.mean(rms > threshold):.3f}%' if len(rms) else 'N/A'
+        for threshold in vlines]
+
+
+def direct_residuals(emudata, dataset, spectrum, growth_floor):
+    """Compare physical spectra using each source's own normalization."""
+    emu = emudata.emu
+    x, truth = dataset.get_data('x_data'), dataset.get_data(spectrum)
+    valid = np.isfinite(x).all(axis=1) & np.isfinite(truth).all(axis=1)
+    x, truth = x[valid], truth[valid]
+    prediction = (np.atleast_2d(emudata.get_y_emu(x, timeit=True))
+                  if len(x) else np.empty_like(truth))
+    if spectrum.startswith('cl_'):
+        truth = truth * np.asarray(dataset.get_data('REF_' + spectrum)).reshape(1, -1)
+        prediction = prediction * np.asarray(emu.y_model.y_ref[0]).reshape(1, -1)
+    else:
+        z = x[:, emu.x_names.index('z_pk')]
+        truth = truth * growth_diagnostics.spline(
+            dataset.get_data('Z_ARRAY'), dataset.get_data('REF_' + spectrum))(z).T
+        prediction = prediction * growth_diagnostics.spline(
+            emu.y_model.z_array, emu.y_model.y_ref[0])(z).T
+    absolute = prediction - truth
+    floor = growth_floor if spectrum.startswith('fk_') else 0.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        relative = 100 * absolute / np.where(abs(truth) > floor, truth, np.nan)
+    return {'accuracy_relative_percent': {'emulator': relative},
+            'accuracy_absolute': {'emulator': absolute}}
+
+
+def plot_observable(root, spectrum, records, vlines, save_dir, relative_to):
+    """One histogram dashboard and one two-row scale dashboard per observable."""
+    from matplotlib.ticker import FuncFormatter
+    family = spectrum.split('_')[0]
+    is_cl = family == 'cl'
+    n = len(records)
+    fig_hist, hist_axes = plt.subplots(
+        1, n, figsize=(6*n, 4.8), squeeze=False, sharex=True, sharey=True)
+    fig_scale, scale_axes = plt.subplots(
+        2, n, figsize=(6*n, 8), squeeze=False, sharex=True, sharey=True)
+    all_rms = [complete_errors(residual)[1] for record in records
+               for residual in record['groups']['accuracy_relative_percent'].values()]
+    positive = np.concatenate([r[r > 0] for r in all_rms] + [np.asarray(vlines)])
+    lo, hi = positive.min()/2, positive.max()*2
+    bins = np.geomspace(lo, hi, 35)
+    for col, record in enumerate(records):
+        ax = hist_axes[0, col]
+        ax.set_title(record['range'])
+        notes = []
+        for method, residual in record['groups']['accuracy_relative_percent'].items():
+            color, style = METHOD_STYLES[method]
+            values, rms = complete_errors(residual)
+            zeros = int(np.count_nonzero(rms == 0))
+            notes.append(f'{method}: {len(rms)}/{record["input_rows"]} samples; '
+                         + (f'{100*np.mean(rms > 1):.2f}% > 1%; zero={zeros}'
+                            if len(rms) else 'no defined errors'))
+            # Exact zeros go in the leftmost bin and remain zero in statistics.
+            if len(rms):
+                ax.hist(np.maximum(rms, lo), bins=bins, histtype='step',
+                        color=color, linestyle=style, linewidth=1.8, label=method)
+                grid = record['grid']
+                q16, median, q84, q95 = np.percentile(values, [16, 50, 84, 95], axis=0)
+                top, bottom = scale_axes[:, col]
+                # A tiny display floor permits exact-zero curves on log axes.
+                display = lambda a: np.maximum(a, 1e-8)
+                top.fill_between(grid, display(q16), display(q84), color=color, alpha=.16)
+                top.plot(grid, display(median), color=color, linestyle=style,
+                         label=f'{method}: median (band 16–84%)')
+                top.plot(grid, display(q95), color=color, linestyle=':',
+                         label=f'{method}: 95th percentile')
+                for rank, index in enumerate(np.argsort(rms)[::-1][:3], 1):
+                    bottom.plot(grid, display(values[index]), color=color,
+                                linestyle=style, alpha=1/rank, linewidth=1.2,
+                                label=f'{method}: rank {rank}, RMS={rms[index]:.3g}%')
+        ax.set_xscale('log')
+        ax.set_yscale('log')
+        ax.set_ylim(bottom=.8)
+        ax.set_xlim(lo, hi)
+        ax.xaxis.set_major_formatter(FuncFormatter(lambda x, pos: f'{x:g}%'))
+        ax.set_xlabel('RMS relative error across ' + ('ℓ' if is_cl else 'k'))
+        if ax.get_legend_handles_labels()[0]:
+            ax.legend(loc='lower right', fontsize=8)
+        ax.text(.02, .98, '\n'.join(notes), transform=ax.transAxes,
+                va='top', fontsize=8, bbox=dict(facecolor='white', alpha=.85, edgecolor='none'))
+        for threshold in vlines:
+            ax.axvline(threshold, color='#ad4141', alpha=.65, linewidth=.8)
+        for row, scale_ax in enumerate(scale_axes[:, col]):
+            scale_ax.set_title(f'{record["range"]} — ' +
+                               ('validation distribution' if row == 0 else 'worst RMS samples'))
+            scale_ax.set_yscale('log')
+            if not is_cl:
+                scale_ax.set_xscale('log')
+            for threshold in vlines:
+                scale_ax.axhline(threshold, color='#ad4141', alpha=.65, linewidth=.8)
+            scale_ax.grid(alpha=.15)
+            handles, labels = scale_ax.get_legend_handles_labels()
+            if handles:
+                scale_ax.legend(fontsize=8, loc='best')
+            else:
+                scale_ax.text(.5, .5, 'No defined relative errors',
+                              ha='center', transform=scale_ax.transAxes)
+        scale_axes[1, col].set_xlabel('Multipole ℓ' if is_cl else r'$k$ [$h$/Mpc]')
+    hist_axes[0, 0].set_ylabel('Validation samples')
+    for ax in scale_axes[:, 0]:
+        ax.set_ylabel('Absolute relative error [%]')
+    fig_hist.suptitle(f'{spectrum} — validation accuracy')
+    fig_scale.suptitle(f'{spectrum} — validation errors (zero curves shown at 1e−8%)')
+    for fig, filename in [(fig_hist, f'{family}_accuracy.png'),
+                          (fig_scale, f'{family}_errors_vs_{"ell" if is_cl else "k"}.png')]:
+        fig.tight_layout()
+        path = plot_path(root, save_dir, filename, relative_to)
+        fig.savefig(path, dpi=150, bbox_inches='tight')
+        plt.close(fig)
         print(f'Saved {path}')
 
 
-def show_summary(
-        root,
-        vlines=[0.01, 0.05, 0.1, 1.],
-        save_dir=None,
-        compare_to_all=False,
-        relative_to=None,
-        growth_histograms=True,
-        growth_batch_size=128,
-        growth_floor=1e-6
-        ):
-
-    save_path_hist = plot_path(
-        root, save_dir, 'histograms.png', relative_to)
-    save_path_sum = plot_path(
-        root, save_dir, 'summary_table.txt', relative_to)
-
+def show_summary(root, vlines=(.01, .05, .1, 1.), save_dir=None,
+                 compare_to_all=False, relative_to=None, growth_histograms=True,
+                 growth_batch_size=128, growth_floor=1e-6):
+    """Write one summary and two figures for each validation observable."""
+    if compare_to_all:
+        raise ValueError('Validation diagnostics require the saved training paths')
     with open(os.path.join(root, 'params.yaml')) as f:
         params = yaml.safe_load(f)
-
-    training_spectrum = params['datasets']['name']
-    is_sobolev = params['emulator']['name'] == 'sobolev_ffnn_emu'
-    if is_sobolev:
-        if not training_spectrum.startswith('pk_'):
-            raise ValueError(
-                'Sobolev histogram diagnostics require a pk_* training '
-                'spectrum in order to infer the matching fk_* target.')
-        spectrum = 'fk_{}'.format(training_spectrum[3:])
-    else:
-        spectrum = training_spectrum
-
-    spectra_diff = {
-        'pk_m': 'rel',
-        'pk_cb': 'rel',
-        'pk_weyl': 'rel',
-        'fk_m': 'rel',
-        'fk_cb': 'rel',
-        'fk_weyl': 'rel',
-        'cl_TT_lensed': 'rel',
-        'cl_TE_lensed': 'abs',
-        'cl_EE_lensed': 'rel',
-        'cl_BB_lensed': 'rel',
-        'cl_Tp_lensed': 'abs',
-        'cl_pp_lensed': 'rel',
-    }
-    diff = spectra_diff[spectrum]
-
-    dataset_paths = params['datasets']['paths']
-    if compare_to_all:
-        raise ValueError(
-            'Validation plots use only the training paths in params.yaml; '
-            'compare_to_all is not supported.')
-
-    ranges = []
-    for p, rows in zip(dataset_paths, validation_rows(params)):
-        dr = os.path.basename(p).replace('.fits', '').split('_')[-1]
-        if not len(rows):
-            print(f'Skipping {p}: no validation rows')
-            continue
-        ranges.append((dr, p, rows))
-
-    n_ranges = len(ranges)
-    fig, axs = plt.subplots(
-        1, n_ranges, figsize=(6 * n_ranges, 4), squeeze=False)
-
-    headers = ['range', 'Validation rows']
-    headers += ['>{}%'.format(val) for val in vlines]
-    headers += ['Time emu (s)', 'Time total (s)']
-    headers += ['Epochs (best/tot)', 'Loss', 'Val Loss', 'LR', '# NaN']
-    tab = []
-
-    emudata = {}
-
-    for ndr, (dr, path, rows) in enumerate(ranges):
-
-        emudata[dr] = EmuData(root)
-
-        epochs = emudata[dr].emu.epochs
-        losses = emudata[dr].emu.loss
-        val_losses = emudata[dr].emu.val_loss
-        learning_rates = emudata[dr].emu.learning_rate
-        idx_best = np.where(np.array(val_losses) == np.min(val_losses))[0][0]
-
-        if diff == 'rel':
-            fun = emudata[dr].get_mean_rel_diff
-        elif diff == 'abs':
-            fun = emudata[dr].get_mean_abs_diff
-        else:
-            raise ValueError('Difference type not recognized!')
-
-        sample_spectra = {training_spectrum, spectrum}
-        if training_spectrum.startswith('pk_'):
-            sample_spectra.add('fk_' + training_spectrum[3:])
-        dataset = ValidationFits(path, rows, sample_spectra)
-        x_data = dataset.get_data('x_data')
-        y_data = dataset.get_data(spectrum)
-        if is_sobolev:
-            # eval_fk returns physical growth; FITS stores f / f_reference.
-            y_data = physical_growth_data(
-                dataset, emudata[dr].emu, spectrum, x_data)
-        n_nans = x_data.shape[0]
-        # Get mask nans
-        mask_nans = (np.isfinite(y_data).all(axis=1)
-                     & np.isfinite(x_data).all(axis=1))
-        # Filter nans
-        x_data = x_data[mask_nans]
-        y_data = y_data[mask_nans]
-        n_nans -= x_data.shape[0]
-        if not len(x_data):
-            raise ValueError(f'No finite validation rows in {path}')
-        print(f'{path}: evaluating {len(x_data)} validation rows')
-
-        result = fun(
-            x_emu=x_data, y_data=y_data,
-            want_scaling=False, want_pca=False,
-            select_pca_modes_emu=None, select_pca_modes_data=None,
-            time_emu=True, use_growth=is_sobolev)
-
-        tab_line = [dr, len(x_data)]
-        tab_line += ['{:.3f}%'.format(
-            len(result[result > val / 100.]) / len(result) * 100.)
-                     for val in vlines]
-        tab_line += ['{:.1e}'.format(emudata[dr].time_emu)]
-        tab_line += ['{:.1e}'.format(emudata[dr].time_all)]
-        tab_line += ['{}/{}'.format(int(epochs[idx_best]), int(epochs[-1]))]
-        tab_line += ['{:.2e}'.format(losses[idx_best])]
-        tab_line += ['{:.2e}'.format(val_losses[idx_best])]
-        tab_line += ['{:.2e}'.format(learning_rates[idx_best])]
-        tab_line += ['{}'.format(n_nans)]
-        tab.append(tab_line)
-
-        axs[0, ndr].hist(np.log10(result), log=True, bins=20)
-        axs[0, ndr].set_title('{} - {}'.format(spectrum, dr), fontsize=18)
-        axs[0, ndr].set_xlabel('Log10 sqrt mean diff squared', fontsize=14)
-        for val in vlines:
-            if diff == 'abs':
-                maxy = np.max(np.abs(y_data))
-            else:
-                maxy = 1.
-            axs[0, ndr].axvline(x=np.log10(maxy * val / 100.), c='r')
-            emudata[dr].max_y_data = maxy
-
-        if growth_histograms and training_spectrum.startswith('pk_'):
-            show_growth_histograms(
-                root, emudata[dr], dataset, 'fk_' + training_spectrum[3:], dr,
-                save_dir=save_dir, relative_to=relative_to,
-                batch_size=growth_batch_size, growth_floor=growth_floor)
-
-    fig.suptitle(f'{spectrum} (validation)', fontsize=20)
-    plt.tight_layout()
-
-    fig.savefig(save_path_hist, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f"Saved {save_path_hist}")
-
-    summary_table = tabulate(tab, headers=headers, tablefmt='orgtbl')
-    print(summary_table)
-
-    with open(save_path_sum, 'w') as outputfile:
-        outputfile.write(f'{spectrum} (validation)')
-        outputfile.write('\n')
-        outputfile.write(summary_table)
-        outputfile.write('\n\n')
-
-    return emudata, spectrum, diff, is_sobolev
-
-
-def plot_worst_modes(
-        root,
-        emudata,
-        spectrum,
-        diff,
-        use_growth=False,
-        n_modes_kept=3,
-        vlines=[0.01, 0.05, 0.1, 1.],
-        save_dir=None,
-        relative_to=None):
-
-    save_path = plot_path(
-        root, save_dir, 'worst_modes.png', relative_to)
-
-    ranges = list(emudata.keys())
-    n_ranges = len(ranges)
-    fig, axs = plt.subplots(
-        1 + n_modes_kept,
-        n_ranges,
-        figsize=(6 * n_ranges, 6 + 4*n_modes_kept),
-        squeeze=False)
-    fig.suptitle('Worst validation modes - {}'.format(spectrum), fontsize=20, y=1.0)
-
-    for ndr, dr in enumerate(ranges):
-        if emudata[dr] is None:
-            continue
-
-        if diff == 'rel':
-            idxs = emudata[dr].get_sorting_idxs_rel()[:n_modes_kept]
-            diffs = emudata[dr].rel_diff[idxs]
-        elif diff == 'abs':
-            idxs = emudata[dr].get_sorting_idxs_abs()[:n_modes_kept]
-            diffs = emudata[dr].abs_diff[idxs]
-        else:
-            raise ValueError('Difference type not recognized!')
-        y_emu = emudata[dr].y_emu[idxs]
-        y_data = emudata[dr].y_data[idxs]
-        # The Sobolev emulator is checked against the fk values stored in the
-        # data file.  get_y_class currently reconstructs the primary Pk
-        # spectrum, so it is not a valid independent fk curve.
-        y_class = None if use_growth else emudata[dr].get_y_class(idxs)
-
-        for val in vlines:
-            axs[0, ndr].axhline(emudata[dr].max_y_data * val, c='k', lw=0.1)
-
-        for nmode in range(len(idxs)):
-            # On the first row plot relative/absolute differences for all modes
-            axs[0, ndr].plot(
-                np.abs(diffs[nmode]) * 100.,
-                label='Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
-            axs[0, ndr].set_yscale('log')
-            axs[0, ndr].set_title('{} - {}'.format(spectrum, dr), fontsize=18)
-
-            # On the other rows plot individual modes: data, emulated, class
-            axs[1 + nmode, ndr].plot(y_data[nmode], label='Data')
-            axs[1 + nmode, ndr].plot(
-                y_emu[nmode], linestyle='--', label='Emulated')
-            if y_class is not None:
-                axs[1 + nmode, ndr].plot(
-                    y_class[nmode], linestyle=':', label='Class')
-            axs[1 + nmode, ndr].set_ylabel(
-                'Rank: {}, Idx: {}'.format(nmode + 1, idxs[nmode]))
-
-        if diff == 'rel':
-            axs[0, 0].set_ylabel('rel diff [%]')
-        elif diff == 'abs':
-            axs[0, 0].set_ylabel('abs diff')
-
-        axs[0, ndr].legend()
-    axs[1, 0].legend()
-
-    plt.tight_layout()
-
-    fig.savefig(save_path, dpi=150, bbox_inches='tight')
-    plt.close(fig)
-    print(f"Saved {save_path}")
+    spectrum = params['datasets']['name']
+    if not spectrum.startswith(('pk_', 'fk_', 'cl_')):
+        raise ValueError(f'Unsupported observable: {spectrum}')
+    emudata = EmuData(root)
+    if emudata.is_sobolev and not spectrum.startswith('pk_'):
+        raise ValueError('Sobolev diagnostics require a pk_* training observable')
+    spectra = [spectrum]
+    if spectrum.startswith('pk_'):
+        spectra.append('fk_' + spectrum[3:])
+    observations = {name: [] for name in spectra}
+    timing, absolute, consistency = [], [], []
+    paths = params['datasets']['paths']
+    for path, rows in zip(paths, validation_rows(params)):
+        dr = os.path.basename(path).removesuffix('.fits').split('_')[-1]
+        dataset = ValidationFits(path, rows, spectra)
+        start = time.perf_counter()
+        primary = direct_residuals(emudata, dataset, spectrum, growth_floor)
+        timing.append([dr, spectrum, len(rows), time.perf_counter() - start])
+        groups_by_name = {spectrum: primary}
+        if spectrum.startswith('pk_'):
+            start = time.perf_counter()
+            groups_by_name[spectra[1]], _ = growth_residuals(
+                emudata, dataset, spectra[1], growth_batch_size, growth_floor)
+            timing.append([dr, spectra[1] + ' (all methods)', len(rows),
+                           time.perf_counter() - start])
+        for name, groups in groups_by_name.items():
+            key = ('ELL_RANGE_' if name.startswith('cl_') else 'K_RANGE_') + name
+            grid = np.asarray(dataset.get_data(key))
+            expected = (emudata.emu.y_model.ell_ranges[0] if name.startswith('cl_')
+                        else emudata.emu.y_model.k_ranges[0])
+            np.testing.assert_array_equal(grid, expected)
+            if grid.ndim != 1 or np.any(np.diff(grid) <= 0):
+                raise ValueError(f'Invalid coordinate grid for {name}')
+            observations[name].append(dict(range=dr, grid=grid, groups=groups,
+                                           input_rows=len(rows)))
+            for kind, table in [('accuracy_absolute', absolute),
+                                ('consistency_absolute', consistency)]:
+                if not name.startswith('fk_'):
+                    continue
+                for method, residual in groups.get(kind, {}).items():
+                    finite = np.asarray(residual)[np.isfinite(residual)]
+                    table.append([dr, method, len(finite), residual.size-len(finite),
+                                  np.sqrt(np.mean(finite**2)) if len(finite) else 'N/A',
+                                  np.max(abs(finite)) if len(finite) else 'N/A'])
+    headers = ['range', 'Prediction', 'Validation rows', 'Evaluated rows',
+               'Excluded rows', 'Median RMS [%]', 'P95 RMS [%]', 'Max RMS [%]']
+    headers += [f'>{v}%' for v in vlines]
+    sections = []
+    for name, records in observations.items():
+        table = [relative_accuracy_row(record['range'], method, residual,
+                                       record['input_rows'], vlines)
+                 for record in records for method, residual in
+                 record['groups']['accuracy_relative_percent'].items()]
+        sections.append(f'{name} (validation; relative RMS accuracy)\n'
+                        + tabulate(table, headers=headers, tablefmt='orgtbl'))
+        if name == spectrum or growth_histograms:
+            plot_observable(root, name, records, vlines, save_dir, relative_to)
+    for title, table in [('Growth absolute errors (dimensionless)', absolute),
+                         ('Sobolev consistency: eval_fk - fk_from_pk (dimensionless)', consistency)]:
+        if table:
+            sections.append(title + '\n' + tabulate(table, headers=[
+                'range', 'Prediction', 'Finite bins', 'Excluded bins', 'RMS', 'Max abs'],
+                tablefmt='orgtbl', floatfmt='.6g'))
+    emu = emudata.emu
+    best = int(np.argmin(emu.val_loss))
+    sections.append('Training history\n' + tabulate([[
+        f'{int(emu.epochs[best])}/{int(emu.epochs[-1])}', emu.loss[best],
+        emu.val_loss[best], emu.learning_rate[best]]],
+        headers=['Epochs (best/total)', 'Loss', 'Val Loss', 'LR'], tablefmt='orgtbl'))
+    sections.append('Diagnostic timing (includes reference reconstruction)\n' + tabulate(
+        timing, headers=['range', 'Observable', 'Validation rows', 'Elapsed [s]'],
+        tablefmt='orgtbl', floatfmt='.6g'))
+    sections.append(
+        'Threshold columns: percentage of evaluated spectra above the RMS error threshold. '
+        'Tables and relative-error plots use only spectra with finite relative errors in every bin. '
+        'Zero errors remain zero in statistics; histogram zeros occupy the leftmost bin. '
+        f'Growth bins with |f_data| <= {growth_floor:g} are undefined; '
+        'pk/cl bins with zero truth are undefined. Relative errors near cl zero crossings '
+        'can be large. Absolute-growth and consistency statistics use all finite bins.')
+    summary = '\n\n'.join(sections) + '\n'
+    path = plot_path(root, save_dir, 'summary_table.txt', relative_to)
+    path.write_text(summary)
+    print(summary)
+    print(f'Saved {path}')
+    return observations
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
-        description='Plot emulator error histograms and worst modes.')
+        description='Plot compact validation accuracy and scale diagnostics.')
     parser.add_argument(
         '--roots',
         '-r',
@@ -746,7 +719,7 @@ if __name__ == '__main__':
         help='Path to the emulator root folder.')
     parser.add_argument(
         '--skip-growth-histograms', action='store_true',
-        help='Skip the additional growth histograms for pk_* runs.')
+        help='Skip both growth figures for pk_* runs; keep growth summary tables.')
     parser.add_argument(
         '--growth-batch-size', type=int, default=128,
         help='Batch size for independent power derivatives (default: 128).')
@@ -779,18 +752,10 @@ if __name__ == '__main__':
 
     for root in roots:
 
-        emudata, spectrum, diff, use_growth = show_summary(
+        show_summary(
             root,
             save_dir=args.save_dir,
             relative_to=relative_to,
             growth_histograms=not args.skip_growth_histograms,
             growth_batch_size=args.growth_batch_size,
             growth_floor=args.growth_floor)
-
-        plot_worst_modes(
-            root,
-            emudata,
-            spectrum, diff, use_growth=use_growth,
-            n_modes_kept=3,
-            save_dir=args.save_dir,
-            relative_to=relative_to)

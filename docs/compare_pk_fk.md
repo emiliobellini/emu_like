@@ -1,47 +1,64 @@
 # Comparing standard and Sobolev power/growth
 
-## Per-model histograms
-
-`plot_histograms.py` also plots growth histograms independently for every
-`pk_*` model it discovers, using the same derivative and histogram helpers:
+## Compact per-model diagnostics
 
 ```bash
 python scripts/check_train/plot_histograms.py \
-  --roots /path/to/train --save-dir output/histograms
+  --roots /path/to/train --save-dir output/diagnostics
 ```
 
-For each dataset range, `fk_*_<range>_accuracy_absolute_histograms.png` and
-`fk_*_<range>_accuracy_relative_percent_histograms.png` compare power-derived
-growth with the matching FITS growth data. Sobolev runs overlay `eval_fk`
-accuracy and add `consistency_absolute` and `consistency_relative_percent`
-histograms of `eval_fk - fk_from_pk`. Each figure shows bin errors, per-spectrum
-RMS, and per-spectrum maximum error. Files under `--save-dir` include the
-relative training-run path, as with the existing plots.
+Each `pk_*` run (standard or Sobolev) produces five files:
 
-Only the histograms are added: no derivative checks, diagnostic JSON/NPZ
-files, or error-versus-k plots from `compare_pk_fk.py` are run. The existing
-summary table and worst-mode plots remain available. Growth predictions
-and FITS targets are compared in physical units using their respective saved
-references. Relative errors divide by physical FITS growth, excluding bins
-with absolute growth at or below `--growth-floor` (default `1e-6`).
+- `summary_table.txt`, containing all observables and training information;
+- `pk_accuracy.png` and `pk_errors_vs_k.png`;
+- `fk_accuracy.png` and `fk_errors_vs_k.png`.
 
-All per-run histograms, summary statistics, and worst-mode plots use only
-validation rows. The split is reconstructed from each run's `params.yaml`:
-apply the training finite-row filter (including growth for Sobolev), join
-the listed datasets in order, and split once using `frac_train` and
-`train_test_random_seed`. Only ranges listed in that run are evaluated.
-The original FITS files must be unchanged since training; an unseeded split
-cannot be reconstructed and raises an error. Growth diagnostics further
-exclude validation rows with nonfinite growth targets. The matching
-`FK_*`, `REF_FK_*`, `K_RANGE_FK_*`, and `Z_ARRAY` FITS extensions are required.
-Use `--growth-batch-size` (default 128) to control derivative memory, or
-`--skip-growth-histograms` to skip the added plots. Standalone `fk_*` runs
-retain their existing accuracy plots: a consistency comparison against a
-separate power model requires the three-model workflow below.
+Standalone `fk_*` runs produce the summary and the two `fk` figures.
+Standalone `cl_*` runs produce the summary, `cl_accuracy.png`, and
+`cl_errors_vs_ell.png`, with multipole ℓ as the scale coordinate. All `cl_*`
+spectra, including signed cross spectra, use relative errors. Zero truth
+bins are undefined; errors close to a zero crossing can be large.
+Files under `--save-dir` include the relative training-run path in their names.
+The script no longer generates `histograms.png`, `worst_modes.png`, or the
+separate growth histograms. Existing files from older runs are left intact;
+use a fresh output directory for a clean collection.
 
-For Sobolev, `eval_fk` is itself derivative-based; its comparison with the
-independent reconstruction also probes reference interpolation differences,
-as explained below.
+Columns correspond to dataset ranges. Accuracy figures histogram one RMS
+relative error per validation spectrum, expressed in percent, with shared
+logarithmic axes and vertical lines at 0.01%, 0.05%, 0.1%, and 1%. Annotations
+report evaluated/validation counts, the fraction above 1%, and exact zeros.
+Exact zeros occupy the leftmost histogram bin but stay zero in statistics.
+Scale figures have two rows: median errors with a 16th–84th percentile band
+and a 95th-percentile curve above, and the three largest-RMS sample curves
+below. Horizontal thresholds match the histogram thresholds. Scale errors
+are absolute relative errors in percent; exact-zero curves are displayed
+at 1e-8%. The same complete spectra enter both figures and the accuracy table.
+
+Power runs derive growth through `fk_from_pk`. Sobolev growth figures overlay
+`eval_fk` with a consistent contrasting color and dashed line style.
+There are no additional consistency figures or CLASS recomputations.
+The summary contains median, 95th percentile, and maximum RMS relative
+errors, threshold exceedance fractions, and validation/evaluated/excluded
+counts for every range and method. It also contains physical absolute-growth
+RMS/maximum errors, Sobolev consistency RMS/maximum absolute differences,
+training history, and elapsed diagnostic time per range and observable.
+Absolute-growth and consistency statistics include all finite bins, retaining
+information near zero growth even when relative errors are undefined.
+
+The validation split is reconstructed from each run's `params.yaml`: apply
+its training finite-row filter (including growth for Sobolev), join files
+in the saved order, and split once using `frac_train` and
+`train_test_random_seed`. Original FITS files must be unchanged since training;
+an unseeded split cannot be reconstructed. Predictions and targets are
+restored to physical units using their respective saved reference tables.
+A spectrum is excluded from relative diagnostics if any bin is undefined.
+For growth, `--growth-floor` (default `1e-6`) excludes bins with physical
+`|f_data|` at or below the floor. Power and angular spectra exclude zero truth.
+
+Use `--growth-batch-size` (default 128) to control derivative memory.
+The existing `--skip-growth-histograms` option skips both derived-growth
+figures for power runs; growth summary tables are still computed.
+The matching FITS growth and reference extensions are needed for power runs.
 
 ## Joint validation comparison
 

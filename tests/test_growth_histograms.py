@@ -60,9 +60,11 @@ def test_physical_growth_accuracy_and_consistency(tmp_path, sobolev, monkeypatch
             atol=1e-12)
     else:
         assert 'consistency_absolute' not in groups
-    hist.show_growth_histograms(
-        tmp_path, emudata, dataset, 'fk_m', 'test', batch_size=1)
-    assert len(list(tmp_path.glob('*.png'))) == (4 if sobolev else 2)
+    hist.plot_observable(tmp_path, 'fk_m', [dict(
+        range='test', groups=groups, grid=k, input_rows=4)],
+        [.01, .05, .1, 1.], None, None)
+    assert {p.name for p in tmp_path.glob('*.png')} == {
+        'fk_accuracy.png', 'fk_errors_vs_k.png'}
     assert not list(tmp_path.glob('*.json'))
     assert not list(tmp_path.glob('*.npz'))
     monkeypatch.setattr(hist.io, 'FitsFile', lambda path: dataset)
@@ -153,3 +155,113 @@ def test_validation_fits_preserves_reference_arrays(monkeypatch):
         np.testing.assert_array_equal(view.get_data(key), arrays[key][[1, 3]])
     for key in ('Z_ARRAY', 'REF_fk_m'):
         np.testing.assert_array_equal(view.get_data(key), arrays[key])
+
+
+def test_relative_accuracy_uses_percent_rms_and_excludes_undefined_rows():
+    residual = np.array([[.03, .04], [.3, .4], [np.nan, 1.]])
+    row = hist.relative_accuracy_row('thin', 'fk_from_pk', residual, 4, [.01, .1, 1.])
+    assert row[:5] == ['thin', 'fk_from_pk', 4, 2, 2]
+    assert row[-3:] == ['100.000%', '50.000%', '0.000%']
+    np.testing.assert_allclose(float(row[5]), np.mean([np.sqrt(.00125), np.sqrt(.125)]), rtol=1e-5)
+    assert hist.relative_accuracy_row(
+        'thin', 'fk_from_pk', residual[:0], 2, [.1])[-1] == 'N/A'
+
+
+@pytest.mark.parametrize('spectrum,sobolev', [
+    ('pk_m', False), ('pk_m', True), ('fk_m', False),
+    ('cl_TT_lensed', False), ('cl_TE_lensed', False)])
+@pytest.mark.parametrize('growth_histograms', [False, True])
+def test_compact_summary_and_output_files(
+        tmp_path, monkeypatch, spectrum, sobolev, growth_histograms):
+    import yaml
+    params = dict(datasets=dict(name=spectrum, paths=['sample_thin.fits']),
+                  emulator=dict(name='sobolev_ffnn_emu' if sobolev else 'ffnn_emu'))
+    (tmp_path / 'params.yaml').write_text(yaml.safe_dump(params))
+    grid = np.array([.1, 1.]) if not spectrum.startswith('cl_') else np.array([2., 100.])
+    arrays = dict(x_data=np.arange(4.)[:, None],
+                  pk_m=np.ones((4, 2)), fk_m=np.ones((4, 2)),
+                  Z_ARRAY=np.arange(4.))
+    arrays[spectrum] = np.ones((4, 2))
+    for name in {spectrum, 'fk_m'}:
+        arrays['REF_' + name] = (np.ones((1, 2)) if name.startswith('cl_')
+                                 else np.ones((2, 4)))
+        arrays[('ELL_RANGE_' if name.startswith('cl_') else 'K_RANGE_') + name] = grid
+    monkeypatch.setattr(hist, 'validation_rows', lambda params: [np.array([1, 3])])
+    monkeypatch.setattr(hist.io, 'FitsFile', lambda path:
+                        SimpleNamespace(get_data=arrays.__getitem__))
+
+    class FakeEmuData(hist.EmuData):
+        def __init__(self, root):
+            self.is_sobolev = sobolev
+            self.emu = SimpleNamespace(
+                epochs=[1, 2], loss=[.2, .1], val_loss=[.3, .2],
+                learning_rate=[.001, .001], x_names=['z_pk'],
+                y_model=SimpleNamespace(k_ranges=[grid], ell_ranges=[grid],
+                    z_array=arrays['Z_ARRAY'], y_ref=[arrays['REF_' + spectrum]]))
+
+        def get_y_emu(self, x, **kwargs):
+            np.testing.assert_array_equal(x[:, 0], [1, 3])
+            return np.ones((2, 2)) + np.array([[.0002], [.002]])
+
+    monkeypatch.setattr(hist, 'EmuData', FakeEmuData)
+    calls = []
+
+    def residuals(emudata, dataset, spectrum, *args):
+        calls.append(spectrum)
+        np.testing.assert_array_equal(dataset.get_data('x_data')[:, 0], [1, 3])
+        relative = {'fk_from_pk': np.array([[.02, .02], [.2, .2]])}
+        groups = {'accuracy_relative_percent': relative,
+                  'accuracy_absolute': {'fk_from_pk': relative['fk_from_pk']/100}}
+        if sobolev:
+            relative['eval_fk'] = np.array([[3., 3.], [3., 3.]])
+            groups['consistency_absolute'] = {'eval_fk - fk_from_pk': np.ones((2, 2))*.03}
+        return groups, {}
+
+    monkeypatch.setattr(hist, 'growth_residuals', residuals)
+    observations = hist.show_summary(tmp_path, growth_histograms=growth_histograms)
+    summary = (tmp_path / 'summary_table.txt').read_text()
+    assert f'{spectrum} (validation; relative RMS accuracy)' in summary
+    assert 'Median RMS [%]' in summary and 'P95 RMS [%]' in summary
+    assert '50.000%' in summary
+    assert 'Training history' in summary and 'Diagnostic timing' in summary
+    family = spectrum.split('_')[0]
+    expected = {f'{family}_accuracy.png',
+                f'{family}_errors_vs_{"ell" if family == "cl" else "k"}.png'}
+    if family == 'pk':
+        assert 'fk_m (validation; relative RMS accuracy)' in summary
+        assert calls == ['fk_m']
+        assert ('Sobolev consistency' in summary) == sobolev
+        if growth_histograms:
+            expected.update(['fk_accuracy.png', 'fk_errors_vs_k.png'])
+    else:
+        assert calls == []
+        assert list(observations) == [spectrum]
+    assert {p.name for p in tmp_path.glob('*.png')} == expected
+    assert {p.name for p in tmp_path.iterdir()} == expected | {'params.yaml', 'summary_table.txt'}
+
+
+@pytest.mark.parametrize('spectrum', ['pk_m', 'fk_m', 'cl_TE_lensed'])
+def test_direct_residuals_restore_separate_references(spectrum):
+    # Different normalizations represent identical physical spectra.
+    is_cl = spectrum.startswith('cl_')
+    data = {'x_data': np.array([[.5], [1.]]), spectrum: np.array([[2., -2.], [2., -2.]]),
+            'REF_' + spectrum: np.ones((1, 2)) if is_cl else np.ones((2, 2)),
+            'Z_ARRAY': np.array([0., 2.])}
+    model = SimpleNamespace(x_names=['z_pk'], y_model=SimpleNamespace(
+        y_ref=[np.full((1, 2) if is_cl else (2, 2), 2.)], z_array=data['Z_ARRAY']))
+    emudata = SimpleNamespace(emu=model, get_y_emu=lambda x, **kw: np.array([[1., -1.], [1., -1.]]))
+    result = hist.direct_residuals(emudata, SimpleNamespace(get_data=data.__getitem__), spectrum, 1e-6)
+    np.testing.assert_allclose(result['accuracy_relative_percent']['emulator'], 0.)
+    data[spectrum][0, 0] = 0.
+    result = hist.direct_residuals(emudata, SimpleNamespace(get_data=data.__getitem__), spectrum, 1e-6)
+    assert np.isnan(result['accuracy_relative_percent']['emulator'][0, 0])
+    assert len(hist.complete_errors(result['accuracy_relative_percent']['emulator'])[1]) == 1
+
+
+def test_compact_plots_with_zero_and_undefined_errors(tmp_path):
+    groups = {'accuracy_relative_percent': {'emulator': np.zeros((1, 2))}}
+    records = [dict(range='zero', grid=np.array([2, 3]), groups=groups, input_rows=1),
+               dict(range='empty', grid=np.array([2, 3]), input_rows=2,
+                    groups={'accuracy_relative_percent': {'emulator': np.full((2, 2), np.nan)}})]
+    hist.plot_observable(tmp_path, 'cl_TE_lensed', records, [.01, .05, .1, 1.], None, None)
+    assert len(list(tmp_path.glob('*.png'))) == 2
